@@ -42,20 +42,20 @@ pub struct PTHash<P: Packed + Default> {
     s: u64,
     /// The pivots.
     k: P,
+    /// The free slots.
+    free: Vec<usize>,
 }
 
 impl<P: Packed + Default> PTHash<P> {
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
-        assert_eq!(alpha, 1.0, "alpha != 1.0 not yet supported");
         // n is the number of slots in the target list.
-        let n0 = (keys.len() as f32 / alpha) as usize;
+        let n0 = keys.len();
+        let mut n = (n0 as f32 / alpha) as usize;
         // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
-        let n = if n0.count_ones() == 1 {
-            panic!("Powers of 2 not yet supported");
-            max(n0, 2) + 1
-        } else {
-            n0
-        };
+        if n.count_ones() == 1 {
+            n = max(n0 + 1, 3)
+        }
+        let n = n;
 
         // The number of buckets.
         // TODO: Why divide by log(n) and not log(n).ceil()?
@@ -74,6 +74,7 @@ impl<P: Packed + Default> PTHash<P> {
             p2,
             s: 0,
             k: Default::default(),
+            free: vec![],
         };
         pthash.init_k(keys);
         pthash
@@ -193,6 +194,19 @@ impl<P: Packed + Default> PTHash<P> {
             }
         }
 
+        // Compute the free spots.
+        self.free = vec![usize::MAX; self.n - self.n0];
+        let mut next_unmapped = self.n0;
+        for i in 0..self.n0 {
+            if !taken[i] {
+                while !taken[next_unmapped] {
+                    next_unmapped += 1;
+                }
+                self.free[next_unmapped - self.n0] = i;
+                next_unmapped += 1;
+            }
+        }
+
         self.k = Packed::new(k);
     }
 
@@ -200,6 +214,11 @@ impl<P: Packed + Default> PTHash<P> {
         let hx = self.hash(x);
         let i = self.bucket(hx);
         let ki = self.k.index(i);
-        self.position(hx, ki)
+        let p = self.position(hx, ki);
+        if p < self.n0 {
+            p
+        } else {
+            self.free[p - self.n0]
+        }
     }
 }
