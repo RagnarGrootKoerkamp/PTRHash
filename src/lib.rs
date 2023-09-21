@@ -105,15 +105,9 @@ impl<P: Packed + Default> PTHash<P> {
             hashes.clear();
 
             let s: u64 = random();
-            if LOG {
-                eprintln!("Trying seed {}", s);
-            }
             for key in keys {
                 let h = hash(key, s);
                 let b = self.bucket(h);
-                if LOG {
-                    eprintln!("key: {:?}, h: {}, b: {}", key, h, b);
-                }
                 if !hashes.insert((h, b)) {
                     continue 's;
                 }
@@ -147,9 +141,6 @@ impl<P: Packed + Default> PTHash<P> {
             let bucket = &buckets[b];
             if bucket.is_empty() {
                 break;
-            }
-            if LOG {
-                eprintln!("Bucket of size {}", bucket.len());
             }
             key_hashes.clear();
             for idx in bucket {
@@ -188,9 +179,6 @@ impl<P: Packed + Default> PTHash<P> {
                     taken.set(position(hx), true);
                 }
                 break;
-            }
-            if LOG {
-                eprintln!(" k[{}] = {}", b, k[b]);
             }
         }
 
