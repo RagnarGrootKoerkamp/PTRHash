@@ -15,7 +15,7 @@ use rustc_hash::FxHashSet as HashSet;
 
 type Key = u64;
 
-const LOG: bool = true;
+const LOG: bool = false;
 
 fn hash(x: &Key, seed: u64) -> u64 {
     murmur64a(
@@ -34,14 +34,12 @@ pub struct PTHash<P: Packed + Default> {
     n: usize,
     /// The number of buckets.
     m: usize,
-
     /// Additional constants.
     p1: u64,
     p2: u64,
 
     /// The global seed.
     s: u64,
-
     /// The pivots.
     k: P,
 }
@@ -135,7 +133,7 @@ impl<P: Packed + Default> PTHash<P> {
 
         // Step 3: Sort buckets by size.
         let mut bucket_order: Vec<_> = (0..self.m).collect();
-        bucket_order.sort_by_key(|v| Reverse(buckets[*v].len()));
+        bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
         let bucket_order = bucket_order;
 
         // Step 4: Initialize arrays;

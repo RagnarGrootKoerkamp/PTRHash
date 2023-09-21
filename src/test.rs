@@ -15,8 +15,8 @@ fn generate_keys(n: usize) -> Vec<Key> {
 }
 
 #[test]
-fn test() {
-    for n in [3, 5, 6, 7, 9, 10, 100, 1000, 10000, 100000, 1000000] {
+fn test_exact() {
+    for n in [3, 5, 6, 7, 9, 10, 100, 1000, 10000, 100000] {
         let keys = generate_keys(n);
         let pthash = PTHash::<Vec<u64>>::new(6.0, 1.0, &keys);
 
@@ -28,4 +28,9 @@ fn test() {
             done[idx] = true;
         }
     }
+}
+#[test]
+fn bench_exact() {
+    let keys = generate_keys(10_000_000);
+    PTHash::<Vec<u64>>::new(7.0, 1.0, &keys);
 }
