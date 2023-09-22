@@ -106,7 +106,6 @@ where
 
     fn bucket(&self, hx: u64) -> usize {
         // TODO: Branchless implementation.
-        // TODO: Optimize the modulo away to multiplications.
         (if (hx % self.rem_n) < self.p1 {
             hx % self.rem_p2
         } else {
