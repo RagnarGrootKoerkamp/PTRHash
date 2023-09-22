@@ -92,7 +92,7 @@ where
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(50_000_000);
-    for n in [1000, 10_000, 100_000, 1_000_000, 10_000_000] {
+    for n in [10_000_000] {
         let (keys, mphf) = get(n);
 
         let start = SystemTime::now();
