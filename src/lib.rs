@@ -1,20 +1,24 @@
 mod pack;
+mod reduce;
 #[cfg(test)]
 mod test;
 
 use std::{
     cmp::{max, Reverse},
     default::Default,
+    ops::Rem,
 };
 
 use bitvec::bitvec;
 use murmur2::murmur64a;
 use pack::Packed;
 use rand::random;
+use reduce::Reduce;
 use rustc_hash::FxHashSet as HashSet;
 
 type Key = u64;
 
+#[allow(unused)]
 const LOG: bool = false;
 
 fn hash(x: &Key, seed: u64) -> u64 {
@@ -27,7 +31,10 @@ fn hash(x: &Key, seed: u64) -> u64 {
     )
 }
 
-pub struct PTHash<P: Packed + Default> {
+pub struct PTHash<P: Packed + Default, R: Reduce>
+where
+    u64: Rem<R, Output = u64>,
+{
     /// The number of keys.
     n0: usize,
     /// The number of slots.
@@ -37,6 +44,13 @@ pub struct PTHash<P: Packed + Default> {
     /// Additional constants.
     p1: u64,
     p2: u64,
+    // Reduce operations
+    /// Fast %n
+    rem_n: R,
+    /// Fast %p2
+    rem_p2: R,
+    /// Fast %(m-p2)
+    rem_mp2: R,
 
     /// The global seed.
     s: u64,
@@ -46,7 +60,10 @@ pub struct PTHash<P: Packed + Default> {
     free: Vec<usize>,
 }
 
-impl<P: Packed + Default> PTHash<P> {
+impl<P: Packed + Default, R: Reduce> PTHash<P, R>
+where
+    u64: Rem<R, Output = u64>,
+{
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         // n is the number of slots in the target list.
         let n0 = keys.len();
@@ -72,6 +89,9 @@ impl<P: Packed + Default> PTHash<P> {
             m,
             p1,
             p2,
+            rem_n: R::new(n as u64),
+            rem_p2: R::new(p2),
+            rem_mp2: R::new(m as u64 - p2),
             s: 0,
             k: Default::default(),
             free: vec![],
@@ -87,15 +107,15 @@ impl<P: Packed + Default> PTHash<P> {
     fn bucket(&self, hx: u64) -> usize {
         // TODO: Branchless implementation.
         // TODO: Optimize the modulo away to multiplications.
-        (if (hx % self.n as u64) < self.p1 {
-            hx % self.p2
+        (if (hx % self.rem_n) < self.p1 {
+            hx % self.rem_p2
         } else {
-            self.p2 + hx % (self.m as u64 - self.p2)
+            self.p2 + hx % self.rem_mp2
         }) as usize
     }
 
     fn position(&self, hx: u64, k: u64) -> usize {
-        (hx ^ self.hash(&k)) as usize % self.n
+        ((hx ^ self.hash(&k)) % self.rem_n) as usize
     }
 
     fn init_k(&mut self, keys: &Vec<Key>) {
