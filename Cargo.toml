@@ -7,6 +7,8 @@ edition = "2021"
 
 [profile.release]
 debug = true
+lto = "thin"
+incremental = true
 
 [dependencies]
 bitvec = "1.0.1"
