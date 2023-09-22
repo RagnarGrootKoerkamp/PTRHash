@@ -24,7 +24,7 @@ fn generate_keys(n: usize) -> Vec<Key> {
 fn test_exact() {
     for n in [3, 5, 6, 7, 9, 10, 100, 1000, 10000, 100000] {
         let keys = generate_keys(n);
-        let pthash = PTHash::<Vec<u64>, u64, false>::new(6.0, 1.0, &keys);
+        let pthash = PTHash::<CompactVector, FastMod64, false>::new(6.0, 1.0, &keys);
 
         let mut done = vec![false; n];
 
@@ -40,7 +40,7 @@ fn test_exact() {
 fn test_free() {
     for n in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 1000, 10000, 100000] {
         let keys = generate_keys(n);
-        let pthash = PTHash::<Vec<u64>, u64, false>::new(6.0, 0.9, &keys);
+        let pthash = PTHash::<CompactVector, FastMod64, false>::new(6.0, 0.9, &keys);
 
         let mut done = vec![false; n];
 

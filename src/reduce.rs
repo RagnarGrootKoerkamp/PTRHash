@@ -65,7 +65,7 @@ impl Rem<FastMod64> for u64 {
     type Output = u64;
 
     fn rem(self, rhs: FastMod64) -> Self::Output {
-        let lowbits = rhs.m * self as u128;
+        let lowbits = rhs.m.wrapping_mul(self as u128);
         mul128_u64(lowbits, rhs.d)
     }
 }
