@@ -31,7 +31,10 @@ fn hash(x: &Key, seed: u64) -> u64 {
     )
 }
 
-pub struct PTHash<P: Packed + Default, R: Reduce>
+/// P: Packing of `k` array.
+/// R: How to compute `a % b` efficiently for constant `b`.
+/// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
+pub struct PTHash<P: Packed + Default, R: Reduce, const T: bool>
 where
     u64: Rem<R, Output = u64>,
 {
@@ -44,7 +47,8 @@ where
     /// Additional constants.
     p1: u64,
     p2: u64,
-    // Reduce operations
+
+    // Precomputed fast modulo operations.
     /// Fast %n
     rem_n: R,
     /// Fast %p2
@@ -52,6 +56,7 @@ where
     /// Fast %(m-p2)
     rem_mp2: R,
 
+    // Computed state.
     /// The global seed.
     s: u64,
     /// The pivots.
@@ -60,7 +65,7 @@ where
     free: Vec<usize>,
 }
 
-impl<P: Packed + Default, R: Reduce> PTHash<P, R>
+impl<P: Packed + Default, R: Reduce, const T: bool> PTHash<P, R, T>
 where
     u64: Rem<R, Output = u64>,
 {
@@ -111,10 +116,14 @@ where
     }
 
     fn bucket(&self, hx: u64) -> usize {
-        self._bucket_thirds(hx)
+        if T {
+            self.bucket_thirds(hx)
+        } else {
+            self.bucket_naive(hx)
+        }
     }
 
-    fn _bucket_naive(&self, hx: u64) -> usize {
+    fn bucket_naive(&self, hx: u64) -> usize {
         // TODO: Branchless implementation.
         (if (hx % self.rem_n) < self.p1 {
             hx % self.rem_p2
@@ -125,7 +134,7 @@ where
 
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
-    fn _bucket_thirds(&self, hx: u64) -> usize {
+    fn bucket_thirds(&self, hx: u64) -> usize {
         let mod_mp2 = hx % self.rem_mp2;
         let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as u64;
         let large = (hx % self.rem_n) >= self.p1;
