@@ -6,7 +6,9 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [profile.release]
+# Things are _slightly_ faster without debug symbols, but they're nice for debugging.
 debug = true
+# Needed for good inlining across crates, in particular murmur2.
 lto = "thin"
 incremental = true
 
