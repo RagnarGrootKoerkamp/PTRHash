@@ -200,7 +200,7 @@ where
 
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; self.n];
-        let mut k = vec![u64::MAX; self.m];
+        let mut k = vec![0; self.m];
 
         // Step 5: For each bucket, find a suitable offset k_i.
         let mut key_hashes = vec![];

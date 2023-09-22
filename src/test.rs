@@ -2,6 +2,7 @@ use std::{hint::black_box, time::SystemTime};
 
 use rand::Rng;
 use strength_reduce::StrengthReducedU64;
+use sucds::int_vectors::CompactVector;
 
 use crate::reduce::*;
 
@@ -114,6 +115,36 @@ fn vec_strengthreduce32() {
 }
 
 // #[test]
-// fn queries_exact_fastreduce() {
+// fn vec_fastreduce() {
+//     queries_exact::<FastReduce>();
+// }
+
+#[test]
+fn compact_u64() {
+    queries_exact::<CompactVector, u64, false>();
+}
+
+#[test]
+fn compact_fastmod64() {
+    queries_exact::<CompactVector, FastMod64, false>();
+}
+
+#[test]
+fn compact_fastmod32() {
+    queries_exact::<CompactVector, FastMod32, false>();
+}
+
+#[test]
+fn compact_strengthreduce64() {
+    queries_exact::<CompactVector, StrengthReducedU64, false>();
+}
+
+#[test]
+fn compact_strengthreduce32() {
+    queries_exact::<CompactVector, MyStrengthReducedU32, false>();
+}
+
+// #[test]
+// fn compact_fastreduce() {
 //     queries_exact::<FastReduce>();
 // }

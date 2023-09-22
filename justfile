@@ -13,17 +13,17 @@ test:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
 
 ## Queries
-bench target="queries_exact_fastmod" *args="":
+bench target="compact_fastmod" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
-flame target="queries_exact_fastmod64" *args="": build
+flame target="compact_fastmod64" *args="": build
     cargo flamegraph --open --unit-test -- --test-threads 1 --nocapture {{target}} {{args}}
 
 # instructions per cycle
-stat target='queries_exact_fastmod64' *args='': build
+stat target='compact_fastmod64' *args='': build
     perf stat cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
 # record time usage
-record target='queries_exact_fastmod64' *args='': build
+record target='compact_fastmod64' *args='': build
     perf record cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
     perf report -n
 report:
