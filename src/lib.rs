@@ -81,7 +81,13 @@ where
 
         // TODO: Understand why exactly this choice of parameters.
         let p1 = (n * 6 / 10) as u64;
-        let p2 = (m * 3 / 10) as u64;
+
+        // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
+        // This allows for more efficient computation modulo p2 or m-p2.
+        // See `bucket_thirds()` below.
+        let m = m.next_multiple_of(3);
+        let p2 = (m / 3) as u64;
+        assert_eq!(m as u64 - p2, 2 * p2);
 
         let mut pthash = Self {
             n0,
@@ -105,12 +111,25 @@ where
     }
 
     fn bucket(&self, hx: u64) -> usize {
+        self._bucket_thirds(hx)
+    }
+
+    fn _bucket_naive(&self, hx: u64) -> usize {
         // TODO: Branchless implementation.
         (if (hx % self.rem_n) < self.p1 {
             hx % self.rem_p2
         } else {
             self.p2 + hx % self.rem_mp2
         }) as usize
+    }
+
+    /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
+    /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
+    fn _bucket_thirds(&self, hx: u64) -> usize {
+        let mod_mp2 = hx % self.rem_mp2;
+        let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as u64;
+        let large = (hx % self.rem_n) >= self.p1;
+        (self.p2 * large as u64 + if large { mod_mp2 } else { mod_p2 }) as usize
     }
 
     /// Branchless version of bucket() above that turns out to be slower.
