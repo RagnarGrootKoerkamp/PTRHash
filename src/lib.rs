@@ -234,7 +234,7 @@ where
         if p < self.n0 {
             p
         } else {
-            self.free[p - self.n0]
+            unsafe { *self.free.get_unchecked(p - self.n0) }
         }
     }
 }
