@@ -67,23 +67,25 @@ where
     u64: Rem<R, Output = u64>,
 {
     eprintln!();
-    let n = 10_000_000;
-    let keys = generate_keys(n);
-    let start = SystemTime::now();
-    let mphf = PTHash::<Vec<u64>, R>::new(7.0, 1.0, &keys);
-    eprintln!("construction: {:?}", start.elapsed().unwrap().as_secs_f32());
-    let start = SystemTime::now();
-    // Prevent loop unrolling.
-    let loops = black_box(10);
-    let mut sum = 0;
-    for _ in 0..loops {
-        for key in &keys {
-            sum += mphf.index(key);
+    // To prevent loop unrolling.
+    let total = black_box(100_000_000);
+    for n in [1000, 10_000, 100_000, 1_000_000, 10_000_000] {
+        let keys = generate_keys(n);
+        let start = SystemTime::now();
+        let mphf = PTHash::<Vec<u64>, R>::new(7.0, 1.0, &keys);
+        let construction = start.elapsed().unwrap().as_secs_f32();
+        let start = SystemTime::now();
+        let loops = total / n;
+        let mut sum = 0;
+        for _ in 0..loops {
+            for key in &keys {
+                sum += mphf.index(key);
+            }
         }
+        black_box(sum);
+        let query = start.elapsed().unwrap().as_nanos() as usize / (loops * n);
+        eprintln!("{n:>10}: {construction:>2.5} {query:>3}");
     }
-    black_box(sum);
-    let t = start.elapsed().unwrap().as_nanos() as usize / (10 * n);
-    eprintln!("ns/query: {t}");
 }
 
 #[test]
