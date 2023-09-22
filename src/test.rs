@@ -75,11 +75,13 @@ where
     let start = SystemTime::now();
     // Prevent loop unrolling.
     let loops = black_box(10);
+    let mut sum = 0;
     for _ in 0..loops {
         for key in &keys {
-            mphf.index(key);
+            sum += mphf.index(key);
         }
     }
+    black_box(sum);
     let t = start.elapsed().unwrap().as_nanos() as usize / (10 * n);
     eprintln!("ns/query: {t}");
 }
