@@ -12,17 +12,17 @@ test:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
 
 ## Queries
-bench target="queries_exact_fastmod" *args="": cpufreq
+bench target="queries_exact_fastmod" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 flame target="queries_exact_fastmod64" *args="": build
     cargo flamegraph --open --unit-test -- --test-threads 1 --nocapture {{target}} {{args}}
 
 # instructions per cycle
-stat target='queries_exact_fastmod64' *args='': build cpufreq
+stat target='queries_exact_fastmod64' *args='': build
     perf stat cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
 # record time usage
-record target='queries_exact_fastmod64' *args='': build cpufreq
+record target='queries_exact_fastmod64' *args='': build
     perf record cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
     perf report -n
 report:
@@ -30,11 +30,11 @@ report:
 
 ## Construction
 
-cflame: cpufreq
+cflame:
     cargo flamegraph --open --unit-test -- construct_free
 
 # TODO: This isn't really working yet; ideally we run the test binary directly
 # but it doesn't have a deterministic name.
-cmemory: cpufreq
+cmemory:
     cargo build -r
     heaptrack cargo test -r -- construct_free
