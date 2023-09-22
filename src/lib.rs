@@ -65,10 +65,32 @@ where
     free: Vec<usize>,
 }
 
-impl<P: Packed + Default, R: Reduce, const T: bool> PTHash<P, R, T>
+impl<P: Packed, R: Reduce, const T: bool> PTHash<P, R, T>
 where
     u64: Rem<R, Output = u64>,
 {
+    /// Helper that converts from a different PTHash type.
+    /// This way the data vector can be reused between different encoding/reduction types.
+    #[cfg(test)]
+    pub fn convert_from<P2: Packed, R2: Reduce, const T2: bool>(other: &PTHash<P2, R2, T2>) -> Self
+    where
+        u64: Rem<R2, Output = u64>,
+    {
+        Self {
+            n0: other.n0,
+            n: other.n,
+            m: other.m,
+            p1: other.p1,
+            p2: other.p2,
+            rem_n: R::new(other.n as u64),
+            rem_p2: R::new(other.p2),
+            rem_mp2: R::new(other.m as u64 - other.p2),
+            s: other.s,
+            k: P::new(other.k.to_vec()),
+            free: other.free.clone(),
+        }
+    }
+
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         // n is the number of slots in the target list.
         let n0 = keys.len();

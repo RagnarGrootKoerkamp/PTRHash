@@ -1,4 +1,4 @@
-use std::{hint::black_box, time::SystemTime};
+use std::{collections::HashMap, hint::black_box, sync::Mutex, time::SystemTime};
 
 use rand::Rng;
 use strength_reduce::StrengthReducedU64;
@@ -67,14 +67,34 @@ fn queries_exact<P: Packed + Default, R: Reduce, const T: bool>()
 where
     u64: Rem<R, Output = u64>,
 {
+    // Use a static cache of pilots: this is slightly ugly/verbose, but
+    // basically this way we only run the construction once for each n, and then
+    // we can construct types MPHFs from known pilots.
+    let get = |n: usize| -> (Vec<u64>, PTHash<P, R, T>) {
+        type DefaultPTHash = PTHash<Vec<u64>, u64, false>;
+        lazy_static::lazy_static! {
+            static ref STATE: Mutex<HashMap<usize, (Vec<u64>, DefaultPTHash)>> =
+                Mutex::new(HashMap::new());
+        }
+
+        let mut binding = STATE.lock().unwrap();
+        let (keys, mphf) = binding.entry(n).or_insert_with(|| {
+            let keys = generate_keys(n);
+            let mphf = PTHash::<Vec<u64>, u64, false>::new(7.0, 1.0, &keys);
+            (keys, mphf)
+        });
+        (
+            keys.clone(),
+            PTHash::convert_from::<Vec<u64>, u64, false>(mphf),
+        )
+    };
+
     eprintln!();
     // To prevent loop unrolling.
-    let total = black_box(100_000_000);
+    let total = black_box(50_000_000);
     for n in [1000, 10_000, 100_000, 1_000_000, 10_000_000] {
-        let keys = generate_keys(n);
-        let start = SystemTime::now();
-        let mphf = PTHash::<P, R, T>::new(7.0, 1.0, &keys);
-        let _construction = start.elapsed().unwrap().as_secs_f32();
+        let (keys, mphf) = get(n);
+
         let start = SystemTime::now();
         let loops = total / n;
         let mut sum = 0;
@@ -85,7 +105,6 @@ where
         }
         black_box(sum);
         let query = start.elapsed().unwrap().as_nanos() as usize / (loops * n);
-        // eprintln!("{n:>10}: {construction:>2.5} {query:>3}");
         eprint!(" {query:>2}");
     }
     eprintln!();
