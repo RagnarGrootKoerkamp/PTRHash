@@ -74,7 +74,7 @@ where
         let keys = generate_keys(n);
         let start = SystemTime::now();
         let mphf = PTHash::<P, R, T>::new(7.0, 1.0, &keys);
-        let construction = start.elapsed().unwrap().as_secs_f32();
+        let _construction = start.elapsed().unwrap().as_secs_f32();
         let start = SystemTime::now();
         let loops = total / n;
         let mut sum = 0;
@@ -85,8 +85,10 @@ where
         }
         black_box(sum);
         let query = start.elapsed().unwrap().as_nanos() as usize / (loops * n);
-        eprintln!("{n:>10}: {construction:>2.5} {query:>3}");
+        // eprintln!("{n:>10}: {construction:>2.5} {query:>3}");
+        eprint!(" {query:>2}");
     }
+    eprintln!();
 }
 
 #[test]
