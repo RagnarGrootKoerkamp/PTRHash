@@ -114,11 +114,23 @@ where
     }
 
     /// Branchless version of bucket() above that turns out to be slower.
-    #[allow(unused)]
-    fn bucket_branchless(&self, hx: u64) -> usize {
+    /// Generates 4 mov and 4 cmov instructions, which take a long time to execute.
+    fn _bucket_branchless(&self, hx: u64) -> usize {
         let is_large = (hx % self.rem_n) >= self.p1;
         let rem = if is_large { self.rem_mp2 } else { self.rem_p2 };
         (is_large as u64 * self.p2 + hx % rem) as usize
+    }
+
+    /// Alternate version of bucket() above that turns out to be (a bit?) slower.
+    /// Branches and does 4 mov instructions in each branch.
+    fn _bucket_branchless_2(&self, hx: u64) -> usize {
+        let is_large = (hx % self.rem_n) >= self.p1;
+        let rem = if is_large {
+            &self.rem_mp2
+        } else {
+            &self.rem_p2
+        };
+        (is_large as u64 * self.p2 + hx % *rem) as usize
     }
 
     fn position(&self, hx: u64, k: u64) -> usize {

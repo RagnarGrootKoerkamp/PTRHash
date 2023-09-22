@@ -2,6 +2,7 @@ alias b := bench
 alias f := flame
 alias s := stat
 alias r := record
+alias p := record
 
 build:
     cargo build -r
