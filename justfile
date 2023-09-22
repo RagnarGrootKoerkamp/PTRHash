@@ -12,7 +12,7 @@ test:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
 
 ## Queries
-bench target="queries" *args="": cpufreq
+bench target="queries_exact_fastmod" *args="": cpufreq
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 flame target="queries_exact_fastmod64" *args="": build
     cargo flamegraph --open --unit-test -- --test-threads 1 --nocapture {{target}} {{args}}

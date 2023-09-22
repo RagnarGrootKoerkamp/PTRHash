@@ -218,6 +218,7 @@ where
         self.k = Packed::new(k);
     }
 
+    #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash(x);
         let i = self.bucket(hx);
