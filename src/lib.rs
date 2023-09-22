@@ -113,6 +113,14 @@ where
         }) as usize
     }
 
+    /// Branchless version of bucket() above that turns out to be slower.
+    #[allow(unused)]
+    fn bucket_branchless(&self, hx: u64) -> usize {
+        let is_large = (hx % self.rem_n) >= self.p1;
+        let rem = if is_large { self.rem_mp2 } else { self.rem_p2 };
+        (is_large as u64 * self.p2 + hx % rem) as usize
+    }
+
     fn position(&self, hx: u64, k: u64) -> usize {
         ((hx ^ self.hash(&k)) % self.rem_n) as usize
     }
