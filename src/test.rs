@@ -1,4 +1,4 @@
-use std::time::SystemTime;
+use std::{hint::black_box, time::SystemTime};
 
 use rand::Rng;
 use strength_reduce::StrengthReducedU64;
@@ -73,7 +73,9 @@ where
     let mphf = PTHash::<Vec<u64>, R>::new(7.0, 1.0, &keys);
     eprintln!("construction: {:?}", start.elapsed().unwrap().as_secs_f32());
     let start = SystemTime::now();
-    for _ in 0..10 {
+    // Prevent loop unrolling.
+    let loops = black_box(10);
+    for _ in 0..loops {
         for key in &keys {
             mphf.index(key);
         }
