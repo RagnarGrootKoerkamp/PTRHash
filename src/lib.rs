@@ -107,7 +107,8 @@ where
         let m = (c * (n as f32) / (n as f32).log2()).ceil() as usize;
 
         // TODO: Understand why exactly this choice of parameters.
-        let p1 = (n * 6 / 10) as u64;
+        // NOTE: This is basically a constant now.
+        let p1 = (0.6f64 * u64::MAX as f64) as u64;
 
         // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
         // This allows for more efficient computation modulo p2 or m-p2.
@@ -147,7 +148,7 @@ where
 
     fn bucket_naive(&self, hx: u64) -> usize {
         // TODO: Branchless implementation.
-        (if (hx % self.rem_n) < self.p1 {
+        (if hx < self.p1 {
             hx % self.rem_p2
         } else {
             self.p2 + hx % self.rem_mp2
@@ -159,14 +160,14 @@ where
     fn bucket_thirds(&self, hx: u64) -> usize {
         let mod_mp2 = hx % self.rem_mp2;
         let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as u64;
-        let large = (hx % self.rem_n) >= self.p1;
+        let large = hx >= self.p1;
         (self.p2 * large as u64 + if large { mod_mp2 } else { mod_p2 }) as usize
     }
 
     /// Branchless version of bucket() above that turns out to be slower.
     /// Generates 4 mov and 4 cmov instructions, which take a long time to execute.
     fn _bucket_branchless(&self, hx: u64) -> usize {
-        let is_large = (hx % self.rem_n) >= self.p1;
+        let is_large = hx >= self.p1;
         let rem = if is_large { self.rem_mp2 } else { self.rem_p2 };
         (is_large as u64 * self.p2 + hx % rem) as usize
     }
@@ -174,7 +175,7 @@ where
     /// Alternate version of bucket() above that turns out to be (a bit?) slower.
     /// Branches and does 4 mov instructions in each branch.
     fn _bucket_branchless_2(&self, hx: u64) -> usize {
-        let is_large = (hx % self.rem_n) >= self.p1;
+        let is_large = hx >= self.p1;
         let rem = if is_large {
             &self.rem_mp2
         } else {
