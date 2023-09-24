@@ -113,6 +113,6 @@ impl Rem<FastReduce> for u64 {
     type Output = u64;
 
     fn rem(self, rhs: FastReduce) -> Self::Output {
-        mul128_u64(self as u128, rhs.d)
+        ((self as u128 * rhs.d as u128) >> 64) as u64
     }
 }
