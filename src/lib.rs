@@ -163,6 +163,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
 
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
+    #[allow(unused)]
     fn _bucket_thirds_shift(&self, hx: Hash) -> usize {
         let mod_mp2 = hx.reduce(self.rem_mp2);
         let small = (hx >= self.p1) as usize;
@@ -270,7 +271,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
             }
             'k: for ki in 0u64.. {
                 if LOG {
-                    if ki > 0 && ki % 100000 == 0 {
+                    if ki > 0 && ki % 10000000 == 0 {
                         eprintln!("{}: ki = {}", bucket.len(), ki);
                     }
                 }
