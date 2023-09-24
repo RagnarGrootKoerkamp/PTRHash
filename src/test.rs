@@ -63,11 +63,7 @@ fn construct_free() {
     PTHash::<Vec<u64>, u64, u64, false>::new(7.0, 0.99, &keys);
 }
 
-fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>()
-where
-    u64: Rem<Rm, Output = u64>,
-    u64: Rem<Rn, Output = u64>,
-{
+fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
     // Use a static cache of pilots: this is slightly ugly/verbose, but
     // basically this way we only run the construction once for each n, and then
     // we can construct types MPHFs from known pilots.

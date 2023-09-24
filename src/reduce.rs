@@ -1,23 +1,58 @@
-use std::ops::Rem;
+use std::ops::BitXor;
 
 use strength_reduce::{StrengthReducedU32, StrengthReducedU64};
 
-pub trait Reduce: Copy
-where
-    u64: Rem<Self, Output = u64>,
-{
-    fn new(d: u64) -> Self;
+/// Strong type for hashes.
+///
+/// We want to limit what kind of operations we do on hashes.
+/// In particular we only need:
+/// - xor, for h(x) ^ h(k)
+/// - reduce: h(x) -> [0, n)
+/// - ord: h(x) < p1 * n
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Hash(u64);
+
+impl BitXor for Hash {
+    type Output = Self;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Hash(self.0 ^ rhs.0)
+    }
+}
+
+impl Hash {
+    pub fn new(h: u64) -> Self {
+        Hash(h)
+    }
+
+    /// Reduce the hash to a value in the range [0, d).
+    pub fn reduce<R: Reduce>(self, d: R) -> usize {
+        d.reduce(self)
+    }
+}
+
+pub trait Reduce: Copy {
+    fn new(d: usize) -> Self;
+    fn reduce(self, h: Hash) -> usize;
 }
 
 impl Reduce for u64 {
-    fn new(d: u64) -> Self {
-        d
+    fn new(d: usize) -> Self {
+        d as u64
+    }
+
+    fn reduce(self, h: Hash) -> usize {
+        (h.0 % self) as usize
     }
 }
 
 impl Reduce for StrengthReducedU64 {
-    fn new(d: u64) -> Self {
-        StrengthReducedU64::new(d)
+    fn new(d: usize) -> Self {
+        StrengthReducedU64::new(d as u64)
+    }
+
+    fn reduce(self, h: Hash) -> usize {
+        (h.0 % self) as usize
     }
 }
 
@@ -25,15 +60,12 @@ impl Reduce for StrengthReducedU64 {
 pub struct MyStrengthReducedU32(StrengthReducedU32);
 
 impl Reduce for MyStrengthReducedU32 {
-    fn new(d: u64) -> Self {
+    fn new(d: usize) -> Self {
         MyStrengthReducedU32(StrengthReducedU32::new(d as u32))
     }
-}
-impl Rem<MyStrengthReducedU32> for u64 {
-    type Output = u64;
 
-    fn rem(self, rhs: MyStrengthReducedU32) -> Self::Output {
-        ((self as u32) % rhs.0) as u64
+    fn reduce(self, h: Hash) -> usize {
+        (h.0 as u32 % self.0) as usize
     }
 }
 
@@ -53,20 +85,16 @@ pub struct FastMod64 {
     m: u128,
 }
 impl Reduce for FastMod64 {
-    fn new(d: u64) -> Self {
+    fn new(d: usize) -> Self {
         Self {
-            d,
+            d: d as u64,
             m: u128::MAX / d as u128 + 1,
         }
     }
-}
 
-impl Rem<FastMod64> for u64 {
-    type Output = u64;
-
-    fn rem(self, rhs: FastMod64) -> Self::Output {
-        let lowbits = rhs.m.wrapping_mul(self as u128);
-        mul128_u64(lowbits, rhs.d)
+    fn reduce(self, h: Hash) -> usize {
+        let lowbits = self.m.wrapping_mul(h.0 as u128);
+        mul128_u64(lowbits, self.d) as usize
     }
 }
 
@@ -77,22 +105,17 @@ pub struct FastMod32 {
     m: u64,
 }
 impl Reduce for FastMod32 {
-    fn new(d: u64) -> Self {
-        assert!(d <= u32::MAX as u64);
+    fn new(d: usize) -> Self {
+        assert!(d <= u32::MAX as usize);
         Self {
-            d,
+            d: d as u64,
             m: u64::MAX / d as u64 + 1,
         }
     }
-}
 
-impl Rem<FastMod32> for u64 {
-    type Output = u64;
-
-    /// Only use the last 32 bits of rhs!
-    fn rem(self, rhs: FastMod32) -> Self::Output {
-        let lowbits = rhs.m * (self as u32 as u64);
-        ((lowbits as u128 * rhs.d as u128) >> 64) as u64
+    fn reduce(self, h: Hash) -> usize {
+        let lowbits = self.m * (h.0 as u32 as u64);
+        ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
 }
 
@@ -100,19 +123,15 @@ impl Rem<FastMod32> for u64 {
 /// NOTE: This doesn't work because entropy only comes from the high-order bits.
 #[derive(Copy, Clone)]
 pub struct FastReduce {
-    d: u64,
+    d: usize,
 }
 
 impl Reduce for FastReduce {
-    fn new(d: u64) -> Self {
+    fn new(d: usize) -> Self {
         Self { d }
     }
-}
 
-impl Rem<FastReduce> for u64 {
-    type Output = u64;
-
-    fn rem(self, rhs: FastReduce) -> Self::Output {
-        ((self as u128 * rhs.d as u128) >> 64) as u64
+    fn reduce(self, h: Hash) -> usize {
+        ((self.d as u128 * h.0 as u128) >> 64) as usize
     }
 }
