@@ -120,18 +120,52 @@ impl Reduce for FastMod32 {
 }
 
 /// Taken from https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
-/// NOTE: This doesn't work because entropy only comes from the high-order bits.
+/// NOTE: This only uses the lg(n) high-order bits of entropy from the hash.
 #[derive(Copy, Clone)]
-pub struct FastReduce {
+pub struct FastReduce64 {
     d: usize,
 }
 
-impl Reduce for FastReduce {
+impl Reduce for FastReduce64 {
     fn new(d: usize) -> Self {
         Self { d }
     }
 
     fn reduce(self, h: Hash) -> usize {
         ((self.d as u128 * h.0 as u128) >> 64) as usize
+    }
+}
+
+/// NOTE: This first takes the 32 high-order bits of the hash, and then uses the lg(n) high-order bits of that.
+#[derive(Copy, Clone)]
+pub struct FastReduceHigh32 {
+    d: usize,
+}
+
+impl Reduce for FastReduceHigh32 {
+    fn new(d: usize) -> Self {
+        assert!(d <= u32::MAX as usize);
+        Self { d }
+    }
+
+    fn reduce(self, h: Hash) -> usize {
+        ((self.d as u64 * h.0 >> 32) >> 32) as usize
+    }
+}
+
+/// NOTE: This first takes the 32 low-order bits of the hash, and then uses the lg(n) high-order bits of that.
+#[derive(Copy, Clone)]
+pub struct FastReduceLow32 {
+    d: usize,
+}
+
+impl Reduce for FastReduceLow32 {
+    fn new(d: usize) -> Self {
+        assert!(d <= u32::MAX as usize);
+        Self { d }
+    }
+
+    fn reduce(self, h: Hash) -> usize {
+        ((self.d as u64 * h.0 as u32 as u64) >> 32) as usize
     }
 }
