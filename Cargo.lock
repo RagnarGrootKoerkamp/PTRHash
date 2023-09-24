@@ -90,6 +90,7 @@ dependencies = [
  "lazy_static",
  "murmur2",
  "rand",
+ "rand_chacha",
  "rustc-hash",
  "strength_reduce",
  "sucds",

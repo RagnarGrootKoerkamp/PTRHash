@@ -7,8 +7,8 @@ alias r := report
 
 build:
     cargo build -r
-test target="test_":
-    cargo test -r -- {{target}}
+test target="test_" *args="":
+    cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
 @cpufreq:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null

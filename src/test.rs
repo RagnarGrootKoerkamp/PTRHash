@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hint::black_box, sync::Mutex, time::SystemTime};
 
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use strength_reduce::StrengthReducedU64;
 use sucds::int_vectors::CompactVector;
 
@@ -9,7 +9,9 @@ use crate::reduce::*;
 use super::*;
 
 fn generate_keys(n: usize) -> Vec<Key> {
-    let mut rng = rand::thread_rng();
+    let seed = random();
+    eprintln!("seed for {n}: {seed}");
+    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
     let mut keys = Vec::with_capacity(n);
     for _ in 0..n {
         keys.push(rng.gen());
@@ -20,27 +22,45 @@ fn generate_keys(n: usize) -> Vec<Key> {
     keys
 }
 
-#[test]
-fn test_exact() {
-    for n in [3, 5, 6, 7, 9, 10, 100, 1000, 10000, 100000] {
-        let keys = generate_keys(n);
-        let pthash = PTHash::<CompactVector, FastMod32, FastMod32, false>::new(6.0, 1.0, &keys);
+fn test_exact<Rm: Reduce, Rn: Reduce>() {
+    for n in [100, 1000, 10000, 100000] {
+        for _ in 0..100 {
+            let keys = generate_keys(n);
+            let pthash = PTHash::<Vec<u64>, Rm, Rn, false>::new(7.0, 1.0, &keys);
 
-        let mut done = vec![false; n];
+            let mut done = vec![false; n];
 
-        for key in keys {
-            let idx = pthash.index(&key);
-            assert!(!done[idx]);
-            done[idx] = true;
+            for key in keys {
+                let idx = pthash.index(&key);
+                assert!(!done[idx]);
+                done[idx] = true;
+            }
         }
     }
+}
+
+#[test]
+fn test_exact_u64() {
+    test_exact::<u64, u64>();
+}
+#[test]
+fn test_exact_fastmod64() {
+    test_exact::<FastMod64, FastMod64>();
+}
+#[test]
+fn test_exact_fastmod32() {
+    test_exact::<FastMod32, FastMod32>();
+}
+#[test]
+fn test_exact_fastreduce() {
+    test_exact::<FastReduce, FastReduce>();
 }
 
 #[test]
 fn test_free() {
     for n in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 1000, 10000, 100000] {
         let keys = generate_keys(n);
-        let pthash = PTHash::<CompactVector, FastMod64, FastMod64, false>::new(6.0, 0.9, &keys);
+        let pthash = PTHash::<CompactVector, FastMod64, FastMod64, false>::new(7.0, 0.9, &keys);
 
         let mut done = vec![false; n];
 
