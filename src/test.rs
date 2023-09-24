@@ -1,7 +1,6 @@
-use std::{collections::HashMap, hint::black_box, sync::Mutex, time::SystemTime};
+use std::{hint::black_box, time::SystemTime};
 
 use rand::{Rng, SeedableRng};
-use strength_reduce::StrengthReducedU64;
 use sucds::int_vectors::CompactVector;
 
 use crate::reduce::*;
@@ -22,7 +21,7 @@ fn generate_keys(n: usize) -> Vec<Key> {
     keys
 }
 
-fn test_exact<Rm: Reduce, Rn: Reduce>() {
+fn exact<Rm: Reduce, Rn: Reduce>() {
     for n in [100, 1000, 10000, 100000] {
         for _ in 0..100 {
             let keys = generate_keys(n);
@@ -40,27 +39,39 @@ fn test_exact<Rm: Reduce, Rn: Reduce>() {
 }
 
 #[test]
-fn test_exact_u64() {
-    test_exact::<u64, u64>();
+fn exact_u64() {
+    exact::<u64, u64>();
 }
 #[test]
-fn test_exact_fastmod64() {
-    test_exact::<FastMod64, FastMod64>();
+fn exact_fm64() {
+    exact::<FM64, FM64>();
 }
 #[test]
-fn test_exact_fastmod32() {
-    test_exact::<FastMod32, FastMod32>();
+fn exact_fm32l() {
+    exact::<FM32L, FM32L>();
 }
 #[test]
-fn test_exact_fastreduce() {
-    test_exact::<FastReduce, FastReduce>();
+fn exact_fm32h() {
+    exact::<FM32H, FM32H>();
+}
+#[test]
+fn exact_fr64() {
+    exact::<FR64, FR64>();
+}
+#[test]
+fn exact_fr32l() {
+    exact::<FR32L, FR32L>();
+}
+#[test]
+fn exact_fr32h() {
+    exact::<FR32H, FR32H>();
 }
 
 #[test]
-fn test_free() {
+fn free() {
     for n in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 100, 1000, 10000, 100000] {
         let keys = generate_keys(n);
-        let pthash = PTHash::<CompactVector, FastMod64, FastMod64, false>::new(7.0, 0.9, &keys);
+        let pthash = PTHash::<CompactVector, FM64, FM64, false>::new(7.0, 0.9, &keys);
 
         let mut done = vec![false; n];
 
@@ -132,47 +143,42 @@ fn vec_u64() {
 }
 
 #[test]
-fn vec_fastmod64() {
-    queries_exact::<Vec<u64>, FastMod64, FastMod64, false>();
+fn vec_fm64() {
+    queries_exact::<Vec<u64>, FM64, FM64, false>();
 }
 
 #[test]
-fn vec_fastmod64_third() {
-    queries_exact::<Vec<u64>, FastMod64, FastMod64, true>();
+fn vec_fm64_third() {
+    queries_exact::<Vec<u64>, FM64, FM64, true>();
 }
 
 #[test]
-fn vec_fastmod32() {
-    queries_exact::<Vec<u64>, FastMod32, FastMod32, false>();
+fn vec_fm32() {
+    queries_exact::<Vec<u64>, FM32L, FM32L, false>();
 }
 
 #[test]
-fn vec_strengthreduce64() {
-    queries_exact::<Vec<u64>, StrengthReducedU64, StrengthReducedU64, false>();
+fn vec_sr64() {
+    queries_exact::<Vec<u64>, SR64, SR64, false>();
 }
 
 #[test]
-fn vec_strengthreduce32() {
-    queries_exact::<Vec<u64>, MyStrengthReducedU32, MyStrengthReducedU32, false>();
-}
-
-// times out
-#[test]
-fn vec_fastreducereduce() {
-    queries_exact::<Vec<u64>, FastReduce, FastReduce, false>();
-}
-#[test]
-fn vec_fastmod64reduce() {
-    queries_exact::<Vec<u64>, FastMod64, FastReduce, false>();
+fn vec_sr32() {
+    queries_exact::<Vec<u64>, SR32L, SR32L, false>();
 }
 
 #[test]
-fn vec_fastreducemod64() {
-    queries_exact::<Vec<u64>, FastReduce, FastMod64, false>();
+fn vec_fr64() {
+    queries_exact::<Vec<u64>, FR64, FR64, false>();
+}
+
+#[test]
+fn vec_frmod64() {
+    queries_exact::<Vec<u64>, FR64, FM64, false>();
 }
 #[test]
-fn vec_fastreducemod32() {
-    queries_exact::<Vec<u64>, FastReduce, FastMod32, false>();
+fn vec_frmod32() {
+    queries_exact::<Vec<u64>, FR64, FM32L, false>();
 }
 
 #[test]
@@ -181,26 +187,26 @@ fn compact_u64() {
 }
 
 #[test]
-fn compact_fastmod64() {
-    queries_exact::<CompactVector, FastMod64, FastMod64, false>();
+fn compact_fm64() {
+    queries_exact::<CompactVector, FM64, FM64, false>();
 }
 
 #[test]
-fn compact_fastmod32() {
-    queries_exact::<CompactVector, FastMod32, FastMod32, false>();
+fn compact_fm32() {
+    queries_exact::<CompactVector, FM32L, FM32L, false>();
 }
 
 #[test]
-fn compact_strengthreduce64() {
-    queries_exact::<CompactVector, StrengthReducedU64, StrengthReducedU64, false>();
+fn compact_sr64() {
+    queries_exact::<CompactVector, SR64, SR64, false>();
 }
 
 #[test]
-fn compact_strengthreduce32() {
-    queries_exact::<CompactVector, MyStrengthReducedU32, MyStrengthReducedU32, false>();
+fn compact_sr32() {
+    queries_exact::<CompactVector, SR32L, SR32L, false>();
 }
 
 // #[test]
-// fn compact_fastreduce() {
-//     queries_exact::<FastReduce>();
+// fn compact_fr() {
+//     queries_exact::<Fr>();
 // }
