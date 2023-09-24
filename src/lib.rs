@@ -217,6 +217,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
                 let h = hash(key, s);
                 let b = self.bucket(h);
                 if !hashes.insert((h, b)) {
+                    eprintln!("Collision for s = {}", s);
                     continue 's;
                 }
             }
