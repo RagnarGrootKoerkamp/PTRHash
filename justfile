@@ -1,3 +1,4 @@
+alias t := test
 alias b := bench
 alias f := flame
 alias s := stat
@@ -6,8 +7,8 @@ alias r := report
 
 build:
     cargo build -r
-test:
-    cargo test -r
+test target="test_":
+    cargo test -r -- {{target}}
 
 @cpufreq:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
