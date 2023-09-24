@@ -48,6 +48,7 @@ where
     /// Additional constants.
     p1: u64,
     p2: u64,
+    mp2: u64,
 
     // Precomputed fast modulo operations.
     /// Fast %n
@@ -87,6 +88,7 @@ where
             m: other.m,
             p1: other.p1,
             p2: other.p2,
+            mp2: other.mp2,
             rem_n: Rn::new(other.n as u64),
             rem_p2: Rm::new(other.p2),
             rem_mp2: Rm::new(other.m as u64 - other.p2),
@@ -128,6 +130,7 @@ where
             m,
             p1,
             p2,
+            mp2: m as u64 - p2,
             rem_n: Rn::new(n as u64),
             rem_p2: Rm::new(p2),
             rem_mp2: Rm::new(m as u64 - p2),
@@ -146,6 +149,7 @@ where
     fn bucket(&self, hx: u64) -> usize {
         if T {
             self.bucket_thirds(hx)
+            // self.bucket_thirds_shift(hx)
         } else {
             self.bucket_naive(hx)
         }
@@ -167,6 +171,14 @@ where
         let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as u64;
         let large = hx >= self.p1;
         (self.p2 * large as u64 + if large { mod_mp2 } else { mod_p2 }) as usize
+    }
+
+    /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
+    /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
+    fn bucket_thirds_shift(&self, hx: u64) -> usize {
+        let mod_mp2 = hx % self.rem_mp2;
+        let small = hx >= self.p1;
+        (self.mp2 * small as u64 + mod_mp2 >> small as u64) as usize
     }
 
     /// Branchless version of bucket() above that turns out to be slower.

@@ -121,6 +121,11 @@ fn vec_fastmod64() {
 }
 
 #[test]
+fn vec_fastmod64_third() {
+    queries_exact::<Vec<u64>, FastMod64, FastMod64, true>();
+}
+
+#[test]
 fn vec_fastmod32() {
     queries_exact::<Vec<u64>, FastMod32, FastMod32, false>();
 }
