@@ -34,9 +34,10 @@ fn hash(x: &Key, seed: u64) -> u64 {
 /// P: Packing of `k` array.
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<P: Packed + Default, R: Reduce, const T: bool>
+pub struct PTHash<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>
 where
-    u64: Rem<R, Output = u64>,
+    u64: Rem<Rm, Output = u64>,
+    u64: Rem<Rn, Output = u64>,
 {
     /// The number of keys.
     n0: usize,
@@ -50,11 +51,11 @@ where
 
     // Precomputed fast modulo operations.
     /// Fast %n
-    rem_n: R,
+    rem_n: Rn,
     /// Fast %p2
-    rem_p2: R,
+    rem_p2: Rm,
     /// Fast %(m-p2)
-    rem_mp2: R,
+    rem_mp2: Rm,
 
     // Computed state.
     /// The global seed.
@@ -65,16 +66,20 @@ where
     free: Vec<usize>,
 }
 
-impl<P: Packed, R: Reduce, const T: bool> PTHash<P, R, T>
+impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T>
 where
-    u64: Rem<R, Output = u64>,
+    u64: Rem<Rm, Output = u64>,
+    u64: Rem<Rn, Output = u64>,
 {
     /// Helper that converts from a different PTHash type.
     /// This way the data vector can be reused between different encoding/reduction types.
     #[cfg(test)]
-    pub fn convert_from<P2: Packed, R2: Reduce, const T2: bool>(other: &PTHash<P2, R2, T2>) -> Self
+    pub fn convert_from<P2: Packed, Rm2: Reduce, Rn2: Reduce, const T2: bool>(
+        other: &PTHash<P2, Rm2, Rn2, T2>,
+    ) -> Self
     where
-        u64: Rem<R2, Output = u64>,
+        u64: Rem<Rm2, Output = u64>,
+        u64: Rem<Rn2, Output = u64>,
     {
         Self {
             n0: other.n0,
@@ -82,9 +87,9 @@ where
             m: other.m,
             p1: other.p1,
             p2: other.p2,
-            rem_n: R::new(other.n as u64),
-            rem_p2: R::new(other.p2),
-            rem_mp2: R::new(other.m as u64 - other.p2),
+            rem_n: Rn::new(other.n as u64),
+            rem_p2: Rm::new(other.p2),
+            rem_mp2: Rm::new(other.m as u64 - other.p2),
             s: other.s,
             k: P::new(other.k.to_vec()),
             free: other.free.clone(),
@@ -123,9 +128,9 @@ where
             m,
             p1,
             p2,
-            rem_n: R::new(n as u64),
-            rem_p2: R::new(p2),
-            rem_mp2: R::new(m as u64 - p2),
+            rem_n: Rn::new(n as u64),
+            rem_p2: Rm::new(p2),
+            rem_mp2: Rm::new(m as u64 - p2),
             s: 0,
             k: Default::default(),
             free: vec![],
