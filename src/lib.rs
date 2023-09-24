@@ -233,11 +233,23 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
             let b = self.bucket(h);
             buckets[b].push(i);
         }
+        let buckets = buckets;
 
         // Step 3: Sort buckets by size.
         let mut bucket_order: Vec<_> = (0..self.m).collect();
         bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
         let bucket_order = bucket_order;
+
+        if LOG {
+            // Print bucket size counts
+            let mut counts = vec![0; buckets[bucket_order[0]].len() + 1];
+            for bucket in &buckets {
+                counts[bucket.len()] += 1;
+            }
+            for (i, &count) in counts.iter().enumerate() {
+                eprintln!("{}: {}", i, count);
+            }
+        }
 
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; self.n];
@@ -256,6 +268,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
                 key_hashes.push(h);
             }
             'k: for ki in 0u64.. {
+                if LOG {
+                    if ki > 0 && ki % 100000 == 0 {
+                        eprintln!("{}: ki = {}", bucket.len(), ki);
+                    }
+                }
                 let hki = self.hash(&ki);
                 let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
