@@ -189,8 +189,21 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
         is_large as usize * self.p2 + hx.reduce(*rem)
     }
 
-    fn position(&self, hx: Hash, k: u64) -> usize {
-        (hx ^ self.hash(&k)).reduce(self.rem_n)
+    fn position(&self, hx: Hash, ki: u64) -> usize {
+        (hx ^ self.hash(&ki)).reduce(self.rem_n)
+    }
+
+    #[inline(always)]
+    pub fn index(&self, x: &Key) -> usize {
+        let hx = self.hash(x);
+        let i = self.bucket(hx);
+        let ki = self.k.index(i);
+        let p = self.position(hx, ki);
+        if p < self.n0 {
+            p
+        } else {
+            unsafe { *self.free.get_unchecked(p - self.n0) }
+        }
     }
 
     fn init_k(&mut self, keys: &Vec<Key>) {
@@ -291,18 +304,5 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
         }
 
         self.k = Packed::new(k);
-    }
-
-    #[inline(always)]
-    pub fn index(&self, x: &Key) -> usize {
-        let hx = self.hash(x);
-        let i = self.bucket(hx);
-        let ki = self.k.index(i);
-        let p = self.position(hx, ki);
-        if p < self.n0 {
-            p
-        } else {
-            unsafe { *self.free.get_unchecked(p - self.n0) }
-        }
     }
 }
