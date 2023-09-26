@@ -13,7 +13,6 @@ use murmur2::murmur64a;
 use pack::Packed;
 use rand::random;
 use reduce::Reduce;
-use rustc_hash::FxHashSet as HashSet;
 
 type Key = u64;
 use reduce::Hash;
@@ -227,105 +226,136 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
     }
 
     fn init_k(&mut self, keys: &Vec<Key>) {
-        // Step 1: find a global seed s to map items into buckets, such that items within a bucket have distinct hashes.
-        let mut hashes = HashSet::with_capacity_and_hasher(self.n as usize, Default::default());
-        's: loop {
-            hashes.clear();
-
-            let s: u64 = random();
-            for key in keys {
-                let h = hash(key, s);
-                let b = self.bucket(h);
-                if !hashes.insert((h, b)) {
-                    eprintln!("Collision for s = {}", s);
-                    continue 's;
-                }
-            }
-            self.s = s;
-            break;
-        }
-
-        // Step 2: Determine the buckets.
-        // TODO: Merge this with step 1 above.
-        // TODO: Rewrite to non-nested vec.
-        let mut buckets = vec![vec![]; self.m];
-        for (i, key) in keys.iter().enumerate() {
-            let h = self.hash(key);
-            let b = self.bucket(h);
-            buckets[b].push(i);
-        }
-        let buckets = buckets;
-
-        // Step 3: Sort buckets by size.
-        let mut bucket_order: Vec<_> = (0..self.m).collect();
-        bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
-        let bucket_order = bucket_order;
-
-        if LOG {
-            // Print bucket size counts
-            let mut counts = vec![0; buckets[bucket_order[0]].len() + 1];
-            for bucket in &buckets {
-                counts[bucket.len()] += 1;
-            }
-            for (i, &count) in counts.iter().enumerate() {
-                eprintln!("{}: {}", i, count);
-            }
-        }
-
         // Step 4: Initialize arrays;
-        let mut taken = bitvec![0; self.n];
-        let mut k = vec![0; self.m];
+        let mut taken = bitvec![0; 0];
+        let mut k = vec![];
 
-        // Step 5: For each bucket, find a suitable offset k_i.
-        let mut key_hashes = vec![];
-        for b in bucket_order {
-            let bucket = &buckets[b];
-            if bucket.is_empty() {
-                break;
+        let mut tries = 0;
+        const MAX_TRIES: usize = 3;
+
+        's: loop {
+            tries += 1;
+            assert!(
+                tries <= MAX_TRIES,
+                "Failed to find a global seed after {MAX_TRIES} tries for {} keys.",
+                self.n
+            );
+            if tries > 1 {
+                eprintln!("Try {tries} for global seed.");
             }
-            key_hashes.clear();
-            for idx in bucket {
-                let h = self.hash(&keys[*idx]);
-                key_hashes.push(h);
+
+            // Reset memory.
+            taken.clear();
+            taken.resize(self.n, false);
+            k.clear();
+            k.resize(self.m, 0);
+
+            // Step 1: choose a global seed s.
+            self.s = random();
+
+            // Step 2: Determine the buckets.
+            // TODO: Merge this with step 1 above.
+            // TODO: Rewrite to non-nested vec?
+            let mut buckets: Vec<Vec<Hash>> = vec![vec![]; self.m];
+            for key in keys {
+                let h = self.hash(key);
+                let b = self.bucket(h);
+                buckets[b].push(h);
             }
-            'k: for ki in 0u64.. {
-                if LOG {
-                    if ki > 0 && ki % 10000000 == 0 {
-                        eprintln!("{}: ki = {}", bucket.len(), ki);
-                    }
-                }
-                let hki = self.hash(&ki);
-                let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
-                // Check if kb is free.
-                for &hx in &key_hashes {
-                    if taken[position(hx)] {
-                        continue 'k;
-                    }
-                }
+            // Step 3: Sort buckets by size.
+            let mut bucket_order: Vec<_> = (0..self.m).collect();
+            bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
+            let bucket_order = bucket_order;
 
-                // This bucket does not collide with previous buckets!
-                // But there may still be collisions within the bucket!
-                for (i, &hx) in key_hashes.iter().enumerate() {
-                    let p = position(hx);
-                    if taken[p] {
-                        // Collision within the bucket. Clean already set entries.
-                        for &hx in &key_hashes[..i] {
-                            taken.set(position(hx), false);
+            let max_bucket_size = buckets[bucket_order[0]].len();
+
+            let expected_bucket_size = self.n as f32 / self.m as f32;
+            assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+
+            if LOG {
+                // Print bucket size counts
+                let mut counts = vec![0; max_bucket_size + 1];
+                for bucket in &buckets {
+                    counts[bucket.len()] += 1;
+                }
+                for (i, &count) in counts.iter().enumerate() {
+                    if count == 0 {
+                        continue;
+                    }
+                    eprintln!("{}: {}", i, count);
+                }
+            }
+
+            // Step 5: For each bucket, find a suitable offset k_i.
+            for b in bucket_order {
+                let bucket = &mut buckets[b];
+                if bucket.is_empty() {
+                    break;
+                }
+                let bucket_size = bucket.len();
+                // Check that the 32 high and 32 low bits in each hash are unique.
+                // TODO: This may be too strong and isn't needed for the 64bit hashes.
+                // bucket.sort_unstable_by_key(|h| h.0 >> 32);
+                // bucket.dedup_by_key(|h| h.0 >> 32);
+                // bucket.sort_unstable_by_key(|h| h.0 as u32);
+                // bucket.dedup_by_key(|h| h.0 as u32);
+                // if bucket.len() < bucket_size {
+                //     // The chosen global seed leads to duplicate hashes, which must be avoided.
+                //     if LOG {
+                //         eprintln!("{bucket_size}: Duplicate hashes found in bucket {bucket_size}.",);
+                //     }
+                //     continue 's;
+                // }
+                let bucket: &_ = bucket;
+
+                'k: for ki in 0u64.. {
+                    // Values of order n are only expected for the last few buckets.
+                    // The probability of failure after n tries is 1/e=0.36, so
+                    // the probability of failure after 10n tries is only 1/e^10
+                    // = 5e-5, which should be small enough.
+                    if ki == 10 * self.n as u64 {
+                        if LOG {
+                            eprintln!("{bucket_size}: No ki found after 10n = {ki} tries.");
                         }
-                        continue 'k;
+                        continue 's;
                     }
-                    taken.set(p, true);
-                }
+                    let hki = self.hash(&ki);
+                    let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
-                // Found a suitable offset.
-                k[b] = ki;
-                // Set entries.
-                for &hx in &key_hashes {
-                    taken.set(position(hx), true);
+                    // Check if kb is free.
+                    for hx in bucket {
+                        if taken[position(*hx)] {
+                            continue 'k;
+                        }
+                    }
+
+                    // This bucket does not collide with previous buckets!
+                    // But there may still be collisions within the bucket!
+                    for (i, &hx) in bucket.iter().enumerate() {
+                        let p = position(hx);
+                        if taken[p] {
+                            // Collision within the bucket. Clean already set entries.
+                            for &hx in &bucket[..i] {
+                                taken.set(position(hx), false);
+                            }
+                            continue 'k;
+                        }
+                        taken.set(p, true);
+                    }
+
+                    // Found a suitable offset.
+                    k[b] = ki;
+                    // Set entries.
+                    for hx in bucket {
+                        taken.set(position(*hx), true);
+                    }
+                    break;
                 }
-                break;
             }
+            // Found a suitable seed.
+            eprintln!("Found seed after {tries} tries.");
+            break 's;
         }
 
         // Compute the free spots.

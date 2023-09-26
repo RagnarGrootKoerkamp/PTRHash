@@ -10,7 +10,7 @@ use strength_reduce::{StrengthReducedU32, StrengthReducedU64};
 /// - reduce: h(x) -> [0, n)
 /// - ord: h(x) < p1 * n
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Hash(u64);
+pub struct Hash(pub u64);
 
 impl BitXor for Hash {
     type Output = Self;
