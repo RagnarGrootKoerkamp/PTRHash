@@ -74,25 +74,22 @@ pub struct PTHash<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool> {
 }
 
 impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
-    /// Helper that converts from a different PTHash type.
-    /// This way the data vector can be reused between different encoding/reduction types.
-    #[cfg(test)]
-    pub fn convert_from<P2: Packed, Rm2: Reduce, Rn2: Reduce, const T2: bool>(
-        other: &PTHash<P2, Rm2, Rn2, T2>,
-    ) -> Self {
-        Self {
-            n0: other.n0,
-            n: other.n,
-            m: other.m,
-            p1: other.p1,
-            p2: other.p2,
-            mp2: other.mp2,
-            rem_n: Rn::new(other.n),
-            rem_p2: Rm::new(other.p2),
-            rem_mp2: Rm::new(other.mp2),
-            s: other.s,
-            k: P::new(other.k.to_vec()),
-            free: other.free.clone(),
+    pub fn convert<P2: Packed + Default, Rm2: Reduce, Rn2: Reduce, const T2: bool>(
+        &self,
+    ) -> PTHash<P2, Rm2, Rn2, T2> {
+        PTHash {
+            n0: self.n0,
+            n: self.n,
+            m: self.m,
+            p1: self.p1,
+            p2: self.p2,
+            mp2: self.mp2,
+            rem_n: Rn2::new(self.n),
+            rem_p2: Rm2::new(self.p2),
+            rem_mp2: Rm2::new(self.mp2),
+            s: self.s,
+            k: P2::new(self.k.to_vec()),
+            free: self.free.clone(),
         }
     }
 
