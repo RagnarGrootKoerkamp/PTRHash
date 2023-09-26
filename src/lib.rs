@@ -31,6 +31,17 @@ fn hash(x: &Key, seed: u64) -> Hash {
     ))
 }
 
+fn gcd(mut n: usize, mut m: usize) -> usize {
+    assert!(n != 0 && m != 0);
+    while m != 0 {
+        if m < n {
+            std::mem::swap(&mut m, &mut n);
+        }
+        m %= n;
+    }
+    n
+}
+
 /// P: Packing of `k` array.
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
@@ -99,7 +110,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
         // The number of buckets.
         // TODO: Why divide by log(n) and not log(n).ceil()?
         // TODO: Why is this the optimal value to divide by?
-        let m = (c * (n as f32) / (n as f32).log2()).ceil() as usize;
+        let mut m = (c * (n as f32) / (n as f32).log2()).ceil() as usize;
 
         // TODO: Understand why exactly this choice of parameters.
         // NOTE: This is basically a constant now.
@@ -108,9 +119,17 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
         // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
         // This allows for more efficient computation modulo p2 or m-p2.
         // See `bucket_thirds()` below.
-        let m = m.next_multiple_of(3);
+        m = m.next_multiple_of(3);
+        // TODO: Figure out if this matters or not.
+        while gcd(n, m) > 1 {
+            m += 3;
+        }
         let p2 = m / 3;
         assert_eq!(m - p2, 2 * p2);
+
+        if LOG {
+            eprintln!("n {n} m {m} gcd {}", gcd(n, m));
+        }
 
         let mut pthash = Self {
             n0,
