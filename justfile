@@ -1,4 +1,3 @@
-alias t := test
 alias b := bench
 alias f := flame
 alias s := stat
@@ -13,10 +12,21 @@ test target="test_" *args="":
 @cpufreq:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
 
+## Generic test
+t *args="":
+    cargo test -r -- --Z unstable-options --report-time {{args}}
+
+## Construction
+c *args="":
+    cargo test -r -- test::construct_ --Z unstable-options --report-time {{args}}
+
 ## Queries
-bench target="compact_fastmod" *args="":
+q target="test::query_" *args="":
+    cargo test -r -- {{target}} --Z unstable-options --report-time {{args}} --nocapture --test-threads 1
+
+bench target="test::query" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
-flame target="compact_fastmod64" *args="": build
+flame target="test::query_" *args="": build
     cargo flamegraph --open --unit-test -- --test-threads 1 --nocapture {{target}} {{args}}
 
 # instructions per cycle
