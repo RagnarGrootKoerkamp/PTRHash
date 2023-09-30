@@ -337,6 +337,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 }
             }
 
+            let mut sum_ki = 0;
+
             // Step 5: For each bucket, find a suitable offset k_i.
             for b in bucket_order {
                 let bucket = &mut buckets[b];
@@ -396,6 +398,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
                     // Found a suitable offset.
                     k[b] = ki;
+                    sum_ki += ki;
                     // Set entries.
                     for hx in bucket {
                         taken.set(position(*hx), true);
@@ -407,6 +410,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             if tries > 1 {
                 eprintln!("Found seed after {tries} tries.");
             }
+            eprintln!("\navg_ki = {}", sum_ki / self.m as u64);
             break 's;
         }
 
