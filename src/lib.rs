@@ -350,7 +350,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
                 }
             }
             // Found a suitable seed.
-            eprintln!("Found seed after {tries} tries.");
+            if tries > 1 {
+                eprintln!("Found seed after {tries} tries.");
+            }
             break 's;
         }
 
