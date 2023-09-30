@@ -1,4 +1,4 @@
-#![feature(iter_array_chunks, core_intrinsics)]
+#![feature(iter_array_chunks, core_intrinsics, split_array)]
 mod hash;
 mod pack;
 mod reduce;
@@ -8,6 +8,7 @@ mod test;
 use std::{
     cmp::{max, Reverse},
     default::Default,
+    intrinsics::prefetch_read_data,
     marker::PhantomData,
 };
 
@@ -228,11 +229,50 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let i = self.bucket(hx);
         let ki = self.k.index(i);
         let p = self.position(hx, ki);
-        if p < self.n0 {
+        assert!(p < self.n);
+        // if likely(p < self.n0) {
+        p
+        // } else {
+        //     unsafe { *self.free.get_unchecked(p - self.n0) }
+        // }
+    }
+
+    #[inline(always)]
+    pub fn index_stream<'a>(&'a self, x: &'a [Key]) -> impl Iterator<Item = usize> + 'a {
+        let mut next_hx = self.hash_key(&x[0]);
+        let mut next_i = self.bucket(next_hx);
+        x[1..].iter().map(move |next_x| {
+            let cur_hx = next_hx;
+            let cur_i = next_i;
+            next_hx = self.hash_key(next_x);
+            next_i = self.bucket(next_hx);
+            unsafe { prefetch_read_data(self.k.address(next_i), 0) };
+            let ki = self.k.index(cur_i);
+            let p = self.position(cur_hx, ki);
+            assert!(p < self.n);
             p
-        } else {
-            unsafe { *self.free.get_unchecked(p - self.n0) }
-        }
+        })
+    }
+
+    #[inline(always)]
+    pub fn index_stream_l<'a, const L: usize>(
+        &'a self,
+        xs: &'a [Key],
+    ) -> impl Iterator<Item = usize> + 'a {
+        let mut next_hx: [Hash; L] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
+        let mut next_i: [usize; L] = next_hx.map(|hx| self.bucket(hx));
+        xs[L..].iter().enumerate().map(move |(idx, next_x)| {
+            let idx = idx % L;
+            let cur_hx = next_hx[idx];
+            let cur_i = next_i[idx];
+            next_hx[idx] = self.hash_key(next_x);
+            next_i[idx] = self.bucket(next_hx[idx]);
+            unsafe { prefetch_read_data(self.k.address(next_i[idx]), 3) };
+            let ki = self.k.index(cur_i);
+            let p = self.position(cur_hx, ki);
+            assert!(p < self.n);
+            p
+        })
     }
 
     fn init_k(&mut self, keys: &Vec<Key>) {
