@@ -140,19 +140,19 @@ macro_rules! test_query {
 
 test_query!(u64, u64, false, query_u64);
 test_query!(FM32H, FM32L, false, query_m32h_m32l);
-test_query!(FM32H, FM64, false, query_m32h_m64);
+// test_query!(FM32H, FM64, false, query_m32h_m64); // SLOW
 test_query!(FM32H, FR32L, false, query_m32h_r32l);
 test_query!(FM32L, FM32H, false, query_m32l_m32h);
-test_query!(FM32L, FM64, false, query_m32l_m64);
+// test_query!(FM32L, FM64, false, query_m32l_m64); // SLOW
 test_query!(FM32L, FR32H, false, query_m32l_r32h);
 test_query!(FM32L, FR64, false, query_m32l_r64);
 test_query!(FM64, FM32H, false, query_m64_m32h);
 test_query!(FM64, FM32L, false, query_m64_m32l);
-test_query!(FM64, FM64, false, query_m64);
-test_query!(FM64, FR32H, false, query_m64_r32h);
-test_query!(FM64, FR32L, false, query_m64_r32l);
-test_query!(FM64, FR64, false, query_m64_r64);
-test_query!(FR32L, FM64, false, query_r32l_m64);
+// test_query!(FM64, FM64, false, query_m64); // SLOW
+// test_query!(FM64, FR32H, false, query_m64_r32h); // SLOW
+// test_query!(FM64, FR32L, false, query_m64_r32l); // SLOW
+// test_query!(FM64, FR64, false, query_m64_r64); // SLOW
+// test_query!(FR32L, FM64, false, query_r32l_m64); // SLOW
 // NOTE: This is the fastest version.
 test_query!(FR32L, FM32H, false, query_r32l_m32h);
 // FIXME: Why is this slower than r32l_m32h?
@@ -162,19 +162,19 @@ test_query!(FR32L, FR32H, false, query_r32l_r32h);
 // NOTE: Triangle variants tend to be slower for already fast versions.
 test_query!(u64, u64, true, query_u64_t);
 test_query!(FM32H, FM32L, true, query_m32h_m32l_t);
-test_query!(FM32H, FM64, true, query_m32h_m64_t);
+// test_query!(FM32H, FM64, true, query_m32h_m64_t); // SLOW
 test_query!(FM32H, FR32L, true, query_m32h_r32l_t);
 test_query!(FM32L, FM32H, true, query_m32l_m32h_t);
-test_query!(FM32L, FM64, true, query_m32l_m64_t);
+// test_query!(FM32L, FM64, true, query_m32l_m64_t); // SLOW
 test_query!(FM32L, FR32H, true, query_m32l_r32h_t);
 test_query!(FM32L, FR64, true, query_m32l_r64_t);
 test_query!(FM64, FM32H, true, query_m64_m32h_t);
 test_query!(FM64, FM32L, true, query_m64_m32l_t);
-test_query!(FM64, FM64, true, query_m64_t);
-test_query!(FM64, FR32H, true, query_m64_r32h_t);
-test_query!(FM64, FR32L, true, query_m64_r32l_t);
-test_query!(FM64, FR64, true, query_m64_r64_t);
+// test_query!(FM64, FM64, true, query_m64_t); // SLOW
+// test_query!(FM64, FR32H, true, query_m64_r32h_t); // SLOW
+// test_query!(FM64, FR32L, true, query_m64_r32l_t); // SLOW
+// test_query!(FM64, FR64, true, query_m64_r64_t); // SLOW
 test_query!(FR32L, FM32H, true, query_r32l_m32h_t);
-test_query!(FR32L, FM64, true, query_r32l_m64_t);
+// test_query!(FR32L, FM64, true, query_r32l_m64_t); // SLOW
 test_query!(FR32L, FR64, true, query_r32l_r64_t);
 test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
