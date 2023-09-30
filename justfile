@@ -9,12 +9,18 @@ build:
 test target="test_" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
-@cpufreq:
+cpufreq:
     sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
+cpufreq-fast:
+    sudo cpupower frequency-set --governor performance -d 3.6GHz -u 3.6GHz > /dev/null
 
 ## Generic test
-t *args="":
+# parallel
+tp *args="":
     cargo test -r -- --Z unstable-options --report-time {{args}}
+# sequential (one at a time), with output
+t1 *args="":
+    cargo test -r -- --Z unstable-options --report-time --nocapture --test-threads 1 {{args}}
 
 ## Construction
 c *args="":
@@ -22,7 +28,7 @@ c *args="":
 
 ## Queries
 q target="test::query_" *args="":
-    cargo test -r -- {{target}} --Z unstable-options --report-time {{args}} --nocapture --test-threads 1
+    cargo test -r -- {{target}} --Z unstable-options --report-time --nocapture --test-threads 1 {{args}}
 
 bench target="test::query" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
