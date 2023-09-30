@@ -177,7 +177,7 @@ impl Reduce for FR32H {
         Self { d }
     }
     fn reduce(self, h: Hash) -> usize {
-        ((self.d as u64 * h.0 >> 32) >> 32) as usize
+        ((self.d as u64 * (h.0 >> 32)) >> 32) as usize
     }
 }
 
