@@ -1,35 +1,6 @@
-use std::ops::BitXor;
-
 use strength_reduce::{StrengthReducedU32, StrengthReducedU64};
 
-/// Strong type for hashes.
-///
-/// We want to limit what kind of operations we do on hashes.
-/// In particular we only need:
-/// - xor, for h(x) ^ h(k)
-/// - reduce: h(x) -> [0, n)
-/// - ord: h(x) < p1 * n
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Hash(pub u64);
-
-impl BitXor for Hash {
-    type Output = Self;
-
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        Hash(self.0 ^ rhs.0)
-    }
-}
-
-impl Hash {
-    pub fn new(h: u64) -> Self {
-        Hash(h)
-    }
-
-    /// Reduce the hash to a value in the range [0, d).
-    pub fn reduce<R: Reduce>(self, d: R) -> usize {
-        d.reduce(self)
-    }
-}
+use crate::hash::Hash;
 
 pub trait Reduce: Copy {
     fn new(d: usize) -> Self;
@@ -42,7 +13,7 @@ impl Reduce for u64 {
     }
 
     fn reduce(self, h: Hash) -> usize {
-        (h.0 % self) as usize
+        (h.get() % self) as usize
     }
 }
 
@@ -53,7 +24,7 @@ impl Reduce for SR64 {
         SR64(StrengthReducedU64::new(d as u64))
     }
     fn reduce(self, h: Hash) -> usize {
-        (h.0 % self.0) as usize
+        (h.get() % self.0) as usize
     }
 }
 
@@ -64,7 +35,7 @@ impl Reduce for SR32L {
         SR32L(StrengthReducedU32::new(d as u32))
     }
     fn reduce(self, h: Hash) -> usize {
-        (h.0 as u32 % self.0) as usize
+        (h.get_low() % self.0) as usize
     }
 }
 
@@ -75,7 +46,7 @@ impl Reduce for SR32H {
         SR32H(StrengthReducedU32::new(d as u32))
     }
     fn reduce(self, h: Hash) -> usize {
-        ((h.0 >> 32) as u32 % self.0) as usize
+        (h.get_high() % self.0) as usize
     }
 }
 
@@ -103,7 +74,7 @@ impl Reduce for FM64 {
         }
     }
     fn reduce(self, h: Hash) -> usize {
-        let lowbits = self.m.wrapping_mul(h.0 as u128);
+        let lowbits = self.m.wrapping_mul(h.get() as u128);
         mul128_u64(lowbits, self.d) as usize
     }
 }
@@ -124,7 +95,7 @@ impl Reduce for FM32L {
         }
     }
     fn reduce(self, h: Hash) -> usize {
-        let lowbits = self.m * (h.0 as u32 as u64);
+        let lowbits = self.m * (h.get_low() as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
 }
@@ -144,7 +115,7 @@ impl Reduce for FM32H {
         }
     }
     fn reduce(self, h: Hash) -> usize {
-        let lowbits = self.m * (h.0 >> 32);
+        let lowbits = self.m * (h.get_high() as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
 }
@@ -161,7 +132,7 @@ impl Reduce for FR64 {
         Self { d }
     }
     fn reduce(self, h: Hash) -> usize {
-        ((self.d as u128 * h.0 as u128) >> 64) as usize
+        ((self.d as u128 * h.get() as u128) >> 64) as usize
     }
 }
 
@@ -177,7 +148,7 @@ impl Reduce for FR32H {
         Self { d }
     }
     fn reduce(self, h: Hash) -> usize {
-        ((self.d as u64 * (h.0 >> 32)) >> 32) as usize
+        ((self.d as u64 * h.get_high() as u64) >> 32) as usize
     }
 }
 
@@ -193,6 +164,6 @@ impl Reduce for FR32L {
         Self { d }
     }
     fn reduce(self, h: Hash) -> usize {
-        ((self.d as u64 * h.0 as u32 as u64) >> 32) as usize
+        ((self.d as u64 * h.get_low() as u64) >> 32) as usize
     }
 }

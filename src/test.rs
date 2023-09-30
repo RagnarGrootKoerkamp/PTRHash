@@ -2,7 +2,7 @@ use std::{hint::black_box, time::SystemTime};
 
 use rand::{Rng, SeedableRng};
 
-use crate::reduce::*;
+use crate::{hash::Murmur, reduce::*};
 
 use super::*;
 
@@ -27,7 +27,7 @@ fn construct<Rm: Reduce, Rn: Reduce>() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash = PTHash::<Vec<u64>, Rm, Rn, false>::new(7.0, 1.0, &keys);
+            let pthash = PTHash::<Vec<u64>, Rm, Rn, Murmur, Murmur, false>::new(7.0, 1.0, &keys);
 
             let mut done = vec![false; n];
 
@@ -111,7 +111,7 @@ fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
     let total = black_box(100_000_000);
     for n in [10_000_000] {
         let keys = generate_keys(n);
-        let mphf = PTHash::<P, Rm, Rn, T>::new(7.0, 1.0, &keys);
+        let mphf = PTHash::<P, Rm, Rn, Murmur, Murmur, T>::new(7.0, 1.0, &keys);
 
         let start = SystemTime::now();
         let loops = total / n;

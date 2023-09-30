@@ -1,3 +1,5 @@
+#![feature(iter_array_chunks, core_intrinsics)]
+mod hash;
 mod pack;
 mod reduce;
 #[cfg(test)]
@@ -6,29 +8,21 @@ mod test;
 use std::{
     cmp::{max, Reverse},
     default::Default,
+    marker::PhantomData,
 };
 
 use bitvec::bitvec;
-use murmur2::murmur64a;
 use pack::Packed;
 use rand::random;
 use reduce::Reduce;
 
 type Key = u64;
-use reduce::Hash;
+use hash::Hasher;
+
+use crate::hash::Hash;
 
 #[allow(unused)]
 const LOG: bool = false;
-
-fn hash(x: &Key, seed: u64) -> Hash {
-    Hash::new(murmur64a(
-        // Pass the key as a byte slice.
-        unsafe {
-            std::slice::from_raw_parts(x as *const Key as *const u8, std::mem::size_of::<Key>())
-        },
-        seed,
-    ))
-}
 
 fn gcd(mut n: usize, mut m: usize) -> usize {
     assert!(n != 0 && m != 0);
@@ -44,7 +38,14 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 /// P: Packing of `k` array.
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool> {
+pub struct PTHash<
+    P: Packed + Default,
+    Rm: Reduce,
+    Rn: Reduce,
+    Hx: Hasher,
+    Hk: Hasher,
+    const T: bool,
+> {
     /// The number of keys.
     n0: usize,
     /// The number of slots.
@@ -71,11 +72,16 @@ pub struct PTHash<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool> {
     k: P,
     /// The free slots.
     free: Vec<usize>,
+
+    _hx: PhantomData<Hx>,
+    _hk: PhantomData<Hk>,
 }
 
-impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
+impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+    PTHash<P, Rm, Rn, Hx, Hk, T>
+{
     /// Convert an existing PTHash to a different packing.
-    pub fn convert<P2: Packed + Default>(&self) -> PTHash<P2, Rm, Rn, T> {
+    pub fn convert<P2: Packed + Default>(&self) -> PTHash<P2, Rm, Rn, Hx, Hk, T> {
         PTHash {
             n0: self.n0,
             n: self.n,
@@ -89,6 +95,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
             s: self.s,
             k: P2::new(self.k.to_vec()),
             free: self.free.clone(),
+            _hk: PhantomData,
+            _hx: PhantomData,
         }
     }
 
@@ -139,13 +147,19 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
             s: 0,
             k: Default::default(),
             free: vec![],
+            _hk: PhantomData,
+            _hx: PhantomData,
         };
         pthash.init_k(keys);
         pthash
     }
 
-    fn hash(&self, x: &Key) -> Hash {
-        hash(x, self.s)
+    fn hash_key(&self, x: &Key) -> Hash {
+        Hx::hash(x, self.s)
+    }
+
+    fn hash_ki(&self, ki: u64) -> Hash {
+        Hk::hash(&ki, self.s)
     }
 
     fn bucket(&self, hx: Hash) -> usize {
@@ -205,12 +219,12 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
     }
 
     fn position(&self, hx: Hash, ki: u64) -> usize {
-        (hx ^ self.hash(&ki)).reduce(self.rem_n)
+        (hx ^ self.hash_ki(ki)).reduce(self.rem_n)
     }
 
     #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
-        let hx = self.hash(x);
+        let hx = self.hash_key(x);
         let i = self.bucket(hx);
         let ki = self.k.index(i);
         let p = self.position(hx, ki);
@@ -254,7 +268,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
             // TODO: Rewrite to non-nested vec?
             let mut buckets: Vec<Vec<Hash>> = vec![vec![]; self.m];
             for key in keys {
-                let h = self.hash(key);
+                let h = self.hash_key(key);
                 let b = self.bucket(h);
                 buckets[b].push(h);
             }
@@ -316,7 +330,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
                         }
                         continue 's;
                     }
-                    let hki = self.hash(&ki);
+                    let hki = self.hash_ki(ki);
                     let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
                     // Check if kb is free.
