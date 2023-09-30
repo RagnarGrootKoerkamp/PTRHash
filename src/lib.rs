@@ -74,9 +74,8 @@ pub struct PTHash<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool> {
 }
 
 impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
-    pub fn convert<P2: Packed + Default, Rm2: Reduce, Rn2: Reduce, const T2: bool>(
-        &self,
-    ) -> PTHash<P2, Rm2, Rn2, T2> {
+    /// Convert an existing PTHash to a different packing.
+    pub fn convert<P2: Packed + Default>(&self) -> PTHash<P2, Rm, Rn, T> {
         PTHash {
             n0: self.n0,
             n: self.n,
@@ -84,9 +83,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool> PTHash<P, Rm, Rn, T> {
             p1: self.p1,
             p2: self.p2,
             mp2: self.mp2,
-            rem_n: Rn2::new(self.n),
-            rem_p2: Rm2::new(self.p2),
-            rem_mp2: Rm2::new(self.mp2),
+            rem_n: self.rem_n,
+            rem_p2: self.rem_p2,
+            rem_mp2: self.rem_mp2,
             s: self.s,
             k: P2::new(self.k.to_vec()),
             free: self.free.clone(),

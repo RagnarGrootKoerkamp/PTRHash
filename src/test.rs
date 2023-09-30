@@ -111,35 +111,12 @@ test_construct!(FR32L, FM32H, construct_r32l_m32h);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
 fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
-    // Use a static cache of pilots: this is slightly ugly/verbose, but
-    // basically this way we only run the construction once for each n, and then
-    // we can construct types MPHFs from known pilots.
-    let get = |n: usize| -> (Vec<u64>, PTHash<P, Rm, Rn, T>) {
-        use std::collections::HashMap;
-        use std::sync::Mutex;
-        type DefaultPTHash = PTHash<Vec<u64>, u64, u64, false>;
-        lazy_static::lazy_static! {
-            static ref STATE: Mutex<HashMap<usize, (Vec<u64>, DefaultPTHash)>> =
-                Mutex::new(HashMap::new());
-        }
-
-        let mut binding = STATE.lock().unwrap();
-        let (keys, mphf) = binding.entry(n).or_insert_with(|| {
-            let keys = generate_keys(n);
-            let mphf = PTHash::<Vec<u64>, u64, u64, false>::new(7.0, 1.0, &keys);
-            (keys, mphf)
-        });
-
-        // let keys = generate_keys(n);
-        // let mphf = PTHash::<P, Rm, Rn, T>::new(7.0, 1.0, &keys);
-        (keys.clone(), mphf.convert())
-    };
-
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(50_000_000);
     for n in [10_000_000] {
-        let (keys, mphf) = get(n);
+        let keys = generate_keys(n);
+        let mphf = PTHash::<P, Rm, Rn, T>::new(7.0, 1.0, &keys);
 
         let start = SystemTime::now();
         let loops = total / n;
