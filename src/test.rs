@@ -197,7 +197,7 @@ fn test_stream<
     let loops = total / n;
     let mut sum = 0;
     for _ in 0..loops {
-        sum += mphf.index_stream_l::<L>(keys).sum::<usize>();
+        sum += mphf.index_stream::<L>(keys).sum::<usize>();
     }
     black_box(sum);
     let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;

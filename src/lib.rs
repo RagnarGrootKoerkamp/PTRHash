@@ -251,26 +251,32 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         //     unsafe { *self.free.get_unchecked(p - self.n0) }
         // }
     }
-
     #[inline(always)]
-    pub fn index_stream<'a>(&'a self, x: &'a [Key]) -> impl Iterator<Item = usize> + 'a {
-        let mut next_hx = self.hash_key(&x[0]);
-        let mut next_i = self.bucket(next_hx);
-        x[1..].iter().map(move |next_x| {
-            let cur_hx = next_hx;
-            let cur_i = next_i;
-            next_hx = self.hash_key(next_x);
-            next_i = self.bucket(next_hx);
-            unsafe { prefetch_read_data(self.k.address(next_i), 0) };
+    pub fn index_stream<'a, const L: usize>(
+        &'a self,
+        xs: &'a [Key],
+    ) -> impl Iterator<Item = usize> + 'a {
+        let mut next_hx: [Hash; L] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
+        let mut next_i: [usize; L] = next_hx.map(|hx| self.bucket(hx));
+        xs[L..].iter().enumerate().map(move |(idx, next_x)| {
+            let idx = idx % L;
+            let cur_hx = next_hx[idx];
+            let cur_i = next_i[idx];
+            next_hx[idx] = self.hash_key(next_x);
+            next_i[idx] = self.bucket(next_hx[idx]);
+            // TODO: Use 0 or 3 here?
+            // I.e. populate caches or do a 'Non-temporal access', meaning the
+            // cache line can skip caches and be immediately discarded after
+            // reading.
+            unsafe { prefetch_read_data(self.k.address(next_i[idx]), 3) };
             let ki = self.k.index(cur_i);
             let p = self.position(cur_hx, ki);
-            assert!(p < self.n);
             p
         })
     }
 
     #[inline(always)]
-    pub fn index_stream_l<'a, const L: usize>(
+    pub fn index_stream_simd<'a, const L: usize>(
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a {
