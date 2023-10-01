@@ -180,8 +180,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     fn bucket(&self, hx: Hash) -> usize {
         if T {
-            self.bucket_thirds(hx)
-            // self.bucket_thirds_shift(hx)
+            // self._bucket_thirds(hx)
+            self.bucket_thirds_shift(hx)
         } else {
             self.bucket_naive(hx)
         }
@@ -198,7 +198,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
-    fn bucket_thirds(&self, hx: Hash) -> usize {
+    fn _bucket_thirds(&self, hx: Hash) -> usize {
         let mod_mp2 = hx.reduce(self.rem_mp2);
         let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as usize;
         let large = hx >= self.p1;
@@ -208,7 +208,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
     #[allow(unused)]
-    fn _bucket_thirds_shift(&self, hx: Hash) -> usize {
+    fn bucket_thirds_shift(&self, hx: Hash) -> usize {
         let mod_mp2 = hx.reduce(self.rem_mp2);
         let small = (hx >= self.p1) as usize;
         self.mp2 * small + mod_mp2 >> small
