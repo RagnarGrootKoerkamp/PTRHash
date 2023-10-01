@@ -259,7 +259,7 @@ test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 fn queries_random<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
     eprintln!();
     // To prevent loop unrolling.
-    let total = black_box(100_000_000);
+    let total = black_box(1_000_000_000);
     for n in [10_000_000] {
         let keys = generate_keys(n);
         let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n);
