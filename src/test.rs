@@ -201,7 +201,36 @@ fn test_stream<
     }
     black_box(sum);
     let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-    eprint!(" {L}: {query:>2.1}");
+    eprintln!(" {L}: {query:>2.1}");
+}
+
+fn test_stream_chunks<
+    const K: usize,
+    const L: usize,
+    P: Packed + Default,
+    Rm: Reduce,
+    Rn: Reduce,
+    Hx: Hasher,
+    Hk: Hasher,
+    const T: bool,
+>(
+    total: usize,
+    n: usize,
+    mphf: &PTHash<P, Rm, Rn, Hx, Hk, T>,
+    keys: &Vec<u64>,
+) where
+    [(); K * L]: Sized,
+    LaneCount<L>: SupportedLaneCount,
+{
+    let start = SystemTime::now();
+    let loops = total / n;
+    let mut sum = 0;
+    for _ in 0..loops {
+        sum += mphf.index_stream_chunks::<K, L>(keys).sum::<usize>();
+    }
+    black_box(sum);
+    let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
+    eprintln!(" {K}*{L}: {query:>2.1}");
 }
 
 /// Macro to generate tests for the given Reduce types.
@@ -259,8 +288,8 @@ test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 fn queries_random<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
     eprintln!();
     // To prevent loop unrolling.
-    let total = black_box(1_000_000_000);
-    for n in [10_000_000] {
+    let total = black_box(100_000_000);
+    for n in [1_000_000] {
         let keys = generate_keys(n);
         let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n);
 
@@ -276,7 +305,22 @@ fn queries_random<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() 
         // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
         // eprint!(" {query:>2.1}");
 
-        test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<4, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<8, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<16, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<32, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<4, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<8, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<16, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<32, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<4, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<8, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<16, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<32, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<8, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<16, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        // test_stream_chunks::<32, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
     }
     eprintln!();
 }
