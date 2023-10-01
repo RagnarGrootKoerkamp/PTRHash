@@ -4,8 +4,9 @@ alias s := stat
 alias p := record
 alias r := report
 
-build:
+@build:
     cargo build -r
+    cargo build -r --tests
 test target="test_" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
@@ -30,14 +31,11 @@ c *args="":
 q target="test::query_" *args="":
     cargo test -r -- {{target}} --Z unstable-options --report-time --nocapture --test-threads 1 {{args}}
 
+
 bench target="test::query" *args="":
     cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 flame target="test::query_" *args="": build
     cargo flamegraph --open --unit-test -- --test-threads 1 --nocapture {{target}} {{args}}
-
-# instructions per cycle
-stat target='compact_fastmod64' *args='': build
-    perf stat cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
 # record time usage
 record target='compact_fastmod64' *args='': build
@@ -45,6 +43,8 @@ record target='compact_fastmod64' *args='': build
     perf report -n
 report:
     perf report -n
+stat target='compact_fastmod64' *args='': build
+    perf stat -d cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
 
 ## Construction
 

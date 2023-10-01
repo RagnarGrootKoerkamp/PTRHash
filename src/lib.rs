@@ -102,8 +102,14 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
+        Self::new_internal(c, alpha, keys.len(), keys, false)
+    }
+    #[cfg(test)]
+    pub fn new_random(c: f32, alpha: f32, n: usize) -> Self {
+        Self::new_internal(c, alpha, n, &vec![], true)
+    }
+    fn new_internal(c: f32, alpha: f32, n0: usize, keys: &Vec<Key>, init_random: bool) -> Self {
         // n is the number of slots in the target list.
-        let n0 = keys.len();
         let mut n = (n0 as f32 / alpha) as usize;
         // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
         if n.count_ones() == 1 {
@@ -151,7 +157,16 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             _hk: PhantomData,
             _hx: PhantomData,
         };
-        pthash.init_k(keys);
+        if cfg!(test) {
+            if init_random {
+                let k = (0..m).map(|_| rand::random()).collect();
+                pthash.k = Packed::new(k);
+            } else {
+                pthash.init_k(keys);
+            }
+        } else {
+            pthash.init_k(keys);
+        }
         pthash
     }
 
@@ -267,10 +282,13 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             let cur_i = next_i[idx];
             next_hx[idx] = self.hash_key(next_x);
             next_i[idx] = self.bucket(next_hx[idx]);
+            // TODO: Use 0 or 3 here?
+            // I.e. populate caches or do a 'Non-temporal access', meaning the
+            // cache line can skip caches and be immediately discarded after
+            // reading.
             unsafe { prefetch_read_data(self.k.address(next_i[idx]), 3) };
             let ki = self.k.index(cur_i);
             let p = self.position(cur_hx, ki);
-            assert!(p < self.n);
             p
         })
     }
