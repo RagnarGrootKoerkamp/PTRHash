@@ -69,11 +69,14 @@ impl Hasher for XorHash {
 /// Multiply the key by a mixing constant.
 pub struct MulHash;
 
+impl MulHash {
+    // Reuse the mixing constant from MurmurHash.
+    pub const C: u64 = 0xc6a4a7935bd1e995;
+}
+
 impl Hasher for MulHash {
     fn hash(x: &Key, _seed: u64) -> Hash {
-        // Reuse the mixing constant from MurmurHash.
-        const M_64: u64 = 0xc6a4a7935bd1e995;
-        Hash(*x * M_64)
+        Hash(*x * Self::C)
     }
 }
 
