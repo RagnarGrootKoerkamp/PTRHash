@@ -397,50 +397,23 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 eprintln!("Try {tries} for global seed.");
             }
 
+            // Step 1: choose a global seed s.
+            self.s = random();
+
+            // Step 2: Determine the buckets.
+            let (mut buckets, bucket_order) = self.create_buckets(keys);
+
+            if LOG {
+                print_bucket_sizes(&buckets);
+            }
+
+            let mut sum_ki = 0;
+
             // Reset memory.
             taken.clear();
             taken.resize(self.n, false);
             k.clear();
             k.resize(self.m, 0);
-
-            // Step 1: choose a global seed s.
-            self.s = random();
-
-            // Step 2: Determine the buckets.
-            // TODO: Merge this with step 1 above.
-            // TODO: Rewrite to non-nested vec?
-            let mut buckets: Vec<Vec<Hash>> = vec![vec![]; self.m];
-            for key in keys {
-                let h = self.hash_key(key);
-                let b = self.bucket(h);
-                buckets[b].push(h);
-            }
-
-            // Step 3: Sort buckets by size.
-            let mut bucket_order: Vec<_> = (0..self.m).collect();
-            bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
-            let bucket_order = bucket_order;
-
-            let max_bucket_size = buckets[bucket_order[0]].len();
-
-            let expected_bucket_size = self.n as f32 / self.m as f32;
-            assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
-
-            if LOG {
-                // Print bucket size counts
-                let mut counts = vec![0; max_bucket_size + 1];
-                for bucket in &buckets {
-                    counts[bucket.len()] += 1;
-                }
-                for (i, &count) in counts.iter().enumerate() {
-                    if count == 0 {
-                        continue;
-                    }
-                    eprintln!("{}: {}", i, count);
-                }
-            }
-
-            let mut sum_ki = 0;
 
             // Step 5: For each bucket, find a suitable offset k_i.
             for b in bucket_order {
@@ -531,5 +504,63 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         self.k = Packed::new(k);
+    }
+
+    /// Return the hashes in each bucket and the order of the buckets.
+    #[must_use]
+    pub fn create_buckets(&self, keys: &Vec<u64>) -> (Vec<Vec<Hash>>, Vec<usize>) {
+        // TODO: Rewrite to non-nested vec?
+        let mut buckets: Vec<Vec<Hash>> = vec![vec![]; self.m];
+        for key in keys {
+            let h = self.hash_key(key);
+            let b = self.bucket(h);
+            buckets[b].push(h);
+        }
+
+        // Step 3: Sort buckets by size.
+        let mut bucket_order: Vec<_> = (0..self.m).collect();
+        bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
+        let bucket_order = bucket_order;
+
+        let max_bucket_size = buckets[bucket_order[0]].len();
+
+        let expected_bucket_size = self.n as f32 / self.m as f32;
+        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+
+        (buckets, bucket_order)
+    }
+}
+
+pub fn print_bucket_sizes(buckets: &Vec<Vec<Hash>>) {
+    let max_bucket_size = buckets.iter().map(|b| b.len()).max().unwrap();
+    let n = buckets.iter().map(|b| b.len()).sum::<usize>();
+    let m = buckets.len();
+
+    // Print bucket size counts
+    let mut counts = vec![0; max_bucket_size + 1];
+    for bucket in buckets {
+        counts[bucket.len()] += 1;
+    }
+    eprintln!("n: {n}");
+    eprintln!("m: {m}");
+    eprintln!("avg sz: {:4.2}", n as f32 / m as f32);
+    eprintln!(
+        "{:>3}  {:>11} {:>7} {:>6} {:>6}",
+        "sz", "cnt", "bucket%", "elem%", "cuml%"
+    );
+    let mut cumulative = 0;
+    for (sz, &count) in counts.iter().enumerate().rev() {
+        if count == 0 {
+            continue;
+        }
+        cumulative += sz * count;
+        eprintln!(
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2}",
+            sz,
+            count,
+            count as f32 / m as f32 * 100.,
+            (sz * count) as f32 / n as f32 * 100.,
+            cumulative as f32 / n as f32 * 100.,
+        );
     }
 }
