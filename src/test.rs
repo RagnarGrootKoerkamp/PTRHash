@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use std::{hint::black_box, time::SystemTime};
 
 use rand::{Rng, SeedableRng};
@@ -6,7 +8,7 @@ use crate::{hash::*, reduce::*};
 
 use super::*;
 
-fn generate_keys(n: usize) -> Vec<Key> {
+pub fn generate_keys(n: usize) -> Vec<Key> {
     let seed = random();
     if LOG {
         eprintln!("seed for {n}: {seed}");
@@ -285,11 +287,12 @@ test_query!(FR32L, FR64, true, query_r32l_r64_t);
 test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 
 /// Primarily for `perf stat`.
+#[cfg(test)]
 fn queries_random<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
-    for n in [1_000_000] {
+    for n in [10_000_000] {
         let keys = generate_keys(n);
         let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n);
 
@@ -305,22 +308,22 @@ fn queries_random<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() 
         // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
         // eprint!(" {query:>2.1}");
 
-        // test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<4, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<8, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<16, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<32, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<4, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<8, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<16, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<32, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<4, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<8, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<16, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<32, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<4, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<8, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<16, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<32, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
         test_stream_chunks::<4, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<8, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<16, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<32, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<8, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<16, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream_chunks::<32, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<8, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<16, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<32, 8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<8, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<16, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+        test_stream_chunks::<32, 4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
     }
     eprintln!();
 }
@@ -335,5 +338,5 @@ macro_rules! test_random {
     };
 }
 
-test_random!(FR32L, FR64, false, query_random_r32l_r64);
 test_random!(FR32L, FR64, true, query_random_r32l_r64_t);
+test_random!(FR32L, FR32H, true, query_random_r32l_r32h_t);

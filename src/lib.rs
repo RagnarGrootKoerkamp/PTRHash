@@ -6,11 +6,11 @@
     portable_simd,
     generic_const_exprs
 )]
-mod hash;
+#![allow(incomplete_features)]
+pub mod hash;
 mod pack;
-mod reduce;
-#[cfg(test)]
-mod test;
+pub mod reduce;
+pub mod test;
 
 use std::{
     cmp::{max, Reverse},
