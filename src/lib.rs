@@ -110,13 +110,22 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
-        Self::new_internal(c, alpha, keys.len(), keys, false)
+        let mut pthash = Self::init_params(c, alpha, keys.len());
+        pthash.init_k(keys);
+        pthash
     }
+
+    /// PTHash with random pivots.
     #[cfg(test)]
     pub fn new_random(c: f32, alpha: f32, n: usize) -> Self {
-        Self::new_internal(c, alpha, n, &vec![], true)
+        let mut pthash = Self::init_params(c, alpha, n);
+        let k = (0..pthash.m).map(|_| rand::random()).collect();
+        pthash.k = Packed::new(k);
+        pthash
     }
-    fn new_internal(c: f32, alpha: f32, n0: usize, keys: &Vec<Key>, init_random: bool) -> Self {
+
+    /// Only initialize the parameters; do not compute the pivots yet.
+    pub fn init_params(c: f32, alpha: f32, n0: usize) -> Self {
         // n is the number of slots in the target list.
         let mut n = (n0 as f32 / alpha) as usize;
         // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
@@ -149,7 +158,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             eprintln!("n {n} m {m} gcd {}", gcd(n, m));
         }
 
-        let mut pthash = Self {
+        Self {
             n0,
             n,
             m,
@@ -164,18 +173,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             free: vec![],
             _hk: PhantomData,
             _hx: PhantomData,
-        };
-        if cfg!(test) {
-            if init_random {
-                let k = (0..m).map(|_| rand::random()).collect();
-                pthash.k = Packed::new(k);
-            } else {
-                pthash.init_k(keys);
-            }
-        } else {
-            pthash.init_k(keys);
         }
-        pthash
     }
 
     fn hash_key(&self, x: &Key) -> Hash {
