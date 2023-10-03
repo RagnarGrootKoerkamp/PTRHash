@@ -290,30 +290,24 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     where
         [(); K * L]: Sized,
     {
-        let mut next_hx: [[Hash; L]; K] = unsafe {
-            xs.split_array_ref::<{ K * L }>()
-                .0
-                .array_chunks::<L>()
-                .map(|x_vec| x_vec.map(|x| self.hash_key(&x)))
-                .array_chunks::<K>()
-                .next()
-                .unwrap_unchecked()
-        };
-        let mut next_i: [[usize; L]; K] = next_hx.map(|hx_vec| hx_vec.map(|hx| self.bucket(hx)));
-        xs[L..]
+        let mut next_hx: [Hash; K * L] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
+        let mut next_i: [usize; K * L] = next_hx.map(|hx| self.bucket(hx));
+        xs[K * L..]
             .iter()
             .copied()
             .array_chunks::<L>()
             .enumerate()
             .map(move |(idx, next_x_vec)| {
-                let idx = idx % K;
-                let cur_hx_vec = next_hx[idx];
-                let cur_i_vec = next_i[idx];
+                let idx = (idx % K) * L;
+                let cur_hx_vec =
+                    unsafe { *next_hx[idx..].array_chunks::<L>().next().unwrap_unchecked() };
+                let cur_i_vec =
+                    unsafe { *next_i[idx..].array_chunks::<L>().next().unwrap_unchecked() };
                 for i in 0..L {
-                    next_hx[idx][i] = self.hash_key(&next_x_vec[i]);
-                    next_i[idx][i] = self.bucket(next_hx[idx][i]);
+                    next_hx[idx + i] = self.hash_key(&next_x_vec[i]);
+                    next_i[idx + i] = self.bucket(next_hx[idx + i]);
                     // TODO: Use 0 or 3 here?
-                    unsafe { prefetch_read_data(self.k.address(next_i[idx][i]), 3) };
+                    unsafe { prefetch_read_data(self.k.address(next_i[idx + i]), 3) };
                 }
                 unsafe {
                     (0..L)
@@ -350,7 +344,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 .map(|hx| self.bucket(Hash::new(hx)))
                 .into()
         });
-        xs[L..]
+        xs[K * L..]
             .iter()
             .copied()
             .array_chunks::<L>()
