@@ -602,22 +602,25 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
     eprintln!("m: {m}");
     eprintln!("avg sz: {:4.2}", n as f32 / m as f32);
     eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6}",
-        "sz", "cnt", "bucket%", "elem%", "cuml%"
+        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6}",
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%"
     );
-    let mut cumulative = 0;
+    let mut elem_cuml = 0;
+    let mut bucket_cuml = 0;
     for (sz, &count) in counts.iter().enumerate().rev() {
         if count == 0 {
             continue;
         }
-        cumulative += sz * count;
+        elem_cuml += sz * count;
+        bucket_cuml += count;
         eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2}",
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2}",
             sz,
             count,
             count as f32 / m as f32 * 100.,
+            bucket_cuml as f32 / m as f32 * 100.,
             (sz * count) as f32 / n as f32 * 100.,
-            cumulative as f32 / n as f32 * 100.,
+            elem_cuml as f32 / n as f32 * 100.,
         );
     }
 }
