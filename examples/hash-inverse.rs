@@ -96,7 +96,6 @@ fn next_possible_diffs(c: T, r: u32, prev_diffs: &Vec<T>) -> Vec<T> {
         for &d in &possible_diffs {
             if (c * (last + d)).leading_zeros() >= r {
                 if !diffs.contains(&d) {
-                    // eprintln!("{r}: new diff {d:10}");
                     diffs.push(d);
 
                     // Once we have found 2 possible differences, the last difference must always be either their sum of difference.
@@ -113,7 +112,6 @@ fn next_possible_diffs(c: T, r: u32, prev_diffs: &Vec<T>) -> Vec<T> {
                 }
                 last += d;
                 if last == 0 {
-                    // eprintln!("WRAPPED; stopping");
                     break 'l;
                 }
                 continue 'l;
@@ -154,11 +152,6 @@ fn find_inverse_fast(x: T, r: u32, diffs: &Vec<Vec<T>>) -> T {
             if new_rr >= rr {
                 k += d;
                 rr = new_rr;
-                // eprintln!(
-                //     "k+={d:20} = {k:20}: {:064b} {:064b}  {rr:>2}",
-                //     C.wrapping_mul(k),
-                //     C.wrapping_mul(k) ^ X
-                // );
                 continue 'rr;
             }
         }
@@ -182,11 +175,6 @@ fn find_inverse_fast_with_test(
             if new_rr >= rr {
                 k += d;
                 rr = new_rr;
-                // eprintln!(
-                //     "k+={d:20} = {k:20}: {:064b} {:064b}  {rr:>2}",
-                //     C.wrapping_mul(k),
-                //     C.wrapping_mul(k) ^ x
-                // );
                 continue 'rr;
             }
         }
@@ -197,17 +185,13 @@ fn find_inverse_fast_with_test(
             return k;
         }
         if r == T::BITS {
+            // Too bad :(
             return T::MAX;
         }
         for &d in &diffs[r as usize] {
             let new_r = (C.wrapping_mul(k + d) ^ x).leading_zeros();
             if new_r >= r {
                 k += d;
-                // eprintln!(
-                //     "k+={d:20} = {k:20}: {:064b} {:064b}  {rr:>2}",
-                //     C.wrapping_mul(k),
-                //     C.wrapping_mul(k) ^ x
-                // );
                 continue 'l;
             }
         }
@@ -237,22 +221,22 @@ fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
     if low == high {
         return find_inverse_fast_with_test(
             low ^ x.get(),
-            64,
+            64, // r
             |k| {
                 let xck = x.get() ^ C.wrapping_mul(k);
                 low <= xck && xck < high
             },
-            0,
+            0, // k0
             diffs,
         );
     }
 
+    // Split [low, high] into two pieces [low, low_end] and [high_start, high]
+    // that have (much) longer LCP.
     let lcp = (low ^ high).leading_zeros();
 
-    // let k0 = find_inverse_fast(low ^ x.get(), lcp, diffs);
-    let k0 = 0;
-
-    // Split [low, high) into two pieces that have (much) longer LCP.
+    // First find the solution for the LCP.
+    let k0 = find_inverse_fast(low ^ x.get(), lcp, diffs);
 
     let low_end = low | ((1u64 << (63 - lcp)) - 1);
     let high_start = low_end + 1;
@@ -260,44 +244,11 @@ fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
     let low_lcp = (low ^ low_end).leading_zeros();
     let high_lcp = (high_start ^ high).leading_zeros();
 
-    // eprintln!("low                                             {low:064b}");
-    // eprintln!("low_end                                         {low_end:064b}");
-    // eprintln!("high_start                                      {high_start:064b}");
-    // eprintln!("high                                            {high:064b}");
-    // eprintln!(
-    // "x                                               {:064b}",
-    // x.get()
-    // );
-    // eprintln!();
+    let test = |k| low <= x.get() ^ C.wrapping_mul(k) && x.get() ^ C.wrapping_mul(k) < high;
 
-    // eprintln!(
-    // "low^x                                           {:064b}",
-    // low ^ x.get()
-    // );
-    let low_k = find_inverse_fast_with_test(
-        low ^ x.get(),
-        low_lcp,
-        |k| {
-            let xck = x.get() ^ C.wrapping_mul(k);
-            low <= xck && xck < high
-        },
-        k0,
-        diffs,
-    );
-    // eprintln!("low_k      {low_k:>10}");
+    let low_k = find_inverse_fast_with_test(low ^ x.get(), low_lcp, test, k0, diffs);
+    let high_k = find_inverse_fast_with_test(high_start ^ x.get(), high_lcp, test, k0, diffs);
 
-    // eprintln!(
-    // "high^x                                          {:064b}",
-    // high ^ x.get()
-    // );
-    let high_k = find_inverse_fast_with_test(
-        high_start ^ x.get(),
-        high_lcp,
-        |k| low <= x.get() ^ C.wrapping_mul(k) && x.get() ^ C.wrapping_mul(k) < high,
-        k0,
-        diffs,
-    );
-    // eprintln!("high_k     {high_k:>10}");
     min(low_k, high_k)
 }
 
@@ -313,12 +264,8 @@ fn find_inverse_statistics() {
     for _ in 0..n {
         let x: T = random();
         let r = random::<u32>() % B;
-        // eprintln!("x = {x:032b}");
-        // eprintln!("r = {r:>2}");
         let k1 = find_inverse_fast(x, r, diffs);
-        // eprintln!("{k1}");
         let ratio = k1 as f64 / 2.0f64.powi(r as _);
-        // eprintln!("{}", ratio);
         min[r as usize] = min[r as usize].min(ratio);
         sum[r as usize] += ratio;
         cnt[r as usize] += 1;
@@ -339,16 +286,11 @@ fn find_inverse_statistics() {
 fn test_invert_fr64() {
     let diffs = &find_diffs(C);
 
+    // Takes around a minute.
     for i in 0..100000000 {
-        if i % 1000000 == 0 {
-            eprintln!("{}", i);
-        }
         let n = random::<usize>() % 10_000_000_000;
         let p = random::<usize>() % n;
         let x = Hash::new(random());
-        // eprintln!("n = {n:>10}");
-        // eprintln!("p = {p:>10}");
-        // eprintln!("x = {:064b}", x.get());
         let k1 = invert_fr64_fast(x, n, p, diffs);
         // let k2 = invert_fr64_bruteforce(x, n, p);
         // assert_eq!(k1, k2);
