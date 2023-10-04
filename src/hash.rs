@@ -10,7 +10,7 @@ use murmur2::murmur64a;
 /// - xor, for h(x) ^ h(k)
 /// - reduce: h(x) -> [0, n)
 /// - ord: h(x) < p1 * n
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
 pub struct Hash(u64);
 
 impl Hash {

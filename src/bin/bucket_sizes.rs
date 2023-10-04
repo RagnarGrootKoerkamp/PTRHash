@@ -19,5 +19,5 @@ fn main() {
         c, a, n,
     );
     let (buckets, _order) = pthash.create_buckets(&keys);
-    print_bucket_sizes(&buckets);
+    print_bucket_sizes(buckets.iter().map(|b| b.len()));
 }

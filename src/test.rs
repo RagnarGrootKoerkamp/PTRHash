@@ -18,7 +18,7 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
     for _ in 0..n {
         keys.push(rng.gen());
     }
-    keys.sort_unstable();
+    radsort::sort(&mut keys);
     keys.dedup();
     assert_eq!(keys.len(), n, "duplicate keys generated");
     keys

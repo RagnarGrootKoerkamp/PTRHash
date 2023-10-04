@@ -13,10 +13,11 @@ pub mod reduce;
 pub mod test;
 
 use std::{
-    cmp::{max, Reverse},
+    cmp::max,
     default::Default,
     intrinsics::prefetch_read_data,
     marker::PhantomData,
+    ops::Range,
     simd::{LaneCount, Simd, SupportedLaneCount},
 };
 
@@ -27,6 +28,7 @@ use reduce::Reduce;
 
 type Key = u64;
 use hash::Hasher;
+use smallvec::SmallVec;
 
 use crate::hash::Hash;
 
@@ -401,10 +403,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (mut buckets, bucket_order) = self.create_buckets(keys);
+            let (buckets, bucket_order) = self.create_buckets(keys);
 
             if LOG {
-                print_bucket_sizes(&buckets);
+                // print_bucket_sizes(&buckets);
             }
 
             let mut sum_ki = 0;
@@ -417,25 +419,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
             // Step 5: For each bucket, find a suitable offset k_i.
             for b in bucket_order {
-                let bucket = &mut buckets[b];
-                if bucket.is_empty() {
+                let bucket = &buckets[b];
+                let bucket_size = bucket.len();
+                if bucket_size == 0 {
                     break;
                 }
-                let bucket_size = bucket.len();
-                // Check that the 32 high and 32 low bits in each hash are unique.
-                // TODO: This may be too strong and isn't needed for the 64bit hashes.
-                // bucket.sort_unstable_by_key(|h| h.0 >> 32);
-                // bucket.dedup_by_key(|h| h.0 >> 32);
-                // bucket.sort_unstable_by_key(|h| h.0 as u32);
-                // bucket.dedup_by_key(|h| h.0 as u32);
-                // if bucket.len() < bucket_size {
-                //     // The chosen global seed leads to duplicate hashes, which must be avoided.
-                //     if LOG {
-                //         eprintln!("{bucket_size}: Duplicate hashes found in bucket {bucket_size}.",);
-                //     }
-                //     continue 's;
-                // }
-                let bucket: &_ = bucket;
 
                 'k: for ki in 0u64.. {
                     // Values of order n are only expected for the last few buckets.
@@ -508,9 +496,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     /// Return the hashes in each bucket and the order of the buckets.
     #[must_use]
-    pub fn create_buckets(&self, keys: &Vec<u64>) -> (Vec<Vec<Hash>>, Vec<usize>) {
+    pub fn create_buckets(&self, keys: &Vec<u64>) -> (Vec<SmallVec<[Hash; 4]>>, Vec<usize>) {
         // TODO: Rewrite to non-nested vec?
-        let mut buckets: Vec<Vec<Hash>> = vec![vec![]; self.m];
+        let mut buckets: Vec<SmallVec<[Hash; 4]>> = vec![Default::default(); self.m];
         for key in keys {
             let h = self.hash_key(key);
             let b = self.bucket(h);
@@ -519,27 +507,96 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
         // Step 3: Sort buckets by size.
         let mut bucket_order: Vec<_> = (0..self.m).collect();
-        bucket_order.sort_by_cached_key(|v| Reverse(buckets[*v].len()));
-        let bucket_order = bucket_order;
+        radsort::sort_by_key(&mut bucket_order, |v| buckets[*v].len());
 
         let max_bucket_size = buckets[bucket_order[0]].len();
-
         let expected_bucket_size = self.n as f32 / self.m as f32;
         assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
 
         (buckets, bucket_order)
     }
+
+    /// Returns:
+    /// 1. Hashes
+    /// 2. Start indices of each bucket.
+    /// 3. Order of the buckets.
+    #[must_use]
+    pub fn _create_buckets_flat(&self, keys: &Vec<u64>) -> (Vec<Hash>, Vec<usize>, Vec<usize>) {
+        let mut buckets: Vec<(usize, Hash)> = vec![];
+        buckets.reserve(keys.len());
+
+        for key in keys {
+            let h = self.hash_key(key);
+            let b = self.bucket(h);
+            buckets.push((b, h));
+        }
+        radsort::sort_by_key(&mut buckets, |(b, _h)| (*b));
+
+        let mut starts = vec![];
+        starts.reserve(self.m + 1);
+        let mut end = 0;
+        starts.push(end);
+        for b in 0..self.m {
+            while end < buckets.len() && buckets[end].0 == b {
+                end += 1;
+            }
+            starts.push(end);
+        }
+
+        let mut order: Vec<_> = (0..self.m).collect();
+        radsort::sort_by_cached_key(&mut order, |&v| starts[v] - starts[v + 1]);
+
+        let max_bucket_size = starts[order[0] + 1] - starts[order[0]];
+        let expected_bucket_size = self.n as f32 / self.m as f32;
+        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+
+        (
+            buckets.into_iter().map(|(_b, h)| h).collect(),
+            starts,
+            order,
+        )
+    }
+
+    /// Return the hashes in each bucket and the order of the buckets.
+    /// Differs from `create_buckets_flat` in that it does not store the bucket
+    /// indices but recomputes them on the fly. For `FastReduce` this is even
+    /// simpler, since hashes can be compared directly!
+    #[must_use]
+    pub fn _create_buckets_slim(&self, keys: &Vec<u64>) -> (Vec<Hash>, Vec<Range<usize>>) {
+        let mut hashes: Vec<Hash> = keys.iter().map(|key| self.hash_key(key)).collect();
+        radsort::sort_by_key(&mut hashes, |h| self.bucket(*h));
+
+        let mut ranges = vec![];
+        ranges.reserve(self.m);
+        let mut start = 0;
+        for b in 0..self.m {
+            let mut end = start;
+            while end < hashes.len() && self.bucket(hashes[end]) == b {
+                end += 1;
+            }
+            ranges.push(start..end);
+            start = end;
+        }
+
+        radsort::sort_by_key(&mut ranges, |r| -(r.len() as isize));
+
+        let max_bucket_size = ranges[0].len();
+        let expected_bucket_size = self.n as f32 / self.m as f32;
+        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+
+        (hashes, ranges)
+    }
 }
 
-pub fn print_bucket_sizes(buckets: &Vec<Vec<Hash>>) {
-    let max_bucket_size = buckets.iter().map(|b| b.len()).max().unwrap();
-    let n = buckets.iter().map(|b| b.len()).sum::<usize>();
-    let m = buckets.len();
+pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
+    let max_bucket_size = bucket_sizes.clone().max().unwrap();
+    let n = bucket_sizes.clone().sum::<usize>();
+    let m = bucket_sizes.clone().count();
 
     // Print bucket size counts
     let mut counts = vec![0; max_bucket_size + 1];
-    for bucket in buckets {
-        counts[bucket.len()] += 1;
+    for bucket_size in bucket_sizes {
+        counts[bucket_size] += 1;
     }
     eprintln!("n: {n}");
     eprintln!("m: {m}");
