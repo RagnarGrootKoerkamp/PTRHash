@@ -5,9 +5,12 @@ use pthash_rs::{
     reduce::{Reduce, FR64},
 };
 
-use std::collections::{
-    hash_map::Entry::{self},
-    HashMap,
+use std::{
+    cmp::min,
+    collections::{
+        hash_map::Entry::{self},
+        HashMap,
+    },
 };
 
 use itertools::Itertools;
@@ -126,21 +129,12 @@ fn next_possible_diffs(c: T, r: u32, prev_diffs: &Vec<T>) -> Vec<T> {
 fn find_diffs(c: T) -> Vec<Vec<T>> {
     let mut diffs = vec![vec![1]];
     for r in 1..T::BITS {
-        eprintln!("r = {}", r);
-        let new_diffs = next_possible_diffs(c, r, diffs.last().unwrap());
-        for d in &new_diffs {
-            if T::BITS == 32 {
-                eprintln!("{d:10} {:32b}", c * d);
-            } else {
-                eprintln!("{d:20} {:64b}", c * d);
-            }
-        }
-        diffs.push(new_diffs);
+        diffs.push(next_possible_diffs(c, r, diffs.last().unwrap()));
     }
     diffs
 }
 
-/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } efficiently.
+/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } in $O(k)$.
 fn find_inverse_bruteforce(x: T, r: u32) -> T {
     for k in 0.. {
         if (C.wrapping_mul(k) ^ x).leading_zeros() >= r {
@@ -150,14 +144,13 @@ fn find_inverse_bruteforce(x: T, r: u32) -> T {
     panic!()
 }
 
-/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } efficiently.
-#[allow(non_snake_case)]
-fn find_inverse_fast(X: T, r: u32, diffs: &Vec<Vec<T>>) -> T {
+/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } in $O(r)$.
+fn find_inverse_fast(x: T, r: u32, diffs: &Vec<Vec<T>>) -> T {
     let mut k = 0;
-    let mut rr = (C.wrapping_mul(k) ^ X).leading_zeros();
+    let mut rr = (C.wrapping_mul(k) ^ x).leading_zeros();
     'rr: while rr < r {
         for &d in &diffs[rr as usize] {
-            let new_rr = (C.wrapping_mul(k + d) ^ X).leading_zeros();
+            let new_rr = (C.wrapping_mul(k + d) ^ x).leading_zeros();
             if new_rr >= rr {
                 k += d;
                 rr = new_rr;
@@ -171,15 +164,59 @@ fn find_inverse_fast(X: T, r: u32, diffs: &Vec<Vec<T>>) -> T {
         }
         unreachable!();
     }
-
-    assert!(rr >= r);
-    assert!((C.wrapping_mul(k) ^ X).leading_zeros() >= r);
-
     k
 }
 
+/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } in $O(r)$.
+fn find_inverse_fast_with_test(
+    x: T,
+    r: u32,
+    test: impl Fn(T) -> bool,
+    mut k: u64,
+    diffs: &Vec<Vec<T>>,
+) -> T {
+    let mut rr = (C.wrapping_mul(k) ^ x).leading_zeros();
+    'rr: while rr < r {
+        for &d in &diffs[rr as usize] {
+            let new_rr = (C.wrapping_mul(k + d) ^ x).leading_zeros();
+            if new_rr >= rr {
+                k += d;
+                rr = new_rr;
+                // eprintln!(
+                //     "k+={d:20} = {k:20}: {:064b} {:064b}  {rr:>2}",
+                //     C.wrapping_mul(k),
+                //     C.wrapping_mul(k) ^ x
+                // );
+                continue 'rr;
+            }
+        }
+        unreachable!();
+    }
+    'l: loop {
+        if test(k) {
+            return k;
+        }
+        if r == T::BITS {
+            return T::MAX;
+        }
+        for &d in &diffs[r as usize] {
+            let new_r = (C.wrapping_mul(k + d) ^ x).leading_zeros();
+            if new_r >= r {
+                k += d;
+                // eprintln!(
+                //     "k+={d:20} = {k:20}: {:064b} {:064b}  {rr:>2}",
+                //     C.wrapping_mul(k),
+                //     C.wrapping_mul(k) ^ x
+                // );
+                continue 'l;
+            }
+        }
+        panic!();
+    }
+}
+
 /// Solve Reduce(hx ^ MH(k), n) == p by trying k = 0.. .
-fn find_full_inverse_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
+fn invert_fr64_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
     let r = FR64::new(n);
     for k in 0u64.. {
         if r.reduce(hx ^ MulHash::hash(&k, 0)) == p {
@@ -189,9 +226,83 @@ fn find_full_inverse_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
     panic!()
 }
 
-fn main() {
+/// Solve FastReduce(x ^ MH(k), n) == p efficiently.
+fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
+    // low = 2^64 * p/n <= x^FR(k) < 2^64 * (p+1)/n = high+1
+    let low = ((1u128 << 64) * p as u128 / n as u128) as u64;
+    // high is an inclusive bound:  (2^64 * (p+1) - 1)/n
+    let high = (((1u128 << 64) * (p + 1) as u128 - 1) / n as u128 - 1) as u64;
+
+    // In this case the partitioning into two intervals doesn't work.
+    if low == high {
+        return find_inverse_fast_with_test(
+            low ^ x.get(),
+            64,
+            |k| {
+                let xck = x.get() ^ C.wrapping_mul(k);
+                low <= xck && xck < high
+            },
+            0,
+            diffs,
+        );
+    }
+
+    let lcp = (low ^ high).leading_zeros();
+
+    // let k0 = find_inverse_fast(low ^ x.get(), lcp, diffs);
+    let k0 = 0;
+
+    // Split [low, high) into two pieces that have (much) longer LCP.
+
+    let low_end = low | ((1u64 << (63 - lcp)) - 1);
+    let high_start = low_end + 1;
+
+    let low_lcp = (low ^ low_end).leading_zeros();
+    let high_lcp = (high_start ^ high).leading_zeros();
+
+    // eprintln!("low                                             {low:064b}");
+    // eprintln!("low_end                                         {low_end:064b}");
+    // eprintln!("high_start                                      {high_start:064b}");
+    // eprintln!("high                                            {high:064b}");
+    // eprintln!(
+    // "x                                               {:064b}",
+    // x.get()
+    // );
+    // eprintln!();
+
+    // eprintln!(
+    // "low^x                                           {:064b}",
+    // low ^ x.get()
+    // );
+    let low_k = find_inverse_fast_with_test(
+        low ^ x.get(),
+        low_lcp,
+        |k| {
+            let xck = x.get() ^ C.wrapping_mul(k);
+            low <= xck && xck < high
+        },
+        k0,
+        diffs,
+    );
+    // eprintln!("low_k      {low_k:>10}");
+
+    // eprintln!(
+    // "high^x                                          {:064b}",
+    // high ^ x.get()
+    // );
+    let high_k = find_inverse_fast_with_test(
+        high_start ^ x.get(),
+        high_lcp,
+        |k| low <= x.get() ^ C.wrapping_mul(k) && x.get() ^ C.wrapping_mul(k) < high,
+        k0,
+        diffs,
+    );
+    // eprintln!("high_k     {high_k:>10}");
+    min(low_k, high_k)
+}
+
+fn find_inverse_statistics() {
     let diffs = &find_diffs(C);
-    // find_diffs_bruteforce(C);
 
     const B: u32 = T::BITS + 1;
     let mut min = [10.0f64; B as usize];
@@ -223,4 +334,27 @@ fn main() {
             max = max[r],
         );
     }
+}
+
+fn test_invert_fr64() {
+    let diffs = &find_diffs(C);
+
+    for i in 0..100000000 {
+        if i % 1000000 == 0 {
+            eprintln!("{}", i);
+        }
+        let n = random::<usize>() % 10_000_000_000;
+        let p = random::<usize>() % n;
+        let x = Hash::new(random());
+        // eprintln!("n = {n:>10}");
+        // eprintln!("p = {p:>10}");
+        // eprintln!("x = {:064b}", x.get());
+        let k1 = invert_fr64_fast(x, n, p, diffs);
+        // let k2 = invert_fr64_bruteforce(x, n, p);
+        // assert_eq!(k1, k2);
+    }
+}
+
+fn main() {
+    test_invert_fr64();
 }
