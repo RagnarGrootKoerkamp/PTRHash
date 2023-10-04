@@ -37,19 +37,16 @@ fn find_diffs_bruteforce(c: T) {
             let ci = c.wrapping_mul(i);
             if ci.leading_zeros() >= r {
                 let diff = i - last;
-                // eprintln!("{:10} = {:10}; diff {:10}", i, ci, diff);
                 last = i;
                 if add_diff(diff) {
                     break;
                 }
             }
         }
-        // add_diff((0 as T).wrapping_sub(last));
-        // diffs.remove(&0);
         let mut diffs = diffs.into_iter().collect_vec();
         diffs.sort();
         for (diff, count) in diffs {
-            eprintln!("{:10} = {:10}", diff, count);
+            eprintln!("{:10}: {:10}", diff, count);
         }
     }
 }
@@ -125,7 +122,7 @@ fn next_possible_diffs(c: T, r: u32, prev_diffs: &Vec<T>) -> Vec<T> {
 }
 
 /// Find the possible difference for a given `c` for all r from 0 to T::BITS.
-fn possible_diffs(c: T) -> Vec<Vec<T>> {
+fn find_diffs(c: T) -> Vec<Vec<T>> {
     let mut diffs = vec![vec![1]];
     for r in 1..T::BITS {
         eprintln!("r = {}", r);
@@ -151,7 +148,7 @@ fn find_inverse_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
 
 /// Solve Reduce(hx ^ MH(k), n) == p efficiently.
 fn find_inverse_fast(hx: Hash, n: usize, p: usize) -> u64 {
-    let diffs = possible_diffs(MulHash::C);
+    // let diffs = possible_diffs(MulHash::C);
     todo!();
 }
 
@@ -161,6 +158,6 @@ fn main() {
     let r: T = random::<T>() ^ 1;
     let c = C;
 
-    possible_diffs(c);
-    return;
+    find_diffs(c);
+    find_diffs_bruteforce(c);
 }
