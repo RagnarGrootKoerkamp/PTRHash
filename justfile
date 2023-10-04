@@ -56,3 +56,12 @@ cflame:
 cmemory:
     cargo build -r
     heaptrack cargo test -r -- construct_free
+
+#### FURTHER COMMANDS FOR BINARIES/EXAMPLES
+
+# Bucket sizes
+buckets *args="":
+    cargo flamegraph --open --bin bucket_sizes -- {{args}}
+# Hash inverse
+inv *args="":
+    cargo run -r --example hash-inverse
