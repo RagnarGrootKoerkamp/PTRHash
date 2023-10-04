@@ -14,6 +14,7 @@ use itertools::Itertools;
 use rand::random;
 
 type T = u64;
+const C: T = MulHash::C as T;
 
 fn find_diffs_bruteforce(c: T) {
     // Find multiples of C with r leading zeros:
@@ -128,15 +129,57 @@ fn find_diffs(c: T) -> Vec<Vec<T>> {
         eprintln!("r = {}", r);
         let new_diffs = next_possible_diffs(c, r, diffs.last().unwrap());
         for d in &new_diffs {
-            eprintln!("{d:20} {:64b}", c * d);
+            if T::BITS == 32 {
+                eprintln!("{d:10} {:32b}", c * d);
+            } else {
+                eprintln!("{d:20} {:64b}", c * d);
+            }
         }
         diffs.push(new_diffs);
     }
     diffs
 }
 
+/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } efficiently.
+fn find_inverse_bruteforce(x: T, r: u32) -> T {
+    for k in 0.. {
+        if (C.wrapping_mul(k) ^ x).leading_zeros() >= r {
+            return k;
+        }
+    }
+    panic!()
+}
+
+/// Solve min_k { C*k = X ^ A : 0 <= A < 2^{64-r} } efficiently.
+#[allow(non_snake_case)]
+fn find_inverse_fast(X: T, r: u32, diffs: &Vec<Vec<T>>) -> T {
+    let mut k = 0;
+    let mut rr = (C.wrapping_mul(k) ^ X).leading_zeros();
+    'rr: while rr < r {
+        for &d in &diffs[rr as usize] {
+            let new_rr = (C.wrapping_mul(k + d) ^ X).leading_zeros();
+            if new_rr >= rr {
+                k += d;
+                rr = new_rr;
+                // eprintln!(
+                //     "k+={d:20} = {k:20}: {:064b} {:064b}  {rr:>2}",
+                //     C.wrapping_mul(k),
+                //     C.wrapping_mul(k) ^ X
+                // );
+                continue 'rr;
+            }
+        }
+        unreachable!();
+    }
+
+    assert!(rr >= r);
+    assert!((C.wrapping_mul(k) ^ X).leading_zeros() >= r);
+
+    k
+}
+
 /// Solve Reduce(hx ^ MH(k), n) == p by trying k = 0.. .
-fn find_inverse_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
+fn find_full_inverse_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
     let r = FR64::new(n);
     for k in 0u64.. {
         if r.reduce(hx ^ MulHash::hash(&k, 0)) == p {
@@ -146,18 +189,38 @@ fn find_inverse_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
     panic!()
 }
 
-/// Solve Reduce(hx ^ MH(k), n) == p efficiently.
-fn find_inverse_fast(hx: Hash, n: usize, p: usize) -> u64 {
-    // let diffs = possible_diffs(MulHash::C);
-    todo!();
-}
-
 fn main() {
-    const C: T = 0xc6a4a7935bd1e995u64 as T;
-    const D: T = 0x5f7a0ea7e59b19bdu64 as T;
-    let r: T = random::<T>() ^ 1;
-    let c = C;
+    let diffs = &find_diffs(C);
+    // find_diffs_bruteforce(C);
 
-    find_diffs(c);
-    find_diffs_bruteforce(c);
+    const B: u32 = T::BITS + 1;
+    let mut min = [10.0f64; B as usize];
+    let mut sum = [0.0f64; B as usize];
+    let mut max = [0.0f64; B as usize];
+    let mut cnt = [0; B as usize];
+    let n = 100000000;
+    for _ in 0..n {
+        let x: T = random();
+        let r = random::<u32>() % B;
+        // eprintln!("x = {x:032b}");
+        // eprintln!("r = {r:>2}");
+        let k1 = find_inverse_fast(x, r, diffs);
+        // eprintln!("{k1}");
+        let ratio = k1 as f64 / 2.0f64.powi(r as _);
+        // eprintln!("{}", ratio);
+        min[r as usize] = min[r as usize].min(ratio);
+        sum[r as usize] += ratio;
+        cnt[r as usize] += 1;
+        max[r as usize] = max[r as usize].max(ratio);
+        // let k2 = find_inverse_bruteforce(x, r);
+        // assert_eq!(k1, k2);
+    }
+    for r in 0..B as usize {
+        eprintln!(
+            "r = {r:>2}: {avg:>10.3} {max:>10.3}",
+            r = r,
+            avg = sum[r] / cnt[r] as f64,
+            max = max[r],
+        );
+    }
 }
