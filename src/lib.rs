@@ -10,6 +10,7 @@
 #![allow(incomplete_features)]
 pub mod bucket;
 pub mod hash;
+mod hash_inverse;
 mod index;
 mod pack;
 pub mod reduce;

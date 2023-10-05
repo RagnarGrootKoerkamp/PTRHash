@@ -1,40 +1,29 @@
 #![allow(dead_code, unused_variables, unreachable_code)]
 
-use pthash_rs::{
+use crate::{
     hash::{Hash, Hasher, MulHash},
     reduce::{Reduce, FR64},
 };
 
-use std::{
-    cmp::min,
-    collections::{
-        hash_map::Entry::{self},
-        HashMap,
-    },
-};
+use std::{cmp::min, collections::HashSet};
 
 use itertools::Itertools;
-use rand::random;
 
 type T = u64;
 const C: T = MulHash::C as T;
 
-fn find_diffs_bruteforce(c: T) {
+/// Find differences for up to r leading zeros.
+fn find_diffs_bruteforce(c: T, r: u32) -> Vec<Vec<T>> {
+    let mut all_diffs = vec![vec![1]];
     // Find multiples of C with r leading zeros:
-    for r in 1..T::BITS {
-        eprintln!("r = {}", r);
+    for r in 1..=r {
         let mut last = 0;
-        let mut diffs = HashMap::new();
+        let mut diffs = HashSet::new();
         let mut add_diff = |d| {
             if d == 0 {
                 return false;
             }
-            match diffs.entry(d) {
-                Entry::Occupied(mut e) => *e.get_mut() += 1,
-                Entry::Vacant(e) => {
-                    e.insert(1);
-                }
-            }
+            diffs.insert(d);
             diffs.len() == 3
         };
         for i in 0..=T::MAX {
@@ -49,10 +38,9 @@ fn find_diffs_bruteforce(c: T) {
         }
         let mut diffs = diffs.into_iter().collect_vec();
         diffs.sort();
-        for (diff, count) in diffs {
-            eprintln!("{:10}: {:10}", diff, count);
-        }
+        all_diffs.push(diffs);
     }
+    all_diffs
 }
 
 /// Find the possible difference for a given `r` and `c`.
@@ -124,7 +112,7 @@ fn next_possible_diffs(c: T, r: u32, prev_diffs: &Vec<T>) -> Vec<T> {
 }
 
 /// Find the possible difference for a given `c` for all r from 0 to T::BITS.
-fn find_diffs(c: T) -> Vec<Vec<T>> {
+pub fn find_diffs(c: T) -> Vec<Vec<T>> {
     let mut diffs = vec![vec![1]];
     for r in 1..T::BITS {
         diffs.push(next_possible_diffs(c, r, diffs.last().unwrap()));
@@ -211,7 +199,7 @@ fn invert_fr64_bruteforce(hx: Hash, n: usize, p: usize) -> u64 {
 }
 
 /// Solve FastReduce(x ^ MH(k), n) == p efficiently.
-fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
+pub fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
     // low = 2^64 * p/n <= x^FR(k) < 2^64 * (p+1)/n = high+1
     let low = ((1u128 << 64) * p as u128 / n as u128) as u64;
     // high is an inclusive bound:  (2^64 * (p+1) - 1)/n
@@ -252,51 +240,108 @@ fn invert_fr64_fast(x: Hash, n: usize, p: usize, diffs: &Vec<Vec<T>>) -> u64 {
     min(low_k, high_k)
 }
 
-fn find_inverse_statistics() {
-    let diffs = &find_diffs(C);
+#[cfg(test)]
+mod test {
+    use std::hint::black_box;
 
-    const B: u32 = T::BITS + 1;
-    let mut min = [10.0f64; B as usize];
-    let mut sum = [0.0f64; B as usize];
-    let mut max = [0.0f64; B as usize];
-    let mut cnt = [0; B as usize];
-    let n = 100000000;
-    for _ in 0..n {
-        let x: T = random();
-        let r = random::<u32>() % B;
-        let k1 = find_inverse_fast(x, r, diffs);
-        let ratio = k1 as f64 / 2.0f64.powi(r as _);
-        min[r as usize] = min[r as usize].min(ratio);
-        sum[r as usize] += ratio;
-        cnt[r as usize] += 1;
-        max[r as usize] = max[r as usize].max(ratio);
-        // let k2 = find_inverse_bruteforce(x, r);
-        // assert_eq!(k1, k2);
+    use super::*;
+    use rand::random;
+
+    #[test]
+    fn test_find_diffs() {
+        let r = 27;
+        let diffs_1 = &super::find_diffs(C);
+        let diffs_2 = &super::find_diffs_bruteforce(C, r);
+        assert_eq!(&diffs_1[..=r as usize], &diffs_2[..]);
     }
-    for r in 0..B as usize {
-        eprintln!(
-            "r = {r:>2}: {avg:>10.3} {max:>10.3}",
-            r = r,
-            avg = sum[r] / cnt[r] as f64,
-            max = max[r],
-        );
+
+    #[test]
+    fn test_find_inverse() {
+        let diffs = &super::find_diffs(C);
+
+        let min_r = 18;
+        let n = 1000000;
+        for i in 0..n {
+            let x: T = random();
+            let r = random::<u32>() % (min_r + 1);
+            let k1 = find_inverse_fast(x, r, diffs);
+            let k2 = find_inverse_bruteforce(x, r);
+            assert_eq!(k1, k2);
+        }
+
+        // Test fewer for larger r.
+        let max_r = 28;
+        let n = 1000;
+        for i in 0..n {
+            let x: T = random();
+            let r = min_r + random::<u32>() % (max_r - min_r + 1);
+            let k1 = find_inverse_fast(x, r, diffs);
+            let k2 = find_inverse_bruteforce(x, r);
+            assert_eq!(k1, k2);
+        }
     }
-}
 
-fn test_invert_fr64() {
-    let diffs = &find_diffs(C);
+    #[test]
+    fn find_inverse_statistics() {
+        let diffs = &super::find_diffs(C);
 
-    // Takes around a minute.
-    for i in 0..100000000 {
-        let n = random::<usize>() % 10_000_000_000;
-        let p = random::<usize>() % n;
-        let x = Hash::new(random());
-        let k1 = invert_fr64_fast(x, n, p, diffs);
-        // let k2 = invert_fr64_bruteforce(x, n, p);
-        // assert_eq!(k1, k2);
+        const B: u32 = T::BITS + 1;
+        let mut min = [10.0f64; B as usize];
+        let mut sum = [0.0f64; B as usize];
+        let mut max = [0.0f64; B as usize];
+        let mut cnt = [0; B as usize];
+        let n = 1000000;
+        for _ in 0..n {
+            let x: T = random();
+            let r = random::<u32>() % B;
+            let k1 = find_inverse_fast(x, r, diffs);
+            let ratio = k1 as f64 / 2.0f64.powi(r as _);
+            min[r as usize] = min[r as usize].min(ratio);
+            sum[r as usize] += ratio;
+            cnt[r as usize] += 1;
+            max[r as usize] = max[r as usize].max(ratio);
+        }
+        for r in 0..B as usize {
+            eprintln!(
+                "r = {r:>2}: {avg:>10.3} {max:>10.3}",
+                r = r,
+                avg = sum[r] / cnt[r] as f64,
+                max = max[r],
+            );
+        }
     }
-}
 
-fn main() {
-    test_invert_fr64();
+    #[test]
+    fn test_invert_fr64() {
+        let diffs = &super::find_diffs(C);
+
+        let test = |its, maxn| {
+            for i in 0..its {
+                let n = 1 + random::<usize>() % maxn;
+                let p = random::<usize>() % n;
+                let x = Hash::new(random());
+                let k1 = invert_fr64_fast(x, n, p, diffs);
+                let k2 = invert_fr64_bruteforce(x, n, p);
+                assert_eq!(k1, k2);
+            }
+        };
+        test(1000000, 100_000);
+        test(10000, 10_000_000);
+        test(100, 1_000_000_000);
+    }
+
+    /// Takes around a minute.
+    #[test]
+    fn bench_invert_fr64() {
+        let diffs = &super::find_diffs(C);
+
+        for i in 0..10000000 {
+            let bits = random::<u32>() % 63;
+            let n = 1 + random::<usize>() % (1 << bits);
+            let p = random::<usize>() % n;
+            let x = Hash::new(random());
+            let k1 = invert_fr64_fast(x, n, p, diffs);
+            black_box(k1);
+        }
+    }
 }

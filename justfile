@@ -67,6 +67,3 @@ cm *args="":
 # Bucket sizes
 buckets *args="":
     cargo flamegraph --open --bin bucket_sizes -- {{args}}
-# Hash inverse
-inv *args="":
-    cargo run -r --example hash-inverse
