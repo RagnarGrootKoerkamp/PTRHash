@@ -50,6 +50,22 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
     n
 }
 
+/// Parameters for PTHash construction.
+///
+/// Since these are not used in inner loops they are simple variables instead of template arguments.
+#[derive(Clone, Copy, Debug)]
+pub struct PTParams {
+    fast_small_buckets: bool,
+}
+
+impl Default for PTParams {
+    fn default() -> Self {
+        Self {
+            fast_small_buckets: true,
+        }
+    }
+}
+
 /// P: Packing of `k` array.
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
@@ -61,6 +77,8 @@ pub struct PTHash<
     Hk: Hasher,
     const T: bool,
 > {
+    params: PTParams,
+
     /// The number of keys.
     n0: usize,
     /// The number of slots.
@@ -98,6 +116,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     /// Convert an existing PTHash to a different packing.
     pub fn convert<P2: Packed + Default>(&self) -> PTHash<P2, Rm, Rn, Hx, Hk, T> {
         PTHash {
+            params: self.params,
             n0: self.n0,
             n: self.n,
             m: self.m,
@@ -116,7 +135,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
-        let mut pthash = Self::init_params(c, alpha, keys.len());
+        let mut pthash = Self::init(c, alpha, keys.len());
         pthash.compute_pilots(keys);
         pthash
     }
@@ -124,14 +143,18 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     /// PTHash with random pivots.
     #[cfg(test)]
     pub fn new_random(c: f32, alpha: f32, n: usize) -> Self {
-        let mut pthash = Self::init_params(c, alpha, n);
+        let mut pthash = Self::init(c, alpha, n);
         let k = (0..pthash.m).map(|_| rand::random()).collect();
         pthash.k = Packed::new(k);
         pthash
     }
 
+    pub fn init(c: f32, alpha: f32, n0: usize) -> Self {
+        Self::init_with_params(c, alpha, n0, Default::default())
+    }
+
     /// Only initialize the parameters; do not compute the pivots yet.
-    pub fn init_params(c: f32, alpha: f32, n0: usize) -> Self {
+    pub fn init_with_params(c: f32, alpha: f32, n0: usize, params: PTParams) -> Self {
         // n is the number of slots in the target list.
         let mut n = (n0 as f32 / alpha) as usize;
         // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
@@ -166,6 +189,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         Self {
+            params,
             n0,
             n,
             m,
@@ -289,35 +313,47 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             // Step 5: For each bucket, find a suitable offset k_i.
             // NOTE: Buckets of size <= 4 are done in a separate loop where the
             // explicit bucket size is known, for better codegen.
-            let mut bs = bucket_order.iter().peekable();
-            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
-                let bucket = &hashes[starts[b]..starts[b + 1]];
-                let bucket_size = bucket.len();
-                if bucket_size == 0 {
-                    break;
+
+            if !self.params.fast_small_buckets {
+                for &b in &bucket_order {
+                    let bucket = &hashes[starts[b]..starts[b + 1]];
+                    let bucket_size = bucket.len();
+                    if bucket_size == 0 {
+                        break;
+                    }
+
+                    k[b] = self.find_pilot(bucket, &mut taken);
+                }
+            } else {
+                let mut bs = bucket_order.iter().peekable();
+
+                // Iterate all buckets of size >= 5 as &[Hash].
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
+                    let bucket = &hashes[starts[b]..starts[b + 1]];
+                    let bucket_size = bucket.len();
+                    if bucket_size == 0 {
+                        break;
+                    }
+
+                    k[b] = self.find_pilot(bucket, &mut taken);
                 }
 
-                k[b] = self.find_pilot(bucket, &mut taken);
-            }
+                // Process smaller buckets as [Hash; BUCKET_SIZE].
+                macro_rules! find_pilot_fixed {
+                    ($BUCKET_SIZE:literal) => {
+                        while let Some(&b) =
+                            bs.next_if(|&&b| starts[b + 1] - starts[b] == $BUCKET_SIZE)
+                        {
+                            let bucket = &hashes[starts[b]..].split_array_ref().0;
+                            k[b] = self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken);
+                        }
+                    };
+                }
 
-            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 4) {
-                let bucket = &hashes[starts[b]..].split_array_ref().0;
-                k[b] = self.find_pilot_fixed::<4>(bucket, &mut taken);
-            }
-
-            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 3) {
-                let bucket = &hashes[starts[b]..].split_array_ref().0;
-                k[b] = self.find_pilot_fixed::<3>(bucket, &mut taken);
-            }
-
-            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
-                let bucket = &hashes[starts[b]..].split_array_ref().0;
-                k[b] = self.find_pilot_fixed::<2>(bucket, &mut taken);
-            }
-
-            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 1) {
-                let bucket = &hashes[starts[b]..].split_array_ref().0;
-                k[b] = self.find_pilot_fixed::<1>(bucket, &mut taken);
+                find_pilot_fixed!(4);
+                find_pilot_fixed!(3);
+                find_pilot_fixed!(2);
+                find_pilot_fixed!(1);
             }
 
             // Found a suitable seed.
@@ -380,6 +416,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             if !all_free {
                 continue 'k;
             }
+
             // for hx in bucket {
             //     let position = position(*hx);
             //     if taken[position] {
@@ -413,16 +450,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         taken: &mut bitvec::vec::BitVec,
     ) -> u64 {
         'k: for ki in 0u64.. {
-            // // Values of order n are only expected for the last few buckets.
-            // // The probability of failure after n tries is 1/e=0.36, so
-            // // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
-            // // (But not that I have seen cases where the minimum is around 16n.)
-            // if ki == 20 * self.n as u64 {
-            //     if LOG {
-            //         eprintln!("{bucket_size}: No ki found after 20n = {ki} tries.");
-            //     }
-            //     continue 's;
-            // }
             let hki = self.hash_ki(ki);
             let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
@@ -433,6 +460,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             if !all_free {
                 continue 'k;
             }
+
             // for hx in bucket {
             //     let position = position(*hx);
             //     if taken[position] {
