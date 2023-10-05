@@ -76,7 +76,7 @@ impl MulHash {
 
 impl Hasher for MulHash {
     fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash(*x * Self::C)
+        Hash(Self::C.wrapping_mul(*x))
     }
 }
 

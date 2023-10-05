@@ -4,7 +4,8 @@
     split_array,
     array_chunks,
     portable_simd,
-    generic_const_exprs
+    generic_const_exprs,
+    iter_advance_by
 )]
 #![allow(incomplete_features)]
 pub mod hash;
@@ -380,7 +381,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             .flatten()
     }
 
-    fn init_k(&mut self, keys: &Vec<Key>) {
+    pub fn init_k(&mut self, keys: &Vec<Key>) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
         let mut k = vec![];
@@ -406,10 +407,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             let (buckets, bucket_order) = self.create_buckets(keys);
 
             if LOG {
-                // print_bucket_sizes(&buckets);
+                print_bucket_sizes(buckets.iter().map(|b| b.len()));
             }
-
-            let mut sum_ki = 0;
 
             // Reset memory.
             taken.clear();
@@ -418,7 +417,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             k.resize(self.m, 0);
 
             // Step 5: For each bucket, find a suitable offset k_i.
-            for b in bucket_order {
+            for &b in &bucket_order {
                 let bucket = &buckets[b];
                 let bucket_size = bucket.len();
                 if bucket_size == 0 {
@@ -441,7 +440,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
                     // Check if kb is free.
                     for hx in bucket {
-                        if taken[position(*hx)] {
+                        let position = position(*hx);
+                        assert!(position < self.n);
+                        if taken[position] {
                             continue 'k;
                         }
                     }
@@ -450,6 +451,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     // But there may still be collisions within the bucket!
                     for (i, &hx) in bucket.iter().enumerate() {
                         let p = position(hx);
+                        assert!(p < self.n);
                         if taken[p] {
                             // Collision within the bucket. Clean already set entries.
                             for &hx in &bucket[..i] {
@@ -462,7 +464,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
                     // Found a suitable offset.
                     k[b] = ki;
-                    sum_ki += ki;
                     // Set entries.
                     for hx in bucket {
                         taken.set(position(*hx), true);
@@ -474,7 +475,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             if tries > 1 {
                 eprintln!("Found seed after {tries} tries.");
             }
-            eprintln!("\navg_ki = {}", sum_ki / self.m as u64);
+
+            // if LOG {
+            print_bucket_sizes_with_ki(bucket_order.iter().map(|&b| (buckets[b].len(), k[b])));
+            // }
+
             break 's;
         }
 
@@ -507,7 +512,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
         // Step 3: Sort buckets by size.
         let mut bucket_order: Vec<_> = (0..self.m).collect();
-        radsort::sort_by_key(&mut bucket_order, |v| buckets[*v].len());
+        radsort::sort_by_key(&mut bucket_order, |v| usize::MAX - buckets[*v].len());
 
         let max_bucket_size = buckets[bucket_order[0]].len();
         let expected_bucket_size = self.n as f32 / self.m as f32;
@@ -621,6 +626,96 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
             bucket_cuml as f32 / m as f32 * 100.,
             (sz * count) as f32 / n as f32 * 100.,
             elem_cuml as f32 / n as f32 * 100.,
+        );
+    }
+}
+
+/// Input is an iterator over (bucket size, ki), sorted by decreasing size.
+pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + Clone) {
+    let bucket_sizes = buckets.clone().map(|(sz, _ki)| sz);
+    let max_bucket_size = bucket_sizes.clone().max().unwrap();
+    let n = bucket_sizes.clone().sum::<usize>();
+    let m = bucket_sizes.clone().count();
+
+    // Collect bucket sizes and ki statistics.
+    let mut counts = vec![0; max_bucket_size + 1];
+    let mut sum_ki = vec![0; max_bucket_size + 1];
+    let mut max_ki = vec![0; max_bucket_size + 1];
+
+    const BINS: usize = 100;
+
+    // Collect ki statistics per percentile.
+    let mut pct_count = vec![0; BINS];
+    let mut pct_sum_ki = vec![0; BINS];
+    let mut pct_max_ki = vec![0; BINS];
+    let mut pct_elems = vec![0; BINS];
+
+    for (i, (sz, ki)) in buckets.clone().enumerate() {
+        counts[sz] += 1;
+        sum_ki[sz] += ki;
+        max_ki[sz] = max_ki[sz].max(ki);
+        pct_count[i * BINS / m] += 1;
+        pct_sum_ki[i * BINS / m] += ki;
+        pct_max_ki[i * BINS / m] = pct_max_ki[i * 100 / m].max(ki);
+        pct_elems[i * BINS / m] += sz;
+    }
+
+    eprintln!("n: {n}");
+    eprintln!("m: {m}");
+
+    eprintln!(
+        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>8} {:>9}",
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki"
+    );
+    let mut elem_cuml = 0;
+    let mut bucket_cuml = 0;
+    let mut it = bucket_sizes.clone();
+    for i in 0..BINS {
+        let count = pct_count[i];
+        assert!(count > 0);
+        let sz = it.next().unwrap();
+        it.advance_by(count - 1).unwrap();
+        if pct_elems[i] == 0 {
+            continue;
+        }
+        bucket_cuml += count;
+        elem_cuml += pct_elems[i];
+        eprintln!(
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>8.1} {:>9}",
+            sz,
+            count,
+            count as f32 / m as f32 * 100.,
+            bucket_cuml as f32 / m as f32 * 100.,
+            pct_elems[i] as f32 / n as f32 * 100.,
+            elem_cuml as f32 / n as f32 * 100.,
+            pct_sum_ki[i] as f32 / pct_count[i] as f32,
+            pct_max_ki[i],
+        );
+    }
+
+    eprintln!();
+    eprintln!(
+        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>8} {:>9}",
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki"
+    );
+    let mut elem_cuml = 0;
+    let mut bucket_cuml = 0;
+    for (sz, &count) in counts.iter().enumerate().rev() {
+        if count == 0 {
+            continue;
+        }
+        elem_cuml += sz * count;
+        bucket_cuml += count;
+        eprintln!(
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>8.1} {:>9}",
+            sz,
+            count,
+            count as f32 / m as f32 * 100.,
+            bucket_cuml as f32 / m as f32 * 100.,
+            (sz * count) as f32 / n as f32 * 100.,
+            elem_cuml as f32 / n as f32 * 100.,
+            sum_ki[sz] as f32 / count as f32,
+            max_ki[sz],
         );
     }
 }
