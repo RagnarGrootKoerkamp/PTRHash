@@ -35,7 +35,7 @@ type Key = u64;
 use hash::Hasher;
 use smallvec::SmallVec;
 
-use crate::hash::Hash;
+use crate::{hash::Hash, hash_inverse::Inverter};
 
 #[allow(unused)]
 const LOG: bool = false;
@@ -56,13 +56,23 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Clone, Copy, Debug)]
 pub struct PTParams {
-    fast_small_buckets: bool,
+    /// Dedicated functions for buckets up to size 4.
+    pub fast_small_buckets: bool,
+    /// A function that returns the number of non-empty buckets at the end of size 1 for
+    /// which inversion is used instead of trial and error.
+    // pub invert_tail_length: fn(n: usize, m: usize) -> usize,
+    pub invert_tail_length: usize,
+    /// When true, all free positions are tried and the one with minimal k_i is used.
+    pub _invert_minimal: bool,
 }
 
 impl Default for PTParams {
     fn default() -> Self {
         Self {
             fast_small_buckets: true,
+            // invert_tail_length: |_, _| 0,
+            invert_tail_length: 0,
+            _invert_minimal: false,
         }
     }
 }
@@ -136,7 +146,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
-        let mut pthash = Self::init(c, alpha, keys.len());
+        Self::new_wth_params(c, alpha, keys, Default::default())
+    }
+
+    pub fn new_wth_params(c: f32, alpha: f32, keys: &Vec<Key>, params: PTParams) -> Self {
+        let mut pthash = Self::init_with_params(c, alpha, keys.len(), params);
         pthash.compute_pilots(keys);
         pthash
     }
@@ -284,6 +298,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let mut tries = 0;
         const MAX_TRIES: usize = 3;
 
+        // Loop over global seeds `s`.
         's: loop {
             tries += 1;
             assert!(
@@ -311,12 +326,26 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             k.clear();
             k.resize(self.m, 0);
 
+            let num_empty_buckets = bucket_order
+                .iter()
+                .rev()
+                .take_while(|&&b| starts[b + 1] - starts[b] == 0)
+                .count();
+            let bucket_order_nonempty = &bucket_order[..self.m - num_empty_buckets];
+            assert_eq!(
+                starts[bucket_order_nonempty.last().unwrap() + 1]
+                    - starts[*bucket_order_nonempty.last().unwrap()],
+                1
+            );
+            let (bucket_order_head, bucket_order_tail) = bucket_order_nonempty
+                .split_at(self.m - num_empty_buckets - self.params.invert_tail_length);
+
             // Step 5: For each bucket, find a suitable offset k_i.
             // NOTE: Buckets of size <= 4 are done in a separate loop where the
             // explicit bucket size is known, for better codegen.
 
             if !self.params.fast_small_buckets {
-                for &b in &bucket_order {
+                for &b in bucket_order_head {
                     let bucket = &hashes[starts[b]..starts[b + 1]];
                     let bucket_size = bucket.len();
                     if bucket_size == 0 {
@@ -326,7 +355,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     k[b] = self.find_pilot(bucket, &mut taken);
                 }
             } else {
-                let mut bs = bucket_order.iter().peekable();
+                let mut bs = bucket_order_head.iter().peekable();
 
                 // Iterate all buckets of size >= 5 as &[Hash].
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
@@ -357,6 +386,25 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 find_pilot_fixed!(1);
             }
 
+            // Process the tail.
+            if !bucket_order_tail.is_empty() {
+                let free_slots = taken.iter_mut().enumerate().filter(|(_, t)| !**t);
+
+                let inverter = Inverter::new(hash::MulHash::C);
+
+                for (&b, (slot_idx, mut taken)) in std::iter::zip(bucket_order_tail, free_slots) {
+                    assert_eq!(
+                        starts[b + 1] - starts[b],
+                        1,
+                        "All buckets in the tail must have size 1. Shrink the tail length."
+                    );
+                    let hx = hashes[starts[b]];
+                    k[b] = inverter.invert_fr64(hx, self.n, slot_idx);
+                    assert_eq!(self.position(hx, k[b]), slot_idx);
+                    *taken = true;
+                }
+            }
+
             // Found a suitable seed.
             if tries > 1 {
                 eprintln!("Found seed after {tries} tries.");
@@ -374,24 +422,24 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             break 's;
         }
 
-        #[cfg(test)]
         if self.n == self.n0 {
-            assert_eq!(taken.count_zeros(), 0);
-        }
-
-        // Compute the free spots.
-        self.free = vec![usize::MAX; self.n - self.n0];
-        let mut next_unmapped = self.n0;
-        for i in 0..self.n0 {
-            if !taken[i] {
-                while !taken[next_unmapped] {
+            assert_eq!(taken.count_zeros(), 0, "All slots must be taken.");
+        } else {
+            // Compute the free spots.
+            self.free = vec![usize::MAX; self.n - self.n0];
+            let mut next_unmapped = self.n0;
+            for i in 0..self.n0 {
+                if !taken[i] {
+                    while !taken[next_unmapped] {
+                        next_unmapped += 1;
+                    }
+                    self.free[next_unmapped - self.n0] = i;
                     next_unmapped += 1;
                 }
-                self.free[next_unmapped - self.n0] = i;
-                next_unmapped += 1;
             }
         }
 
+        // Pack the data.
         self.k = Packed::new(k);
     }
 
@@ -578,7 +626,7 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
         bucket_cuml += count;
         elem_cuml += pct_elems[i];
         eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>8.1} {:>9}",
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10}",
             sz,
             count,
             count as f32 / m as f32 * 100.,
@@ -592,7 +640,7 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
 
     eprintln!();
     eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>8} {:>9}",
+        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10}",
         "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki"
     );
     let mut elem_cuml = 0;
@@ -604,7 +652,7 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
         elem_cuml += sz * count;
         bucket_cuml += count;
         eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>8.1} {:>9}",
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10}",
             sz,
             count,
             count as f32 / m as f32 * 100.,

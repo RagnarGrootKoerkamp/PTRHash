@@ -11,22 +11,45 @@ struct Args {
     #[arg(short, default_value_t = 1.0)]
     a: f32,
 
-    /// Compute pilots and statistics as well.
+    /// Only print bucket statistics, do not build the PTHash.
     #[arg(long, default_value_t = false)]
-    build: bool,
+    bucket_stats: bool,
+
+    /// Disable fast small buckets.
+    #[arg(long, default_value_t = false)]
+    no_fast_buckets: bool,
+
+    #[arg(long, default_value_t = 0)]
+    tail: usize,
 }
 
 fn main() {
-    let Args { n, c, a, build } = Args::parse();
+    let Args {
+        n,
+        c,
+        a,
+        bucket_stats,
+        tail,
+        no_fast_buckets: slow,
+    } = Args::parse();
 
     type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, false>;
 
     let keys = pthash_rs::test::generate_keys(n);
-    if build {
-        PT::new(c, a, &keys);
-    } else {
+    if bucket_stats {
         let pthash = PT::init(c, a, n);
         let (buckets, _order) = pthash.sort_buckets(&keys);
         print_bucket_sizes(buckets.iter().map(|b| b.len()));
+    } else {
+        PT::new_wth_params(
+            c,
+            a,
+            &keys,
+            PTParams {
+                fast_small_buckets: !slow,
+                invert_tail_length: tail,
+                _invert_minimal: false,
+            },
+        );
     }
 }

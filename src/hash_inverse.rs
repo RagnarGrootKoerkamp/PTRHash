@@ -7,7 +7,7 @@ use std::cmp::min;
 type T = u64;
 const C: T = MulHash::C as T;
 
-struct Inverter {
+pub struct Inverter {
     diffs: Vec<Vec<T>>,
 }
 
