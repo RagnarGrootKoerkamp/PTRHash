@@ -24,7 +24,7 @@ fn main() {
         PT::new(c, a, &keys);
     } else {
         let pthash = PT::init_params(c, a, n);
-        let (buckets, _order) = pthash.create_buckets(&keys);
+        let (buckets, _order) = pthash.sort_buckets(&keys);
         print_bucket_sizes(buckets.iter().map(|b| b.len()));
     }
 }

@@ -8,9 +8,12 @@
     iter_advance_by
 )]
 #![allow(incomplete_features)]
+pub mod bucket;
 pub mod hash;
+mod index;
 mod pack;
 pub mod reduce;
+mod sort_buckets;
 pub mod test;
 
 use std::{
@@ -114,7 +117,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         let mut pthash = Self::init_params(c, alpha, keys.len());
-        pthash.init_k(keys);
+        pthash.compute_pilots(keys);
         pthash
     }
 
@@ -187,9 +190,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         Hk::hash(&ki, self.s)
     }
 
+    /// See bucket.rs for additional implementations.
     fn bucket(&self, hx: Hash) -> usize {
         if T {
-            // self._bucket_thirds(hx)
             self.bucket_thirds_shift(hx)
         } else {
             self.bucket_naive(hx)
@@ -205,48 +208,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }) as usize
     }
 
-    /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
-    /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
-    fn _bucket_thirds(&self, hx: Hash) -> usize {
-        let mod_mp2 = hx.reduce(self.rem_mp2);
-        let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as usize;
-        let large = hx >= self.p1;
-        self.p2 * large as usize + if large { mod_mp2 } else { mod_p2 }
-    }
-
-    /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
-    /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
-    #[allow(unused)]
-    fn bucket_thirds_shift(&self, hx: Hash) -> usize {
-        let mod_mp2 = hx.reduce(self.rem_mp2);
-        let small = (hx >= self.p1) as usize;
-        self.mp2 * small + mod_mp2 >> small
-    }
-
-    /// Branchless version of bucket() above that turns out to be slower.
-    /// Generates 4 mov and 4 cmov instructions, which take a long time to execute.
-    fn _bucket_branchless(&self, hx: Hash) -> usize {
-        let is_large = hx >= self.p1;
-        let rem = if is_large { self.rem_mp2 } else { self.rem_p2 };
-        is_large as usize * self.p2 + hx.reduce(rem)
-    }
-
-    /// Alternate version of bucket() above that turns out to be (a bit?) slower.
-    /// Branches and does 4 mov instructions in each branch.
-    fn _bucket_branchless_2(&self, hx: Hash) -> usize {
-        let is_large = hx >= self.p1;
-        let rem = if is_large {
-            &self.rem_mp2
-        } else {
-            &self.rem_p2
-        };
-        is_large as usize * self.p2 + hx.reduce(*rem)
-    }
-
     fn position(&self, hx: Hash, ki: u64) -> usize {
         (hx ^ self.hash_ki(ki)).reduce(self.rem_n)
     }
 
+    /// See index.rs for additional streaming/SIMD implementations.
     #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
@@ -261,127 +227,30 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         // }
     }
 
-    #[inline(always)]
-    pub fn index_stream<'a, const K: usize>(
-        &'a self,
-        xs: &'a [Key],
-    ) -> impl Iterator<Item = usize> + 'a {
-        let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K] = next_hx.map(|hx| self.bucket(hx));
-        xs[K..].iter().enumerate().map(move |(idx, next_x)| {
-            let idx = idx % K;
-            let cur_hx = next_hx[idx];
-            let cur_i = next_i[idx];
-            next_hx[idx] = self.hash_key(next_x);
-            next_i[idx] = self.bucket(next_hx[idx]);
-            // TODO: Use 0 or 3 here?
-            // I.e. populate caches or do a 'Non-temporal access', meaning the
-            // cache line can skip caches and be immediately discarded after
-            // reading.
-            unsafe { prefetch_read_data(self.k.address(next_i[idx]), 3) };
-            let ki = self.k.index(cur_i);
-            let p = self.position(cur_hx, ki);
-            p
-        })
+    /// Return the hashes in each bucket and the order of the buckets.
+    /// See sort_buckets.rs for additional implementations.
+    #[must_use]
+    pub fn sort_buckets(&self, keys: &Vec<u64>) -> (Vec<SmallVec<[Hash; 4]>>, Vec<usize>) {
+        // TODO: Rewrite to non-nested vec?
+        let mut buckets: Vec<SmallVec<[Hash; 4]>> = vec![Default::default(); self.m];
+        for key in keys {
+            let h = self.hash_key(key);
+            let b = self.bucket(h);
+            buckets[b].push(h);
+        }
+
+        // Step 3: Sort buckets by size.
+        let mut bucket_order: Vec<_> = (0..self.m).collect();
+        radsort::sort_by_key(&mut bucket_order, |v| usize::MAX - buckets[*v].len());
+
+        let max_bucket_size = buckets[bucket_order[0]].len();
+        let expected_bucket_size = self.n as f32 / self.m as f32;
+        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+
+        (buckets, bucket_order)
     }
 
-    #[inline(always)]
-    pub fn index_stream_chunks<'a, const K: usize, const L: usize>(
-        &'a self,
-        xs: &'a [Key],
-    ) -> impl Iterator<Item = usize> + 'a
-    where
-        [(); K * L]: Sized,
-    {
-        let mut next_hx: [Hash; K * L] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K * L] = next_hx.map(|hx| self.bucket(hx));
-        xs[K * L..]
-            .iter()
-            .copied()
-            .array_chunks::<L>()
-            .enumerate()
-            .map(move |(idx, next_x_vec)| {
-                let idx = (idx % K) * L;
-                let cur_hx_vec =
-                    unsafe { *next_hx[idx..].array_chunks::<L>().next().unwrap_unchecked() };
-                let cur_i_vec =
-                    unsafe { *next_i[idx..].array_chunks::<L>().next().unwrap_unchecked() };
-                for i in 0..L {
-                    next_hx[idx + i] = self.hash_key(&next_x_vec[i]);
-                    next_i[idx + i] = self.bucket(next_hx[idx + i]);
-                    // TODO: Use 0 or 3 here?
-                    unsafe { prefetch_read_data(self.k.address(next_i[idx + i]), 3) };
-                }
-                unsafe {
-                    (0..L)
-                        .map(|i| self.position(cur_hx_vec[i], self.k.index(cur_i_vec[i])))
-                        .array_chunks::<L>()
-                        .next()
-                        .unwrap_unchecked()
-                }
-            })
-            .flatten()
-    }
-
-    #[inline(always)]
-    pub fn index_stream_simd<'a, const K: usize, const L: usize>(
-        &'a self,
-        xs: &'a [Key],
-    ) -> impl Iterator<Item = usize> + 'a
-    where
-        [(); K * L]: Sized,
-        LaneCount<L>: SupportedLaneCount,
-    {
-        let mut next_hx: [Simd<u64, L>; K] = unsafe {
-            xs.split_array_ref::<{ K * L }>()
-                .0
-                .array_chunks::<L>()
-                .map(|x_vec| x_vec.map(|x| self.hash_key(&x).get()).into())
-                .array_chunks::<K>()
-                .next()
-                .unwrap_unchecked()
-        };
-        let mut next_i: [Simd<usize, L>; K] = next_hx.map(|hx_vec| {
-            hx_vec
-                .as_array()
-                .map(|hx| self.bucket(Hash::new(hx)))
-                .into()
-        });
-        xs[K * L..]
-            .iter()
-            .copied()
-            .array_chunks::<L>()
-            .map(|c| c.into())
-            .enumerate()
-            .map(move |(idx, next_x_vec): (usize, Simd<Key, L>)| {
-                let idx = idx % K;
-                let cur_hx_vec = next_hx[idx];
-                let cur_i_vec = next_i[idx];
-                next_hx[idx] = next_x_vec
-                    .as_array()
-                    .map(|next_x| self.hash_key(&next_x).get())
-                    .into();
-                next_i[idx] = next_hx[idx]
-                    .as_array()
-                    .map(|hx| self.bucket(Hash::new(hx)))
-                    .into();
-                // TODO: Use 0 or 3 here?
-                for i in 0..L {
-                    unsafe { prefetch_read_data(self.k.address(next_i[idx][i]), 3) };
-                }
-                let ki_vec = cur_i_vec.as_array().map(|cur_i| self.k.index(cur_i));
-                let mut i = 0;
-                let p_vec = [(); L].map(move |_| {
-                    let p = self.position(Hash::new(cur_hx_vec.as_array()[i]), ki_vec[i]);
-                    i += 1;
-                    p
-                });
-                p_vec
-            })
-            .flatten()
-    }
-
-    pub fn init_k(&mut self, keys: &Vec<Key>) {
+    pub fn compute_pilots(&mut self, keys: &Vec<Key>) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
         let mut k = vec![];
@@ -404,7 +273,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (buckets, bucket_order) = self.create_buckets(keys);
+            let (buckets, bucket_order) = self.sort_buckets(keys);
 
             if LOG {
                 print_bucket_sizes(buckets.iter().map(|b| b.len()));
@@ -427,11 +296,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 'k: for ki in 0u64.. {
                     // Values of order n are only expected for the last few buckets.
                     // The probability of failure after n tries is 1/e=0.36, so
-                    // the probability of failure after 10n tries is only 1/e^10
-                    // = 5e-5, which should be small enough.
-                    if ki == 10 * self.n as u64 {
+                    // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
+                    // (But not that I have seen cases where the minimum is around 16n.)
+                    if ki == 20 * self.n as u64 {
                         if LOG {
-                            eprintln!("{bucket_size}: No ki found after 10n = {ki} tries.");
+                            eprintln!("{bucket_size}: No ki found after 20n = {ki} tries.");
                         }
                         continue 's;
                     }
@@ -497,99 +366,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         self.k = Packed::new(k);
-    }
-
-    /// Return the hashes in each bucket and the order of the buckets.
-    #[must_use]
-    pub fn create_buckets(&self, keys: &Vec<u64>) -> (Vec<SmallVec<[Hash; 4]>>, Vec<usize>) {
-        // TODO: Rewrite to non-nested vec?
-        let mut buckets: Vec<SmallVec<[Hash; 4]>> = vec![Default::default(); self.m];
-        for key in keys {
-            let h = self.hash_key(key);
-            let b = self.bucket(h);
-            buckets[b].push(h);
-        }
-
-        // Step 3: Sort buckets by size.
-        let mut bucket_order: Vec<_> = (0..self.m).collect();
-        radsort::sort_by_key(&mut bucket_order, |v| usize::MAX - buckets[*v].len());
-
-        let max_bucket_size = buckets[bucket_order[0]].len();
-        let expected_bucket_size = self.n as f32 / self.m as f32;
-        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
-
-        (buckets, bucket_order)
-    }
-
-    /// Returns:
-    /// 1. Hashes
-    /// 2. Start indices of each bucket.
-    /// 3. Order of the buckets.
-    #[must_use]
-    pub fn _create_buckets_flat(&self, keys: &Vec<u64>) -> (Vec<Hash>, Vec<usize>, Vec<usize>) {
-        let mut buckets: Vec<(usize, Hash)> = vec![];
-        buckets.reserve(keys.len());
-
-        for key in keys {
-            let h = self.hash_key(key);
-            let b = self.bucket(h);
-            buckets.push((b, h));
-        }
-        radsort::sort_by_key(&mut buckets, |(b, _h)| (*b));
-
-        let mut starts = vec![];
-        starts.reserve(self.m + 1);
-        let mut end = 0;
-        starts.push(end);
-        for b in 0..self.m {
-            while end < buckets.len() && buckets[end].0 == b {
-                end += 1;
-            }
-            starts.push(end);
-        }
-
-        let mut order: Vec<_> = (0..self.m).collect();
-        radsort::sort_by_cached_key(&mut order, |&v| starts[v] - starts[v + 1]);
-
-        let max_bucket_size = starts[order[0] + 1] - starts[order[0]];
-        let expected_bucket_size = self.n as f32 / self.m as f32;
-        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
-
-        (
-            buckets.into_iter().map(|(_b, h)| h).collect(),
-            starts,
-            order,
-        )
-    }
-
-    /// Return the hashes in each bucket and the order of the buckets.
-    /// Differs from `create_buckets_flat` in that it does not store the bucket
-    /// indices but recomputes them on the fly. For `FastReduce` this is even
-    /// simpler, since hashes can be compared directly!
-    #[must_use]
-    pub fn _create_buckets_slim(&self, keys: &Vec<u64>) -> (Vec<Hash>, Vec<Range<usize>>) {
-        let mut hashes: Vec<Hash> = keys.iter().map(|key| self.hash_key(key)).collect();
-        radsort::sort_by_key(&mut hashes, |h| self.bucket(*h));
-
-        let mut ranges = vec![];
-        ranges.reserve(self.m);
-        let mut start = 0;
-        for b in 0..self.m {
-            let mut end = start;
-            while end < hashes.len() && self.bucket(hashes[end]) == b {
-                end += 1;
-            }
-            ranges.push(start..end);
-            start = end;
-        }
-
-        radsort::sort_by_key(&mut ranges, |r| -(r.len() as isize));
-
-        let max_bucket_size = ranges[0].len();
-        let expected_bucket_size = self.n as f32 / self.m as f32;
-        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
-
-        (hashes, ranges)
     }
 }
 
