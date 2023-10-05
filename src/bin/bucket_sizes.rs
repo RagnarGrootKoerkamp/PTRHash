@@ -1,6 +1,7 @@
 use clap::Parser;
 use pthash_rs::*;
 
+/// Print statistics on PTHash bucket sizes.
 #[derive(clap::Parser)]
 struct Args {
     #[arg(short)]
@@ -10,6 +11,7 @@ struct Args {
     #[arg(short, default_value_t = 1.0)]
     a: f32,
 
+    /// Compute pilots and statistics as well.
     #[arg(long, default_value_t = false)]
     build: bool,
 }

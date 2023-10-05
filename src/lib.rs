@@ -154,9 +154,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         // See `bucket_thirds()` below.
         m = m.next_multiple_of(3);
         // TODO: Figure out if this matters or not.
-        while gcd(n, m) > 1 {
-            m += 3;
-        }
+        // BUG: When n is divisible by 3, this is an infinite loop!
+        // while gcd(n, m) > 1 {
+        //     m += 3;
+        // }
         let p2 = m / 3;
         assert_eq!(m - p2, 2 * p2);
 
@@ -273,10 +274,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (buckets, bucket_order) = self.sort_buckets(keys);
+            let (hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
 
             if LOG {
-                print_bucket_sizes(buckets.iter().map(|b| b.len()));
+                print_bucket_sizes((0..self.m).map(|i| starts[i + 1] - starts[i]));
             }
 
             // Reset memory.
@@ -286,70 +287,59 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             k.resize(self.m, 0);
 
             // Step 5: For each bucket, find a suitable offset k_i.
-            for &b in &bucket_order {
-                let bucket = &buckets[b];
+            // NOTE: Buckets of size <= 4 are done in a separate loop where the
+            // explicit bucket size is known, for better codegen.
+            let mut bs = bucket_order.iter().peekable();
+            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
+                let bucket = &hashes[starts[b]..starts[b + 1]];
                 let bucket_size = bucket.len();
                 if bucket_size == 0 {
                     break;
                 }
 
-                'k: for ki in 0u64.. {
-                    // Values of order n are only expected for the last few buckets.
-                    // The probability of failure after n tries is 1/e=0.36, so
-                    // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
-                    // (But not that I have seen cases where the minimum is around 16n.)
-                    if ki == 20 * self.n as u64 {
-                        if LOG {
-                            eprintln!("{bucket_size}: No ki found after 20n = {ki} tries.");
-                        }
-                        continue 's;
-                    }
-                    let hki = self.hash_ki(ki);
-                    let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
-
-                    // Check if kb is free.
-                    for hx in bucket {
-                        let position = position(*hx);
-                        assert!(position < self.n);
-                        if taken[position] {
-                            continue 'k;
-                        }
-                    }
-
-                    // This bucket does not collide with previous buckets!
-                    // But there may still be collisions within the bucket!
-                    for (i, &hx) in bucket.iter().enumerate() {
-                        let p = position(hx);
-                        assert!(p < self.n);
-                        if taken[p] {
-                            // Collision within the bucket. Clean already set entries.
-                            for &hx in &bucket[..i] {
-                                taken.set(position(hx), false);
-                            }
-                            continue 'k;
-                        }
-                        taken.set(p, true);
-                    }
-
-                    // Found a suitable offset.
-                    k[b] = ki;
-                    // Set entries.
-                    for hx in bucket {
-                        taken.set(position(*hx), true);
-                    }
-                    break;
-                }
+                k[b] = self.find_pilot(bucket, &mut taken);
             }
+
+            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 4) {
+                let bucket = &hashes[starts[b]..].split_array_ref().0;
+                k[b] = self.find_pilot_fixed::<4>(bucket, &mut taken);
+            }
+
+            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 3) {
+                let bucket = &hashes[starts[b]..].split_array_ref().0;
+                k[b] = self.find_pilot_fixed::<3>(bucket, &mut taken);
+            }
+
+            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
+                let bucket = &hashes[starts[b]..].split_array_ref().0;
+                k[b] = self.find_pilot_fixed::<2>(bucket, &mut taken);
+            }
+
+            while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 1) {
+                let bucket = &hashes[starts[b]..].split_array_ref().0;
+                k[b] = self.find_pilot_fixed::<1>(bucket, &mut taken);
+            }
+
             // Found a suitable seed.
             if tries > 1 {
                 eprintln!("Found seed after {tries} tries.");
             }
 
             // if LOG {
-            print_bucket_sizes_with_ki(bucket_order.iter().map(|&b| (buckets[b].len(), k[b])));
+            // print_bucket_sizes_with_ki(bucket_order.iter().map(|&b| (buckets[b].len(), k[b])));
+            print_bucket_sizes_with_ki(
+                bucket_order
+                    .iter()
+                    .map(|&b| (starts[b + 1] - starts[b], k[b])),
+            );
             // }
 
             break 's;
+        }
+
+        #[cfg(test)]
+        if self.n == self.n0 {
+            assert_eq!(taken.count_zeros(), 0);
         }
 
         // Compute the free spots.
@@ -366,6 +356,108 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         self.k = Packed::new(k);
+    }
+
+    fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> u64 {
+        'k: for ki in 0u64.. {
+            // // Values of order n are only expected for the last few buckets.
+            // // The probability of failure after n tries is 1/e=0.36, so
+            // // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
+            // // (But not that I have seen cases where the minimum is around 16n.)
+            // if ki == 20 * self.n as u64 {
+            //     if LOG {
+            //         eprintln!("{bucket_size}: No ki found after 20n = {ki} tries.");
+            //     }
+            //     continue 's;
+            // }
+            let hki = self.hash_ki(ki);
+            let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
+
+            // Check if all are free.
+            let all_free = bucket
+                .iter()
+                .all(|&hx| unsafe { !*taken.get_unchecked(position(hx)) });
+            if !all_free {
+                continue 'k;
+            }
+            // for hx in bucket {
+            //     let position = position(*hx);
+            //     if taken[position] {
+            //         continue 'k;
+            //     }
+            // }
+
+            // This bucket does not collide with previous buckets!
+            // But there may still be collisions within the bucket!
+            for (i, &hx) in bucket.iter().enumerate() {
+                let p = position(hx);
+                if taken[p] {
+                    // Collision within the bucket. Clean already set entries.
+                    for &hx in &bucket[..i] {
+                        taken.set(position(hx), false);
+                    }
+                    continue 'k;
+                }
+                taken.set(p, true);
+            }
+
+            // Found a suitable offset.
+            return ki;
+        }
+        unreachable!()
+    }
+
+    fn find_pilot_fixed<const L: usize>(
+        &mut self,
+        bucket: &[Hash; L],
+        taken: &mut bitvec::vec::BitVec,
+    ) -> u64 {
+        'k: for ki in 0u64.. {
+            // // Values of order n are only expected for the last few buckets.
+            // // The probability of failure after n tries is 1/e=0.36, so
+            // // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
+            // // (But not that I have seen cases where the minimum is around 16n.)
+            // if ki == 20 * self.n as u64 {
+            //     if LOG {
+            //         eprintln!("{bucket_size}: No ki found after 20n = {ki} tries.");
+            //     }
+            //     continue 's;
+            // }
+            let hki = self.hash_ki(ki);
+            let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
+
+            // Check if all are free.
+            let all_free = bucket
+                .iter()
+                .all(|&hx| unsafe { !*taken.get_unchecked(position(hx)) });
+            if !all_free {
+                continue 'k;
+            }
+            // for hx in bucket {
+            //     let position = position(*hx);
+            //     if taken[position] {
+            //         continue 'k;
+            //     }
+            // }
+
+            // This bucket does not collide with previous buckets!
+            // But there may still be collisions within the bucket!
+            for (i, &hx) in bucket.iter().enumerate() {
+                let p = position(hx);
+                if taken[p] {
+                    // Collision within the bucket. Clean already set entries.
+                    for &hx in &bucket[..i] {
+                        taken.set(position(hx), false);
+                    }
+                    continue 'k;
+                }
+                taken.set(p, true);
+            }
+
+            // Found a suitable offset.
+            return ki;
+        }
+        unreachable!()
     }
 }
 

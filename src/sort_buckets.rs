@@ -32,7 +32,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
         }
 
         let mut order: Vec<_> = (0..self.m).collect();
-        radsort::sort_by_cached_key(&mut order, |&v| starts[v] - starts[v + 1]);
+        radsort::sort_by_cached_key(&mut order, |&v| -((starts[v + 1] - starts[v]) as isize));
 
         let max_bucket_size = starts[order[0] + 1] - starts[order[0]];
         let expected_bucket_size = self.n as f32 / self.m as f32;
