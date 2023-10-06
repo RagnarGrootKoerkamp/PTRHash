@@ -29,7 +29,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             .next_power_of_two()
             .ilog2();
         // Optimistically start a bit below the expected lower bound.
-        'b: for b in bmin - 2.. {
+        // TODO: Instead of starting a new search in case of failure, we could add edges incrementally.
+        'b: for b in bmin - 1.. {
             let kmax = 1 << b;
             eprintln!("b: {b} k: {kmax}");
 

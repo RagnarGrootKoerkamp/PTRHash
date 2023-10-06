@@ -107,13 +107,14 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32L, construct_r32h_r32l);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
+#[cfg(test)]
 fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     for n in [10_000_000] {
         let keys = generate_keys(n);
-        let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new(7.0, 1.0, &keys);
+        let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n);
 
         let start = SystemTime::now();
         let loops = total / n;
@@ -145,7 +146,7 @@ fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
         // test_stream::<32, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
         // test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
 
-        let mphf = PTHash::<P, Rm, Rn, NoHash, MulHash, T>::new(7.0, 1.0, &keys);
+        let mphf = PTHash::<P, Rm, Rn, NoHash, MulHash, T>::new_random(7.0, 1.0, n);
 
         let start = SystemTime::now();
         let loops = total / n;

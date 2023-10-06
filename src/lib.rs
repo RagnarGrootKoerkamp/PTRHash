@@ -740,4 +740,18 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
             num_ki_cuml,
         );
     }
+    eprintln!(
+        "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
+        "",
+        m,
+        100.,
+        100.,
+        100.,
+        100.,
+        pct_sum_ki.iter().copied().sum::<u64>() as f32
+            / pct_count.iter().copied().sum::<usize>() as f32,
+        pct_max_ki.iter().max().unwrap(),
+        pct_new_ki.iter().copied().sum::<usize>(),
+        num_ki_cuml,
+    );
 }
