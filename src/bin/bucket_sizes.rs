@@ -24,6 +24,8 @@ struct Args {
 
     #[arg(long)]
     minimal: bool,
+    #[arg(long)]
+    matching: bool,
 }
 
 fn main() {
@@ -35,6 +37,7 @@ fn main() {
         tail,
         no_fast_buckets: slow,
         minimal,
+        matching,
     } = Args::parse();
 
     type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, false>;
@@ -53,6 +56,7 @@ fn main() {
                 fast_small_buckets: !slow,
                 invert_tail_length: tail,
                 invert_minimal: minimal,
+                matching,
             },
         );
     }
