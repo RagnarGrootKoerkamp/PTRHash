@@ -12,6 +12,7 @@ pub mod bucket;
 pub mod hash;
 mod hash_inverse;
 mod index;
+mod matching;
 mod pack;
 pub mod reduce;
 mod sort_buckets;
