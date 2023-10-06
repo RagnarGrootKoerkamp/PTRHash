@@ -18,7 +18,7 @@ mod sort_buckets;
 pub mod test;
 
 use std::{
-    cmp::max,
+    cmp::{max, min},
     default::Default,
     intrinsics::prefetch_read_data,
     marker::PhantomData,
@@ -27,6 +27,7 @@ use std::{
 };
 
 use bitvec::bitvec;
+use itertools::Itertools;
 use pack::Packed;
 use rand::random;
 use reduce::Reduce;
@@ -63,7 +64,7 @@ pub struct PTParams {
     // pub invert_tail_length: fn(n: usize, m: usize) -> usize,
     pub invert_tail_length: usize,
     /// When true, all free positions are tried and the one with minimal k_i is used.
-    pub _invert_minimal: bool,
+    pub invert_minimal: bool,
 }
 
 impl Default for PTParams {
@@ -72,7 +73,7 @@ impl Default for PTParams {
             fast_small_buckets: true,
             // invert_tail_length: |_, _| 0,
             invert_tail_length: 0,
-            _invert_minimal: false,
+            invert_minimal: false,
         }
     }
 }
@@ -341,8 +342,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 .split_at(self.m - num_empty_buckets - self.params.invert_tail_length);
 
             // Step 5: For each bucket, find a suitable offset k_i.
-            // NOTE: Buckets of size <= 4 are done in a separate loop where the
-            // explicit bucket size is known, for better codegen.
 
             if !self.params.fast_small_buckets {
                 for &b in bucket_order_head {
@@ -368,7 +367,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     k[b] = self.find_pilot(bucket, &mut taken);
                 }
 
-                // Process smaller buckets as [Hash; BUCKET_SIZE].
+                // Process smaller buckets as [Hash; BUCKET_SIZE] where the
+                // bucket size is known, for better codegen.
                 macro_rules! find_pilot_fixed {
                     ($BUCKET_SIZE:literal) => {
                         while let Some(&b) =
@@ -386,22 +386,50 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 find_pilot_fixed!(1);
             }
 
-            // Process the tail.
+            // Process the tail using direct inversion of the hash.
             if !bucket_order_tail.is_empty() {
-                let free_slots = taken.iter_mut().enumerate().filter(|(_, t)| !**t);
+                let mut free_slots = taken.iter_zeros().map(|i| (i, true)).collect_vec();
 
                 let inverter = Inverter::new(hash::MulHash::C);
 
-                for (&b, (slot_idx, mut taken)) in std::iter::zip(bucket_order_tail, free_slots) {
-                    assert_eq!(
-                        starts[b + 1] - starts[b],
-                        1,
-                        "All buckets in the tail must have size 1. Shrink the tail length."
-                    );
-                    let hx = hashes[starts[b]];
-                    k[b] = inverter.invert_fr64(hx, self.n, slot_idx);
-                    assert_eq!(self.position(hx, k[b]), slot_idx);
-                    *taken = true;
+                if !self.params.invert_minimal {
+                    // Match buckets to free slots one-to-one.
+                    for (&b, &(f, _)) in std::iter::zip(bucket_order_tail, &free_slots) {
+                        assert_eq!(
+                            starts[b + 1] - starts[b],
+                            1,
+                            "All buckets in the tail must have size 1. Shrink the tail length."
+                        );
+                        let hx = hashes[starts[b]];
+                        k[b] = inverter.invert_fr64(hx, self.n, f);
+                        // assert_eq!(self.position(hx, k[b]), f);
+                    }
+                } else {
+                    // For each bucket find the free slot with the minimal ki.
+                    // TODO: We can make an early break as soon as the value has the right number of bits.
+                    for &b in bucket_order_tail {
+                        // assert_eq!(
+                        //     starts[b + 1] - starts[b],
+                        //     1,
+                        //     "All buckets in the tail must have size 1. Shrink the tail length."
+                        // );
+                        let mut min_ki = (u64::MAX, 0);
+                        let hx = hashes[starts[b]];
+
+                        for (i, &(f, free)) in free_slots.iter().enumerate() {
+                            if free {
+                                let ki_f = inverter.invert_fr64(hx, self.n, f);
+                                min_ki = min(min_ki, (ki_f, i));
+                            }
+                        }
+                        k[b] = min_ki.0;
+                        free_slots[min_ki.1].1 = false;
+                        // assert_eq!(self.position(hx, k[b]), f);
+                    }
+                }
+
+                for (f, _) in free_slots {
+                    taken.set(f, true);
                 }
             }
 

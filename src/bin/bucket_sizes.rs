@@ -21,6 +21,9 @@ struct Args {
 
     #[arg(long, default_value_t = 0)]
     tail: usize,
+
+    #[arg(long)]
+    minimal: bool,
 }
 
 fn main() {
@@ -31,6 +34,7 @@ fn main() {
         bucket_stats,
         tail,
         no_fast_buckets: slow,
+        minimal,
     } = Args::parse();
 
     type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, false>;
@@ -48,7 +52,7 @@ fn main() {
             PTParams {
                 fast_small_buckets: !slow,
                 invert_tail_length: tail,
-                _invert_minimal: false,
+                invert_minimal: minimal,
             },
         );
     }
