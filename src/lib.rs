@@ -19,6 +19,7 @@ pub mod test;
 
 use std::{
     cmp::{max, min},
+    collections::HashSet,
     default::Default,
     intrinsics::prefetch_read_data,
     marker::PhantomData,
@@ -601,6 +602,7 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
             elem_cuml as f32 / n as f32 * 100.,
         );
     }
+    eprintln!("{:>3}: {:>11}", "", m,);
 }
 
 /// Input is an iterator over (bucket size, ki), sorted by decreasing size.
@@ -614,6 +616,7 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
     let mut counts = vec![0; max_bucket_size + 1];
     let mut sum_ki = vec![0; max_bucket_size + 1];
     let mut max_ki = vec![0; max_bucket_size + 1];
+    let mut new_ki = vec![0; max_bucket_size + 1];
 
     const BINS: usize = 100;
 
@@ -621,27 +624,35 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
     let mut pct_count = vec![0; BINS];
     let mut pct_sum_ki = vec![0; BINS];
     let mut pct_max_ki = vec![0; BINS];
+    let mut pct_new_ki = vec![0; BINS];
     let mut pct_elems = vec![0; BINS];
 
+    let mut distinct_ki = HashSet::new();
     for (i, (sz, ki)) in buckets.clone().enumerate() {
+        let new = distinct_ki.insert(ki) as usize;
         counts[sz] += 1;
         sum_ki[sz] += ki;
         max_ki[sz] = max_ki[sz].max(ki);
-        pct_count[i * BINS / m] += 1;
-        pct_sum_ki[i * BINS / m] += ki;
-        pct_max_ki[i * BINS / m] = pct_max_ki[i * 100 / m].max(ki);
-        pct_elems[i * BINS / m] += sz;
+        new_ki[sz] += new;
+
+        let pct = i * BINS / m;
+        pct_count[pct] += 1;
+        pct_sum_ki[pct] += ki;
+        pct_max_ki[pct] = pct_max_ki[i * 100 / m].max(ki);
+        pct_elems[pct] += sz;
+        pct_new_ki[pct] += new;
     }
 
     eprintln!("n: {n}");
     eprintln!("m: {m}");
 
     eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>8} {:>9}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki"
+        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10} {:>10} {:>10}",
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki", "new ki", "# ki"
     );
     let mut elem_cuml = 0;
     let mut bucket_cuml = 0;
+    let mut num_ki_cuml = 0;
     let mut it = bucket_sizes.clone();
     for i in 0..BINS {
         let count = pct_count[i];
@@ -653,8 +664,9 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
         }
         bucket_cuml += count;
         elem_cuml += pct_elems[i];
+        num_ki_cuml += pct_new_ki[i];
         eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10}",
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
             sz,
             count,
             count as f32 / m as f32 * 100.,
@@ -663,24 +675,42 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
             elem_cuml as f32 / n as f32 * 100.,
             pct_sum_ki[i] as f32 / pct_count[i] as f32,
             pct_max_ki[i],
+            pct_new_ki[i],
+            num_ki_cuml,
         );
     }
+    eprintln!(
+        "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
+        "",
+        m,
+        100.,
+        100.,
+        100.,
+        100.,
+        pct_sum_ki.iter().copied().sum::<u64>() as f32
+            / pct_count.iter().copied().sum::<usize>() as f32,
+        pct_max_ki.iter().max().unwrap(),
+        pct_new_ki.iter().copied().sum::<usize>(),
+        num_ki_cuml,
+    );
 
     eprintln!();
     eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki"
+        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10} {:>10} {:>10}",
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki", "new ki", "# ki"
     );
     let mut elem_cuml = 0;
     let mut bucket_cuml = 0;
+    let mut num_ki_cuml = 0;
     for (sz, &count) in counts.iter().enumerate().rev() {
         if count == 0 {
             continue;
         }
         elem_cuml += sz * count;
         bucket_cuml += count;
+        num_ki_cuml += new_ki[sz];
         eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10}",
+            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
             sz,
             count,
             count as f32 / m as f32 * 100.,
@@ -689,6 +719,8 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
             elem_cuml as f32 / n as f32 * 100.,
             sum_ki[sz] as f32 / count as f32,
             max_ki[sz],
+            new_ki[sz],
+            num_ki_cuml,
         );
     }
 }
