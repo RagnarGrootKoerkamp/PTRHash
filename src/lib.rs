@@ -69,6 +69,8 @@ pub struct PTParams {
     pub invert_minimal: bool,
     /// When true, run a matching for the tail.
     pub matching: bool,
+    /// When true, peel the tail.
+    pub peel: bool,
 }
 
 impl Default for PTParams {
@@ -79,6 +81,7 @@ impl Default for PTParams {
             invert_tail_length: 0,
             invert_minimal: false,
             matching: false,
+            peel: false,
         }
     }
 }
@@ -441,7 +444,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                         .collect_vec();
                     let free_slots = taken.iter_zeros().collect_vec();
                     // Use matching.
-                    let kis = self.match_tail(&hashes, &free_slots);
+                    let kis = self.match_tail(&hashes, &free_slots, self.params.peel);
                     for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
                         k[b] = ki;
                     }
