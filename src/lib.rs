@@ -72,6 +72,8 @@ pub struct PTParams {
     pub matching: bool,
     /// When true, peel the tail.
     pub peel: bool,
+    /// When true, peel all buckets of size 2.
+    pub peel2: bool,
 }
 
 impl Default for PTParams {
@@ -83,6 +85,7 @@ impl Default for PTParams {
             invert_minimal: false,
             matching: false,
             peel: false,
+            peel2: false,
         }
     }
 }
@@ -391,7 +394,24 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
                 find_pilot_fixed!(4);
                 find_pilot_fixed!(3);
-                find_pilot_fixed!(2);
+                if !self.params.peel2 {
+                    find_pilot_fixed!(2);
+                } else {
+                    let mut local_hashes = vec![];
+
+                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
+                        local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
+                    }
+                    let free_slots = taken.iter_zeros().collect_vec();
+                    // Use matching.
+                    let kis = self.peel_size_2(local_hashes.into_iter(), &taken);
+                    for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
+                        k[b] = ki;
+                    }
+                    for f in free_slots {
+                        taken.set(f, true);
+                    }
+                }
                 find_pilot_fixed!(1);
             }
 

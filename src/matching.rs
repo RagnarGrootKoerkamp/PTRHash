@@ -148,7 +148,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             }
 
             if peel {
-                if let (true, eis) = crate::peeling::PeelingMatcher::new(f, e, edges, starts).run()
+                if let (true, eis) =
+                    crate::peeling::DoubleSidedPeeler::new(f, e, edges, starts).run()
                 {
                     return eis.iter().map(|&ei| kis[ei]).collect();
                 }

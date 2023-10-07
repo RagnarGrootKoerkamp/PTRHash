@@ -28,6 +28,8 @@ struct Args {
     matching: bool,
     #[arg(long)]
     peel: bool,
+    #[arg(long)]
+    peel2: bool,
 }
 
 fn main() {
@@ -41,6 +43,7 @@ fn main() {
         minimal,
         matching,
         peel,
+        peel2,
     } = Args::parse();
 
     type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, false>;
@@ -61,6 +64,7 @@ fn main() {
                 invert_minimal: minimal,
                 matching,
                 peel,
+                peel2,
             },
         );
     }
