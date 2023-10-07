@@ -10,7 +10,7 @@ use super::*;
 impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     PTHash<P, Rm, Rn, Hx, Hk, T>
 {
-    pub fn match_tail(&self, hashes: &Vec<Hash>, slots: &Vec<usize>, peel: bool) -> Vec<u64> {
+    pub fn match_tail(&self, hashes: &Vec<Hash>, taken: &BitVec, peel: bool) -> Vec<u64> {
         let include_st_edges = !peel;
 
         // eprintln!("MATCH");
@@ -19,11 +19,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         // latency.
         // TODO: Check if this is actually faster than the bitvector.
         let slot_idx: FxHashMap<usize, usize> =
-            FxHashMap::from_iter(slots.iter().copied().enumerate().map(|(i, f)| (f, i)));
+            FxHashMap::from_iter(taken.iter_zeros().enumerate().map(|(i, f)| (f, i)));
 
         let f = hashes.len();
         eprintln!("f: {f}");
-        assert_eq!(f, slots.len());
+        assert_eq!(f, slot_idx.len());
         // Each bucket should have >= log(f) expected edges.
         // One edge happens roughly every n/f tries.
         // https://math.stackexchange.com/a/2500096/91741
@@ -52,11 +52,15 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             let mut edges = vec![];
             let mut kis = vec![];
             let mut starts = vec![0; 2 * f + 1 + include_st_edges as usize];
-            for (i, hx) in hashes.iter().enumerate() {
+            'i: for (i, hx) in hashes.iter().enumerate() {
                 let mut count = 0;
                 for ki in 0..kmax {
                     let p = self.position(*hx, ki);
-                    if let Some(&j) = slot_idx.get(&p) {
+                    // TODO: COMPARE `taken` vs `slot_idx`.
+                    // if let Some(&j) = slot_idx.get(&p) {
+                    if !taken[p] {
+                        let j = slot_idx[&p];
+
                         count += 1;
                         edges.push(f + j);
                         kis.push(ki);
@@ -135,9 +139,12 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
             // Edges from s.
             if include_st_edges {
-                for i in 0..f {
-                    edges[2 * e + f + i] = i;
+                for u in 0..f {
+                    edges[2 * e + f + u] = u;
                 }
+                // Sort edges from s by increasing degree, so that 'harder' edges are matched first.
+                edges[2 * e + f..2 * e + 2 * f]
+                    .sort_unstable_by_key(|&u| starts[u + 1] - starts[u]);
             }
 
             if peel {
@@ -167,7 +174,6 @@ struct DinicMatcher {
     t: usize,
     f: usize,
     e: usize,
-    max_degree: usize,
 
     // Internal state
     // Size 2*f+2
@@ -210,7 +216,6 @@ impl DinicMatcher {
             t,
             f,
             e,
-            max_degree,
             levels,
             its,
             its_s: 0,
@@ -241,25 +246,13 @@ impl DinicMatcher {
                 flow += 1;
             }
             eprintln!(
-                "Flow at depth {:>2}: {:>9}   total {:>9}",
-                self.levels[self.t], level_flow, flow
+                "Flow at depth {:>2}: {:>9}   total {:>9}     Iterations {:>11} / {:>11}",
+                self.levels[self.t],
+                level_flow,
+                flow,
+                self.its.iter().map(|it| *it as usize).sum::<usize>(),
+                self.e
             );
-
-            let mut edge_position_cnt = vec![0; self.max_degree + 1];
-            let mut u = 0;
-            for ei in self.free.iter_zeros().take_while(|&ei| ei < self.e) {
-                while self.starts[u + 1] <= ei {
-                    u += 1;
-                }
-                edge_position_cnt[ei - self.starts[u]] += 1;
-            }
-            while edge_position_cnt.last() == Some(&0) {
-                edge_position_cnt.pop();
-            }
-            for cnt in &edge_position_cnt {
-                eprint!(" {}", cnt);
-            }
-            eprintln!();
 
             if flow == self.f {
                 let eis = self

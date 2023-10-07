@@ -444,7 +444,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                         .collect_vec();
                     let free_slots = taken.iter_zeros().collect_vec();
                     // Use matching.
-                    let kis = self.match_tail(&hashes, &free_slots, self.params.peel);
+                    let kis = self.match_tail(&hashes, &taken, self.params.peel);
                     for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
                         k[b] = ki;
                     }
