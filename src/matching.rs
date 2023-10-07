@@ -75,7 +75,20 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             // Here, construction should succeed with high probability.
 
             let e = edges.len();
-            // eprintln!("e: {e}");
+            eprintln!("edges: {e}");
+
+            eprintln!("avg degree: {:>4.1}", e as f32 / f as f32);
+            eprintln!(
+                "min/max forward degree: {:>2} .. {:>2}",
+                starts[0..f].iter().min().unwrap(),
+                starts[0..f].iter().max().unwrap()
+            );
+            eprintln!(
+                "min/max backward degree: {:>2} .. {:>2}",
+                starts[f..2 * f].iter().min().unwrap(),
+                starts[f..2 * f].iter().max().unwrap()
+            );
+
             edges.resize(2 * e, 0);
             // eprintln!("starts\n{starts:?}");
 
@@ -122,7 +135,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             // eprintln!("edges\n{edges:?}");
 
             // eprintln!("BUILT GRAPH");
-            if let Some(eis) = Matcher::new(f, e, edges, starts, s, t).run() {
+            if let Some(eis) = DinicMatcher::new(f, e, edges, starts, s, t).run() {
                 return eis.iter().map(|&ei| kis[ei]).collect();
             }
         }
@@ -130,23 +143,33 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 }
 
-/// Dinic algorithm for max matching.
-struct Matcher {
+/// Dinic / Hopcroft-Karp algorithm for max matching.
+/// Runs in O(Sqrt(V) * E) time worst case, but probably better since our edges are random.
+struct DinicMatcher {
     // Input
+
+    // Size 2*e + 2*f
     edges: Vec<usize>,
+    // Size 2*f+2
     starts: Vec<usize>,
     s: usize,
     t: usize,
     f: usize,
     e: usize,
+    max_degree: usize,
 
     // Internal state
-    levels: Vec<isize>,
-    its: Vec<usize>,
+    // Size 2*f+2
+    levels: Vec<i8>,
+    // Size 2*f+2
+    its: Vec<u8>,
+    // The start needs a larger iterator type becuase it has many outgoing edges.
+    its_s: usize,
+    // Size 2*e
     free: BitVec,
 }
 
-impl Matcher {
+impl DinicMatcher {
     fn new(f: usize, e: usize, edges: Vec<usize>, starts: Vec<usize>, s: usize, t: usize) -> Self {
         let v = starts.len();
         let levels = vec![-1; v];
@@ -161,6 +184,14 @@ impl Matcher {
         for j in f..2 * f {
             free.set(starts[j], true);
         }
+        let mut max_degree = 0;
+        for i in 0..2 * f {
+            max_degree = max(max_degree, starts[i + 1] - starts[i]);
+        }
+        assert!(
+            max_degree < 255,
+            "The maximum degree of {max_degree} is too large!"
+        );
         Self {
             edges,
             starts,
@@ -168,40 +199,18 @@ impl Matcher {
             t,
             f,
             e,
+            max_degree,
             levels,
             its,
+            its_s: 0,
             free,
         }
     }
     fn run(&mut self) -> Option<Vec<usize>> {
         let mut flow = 0;
         loop {
-            // Recompute layers.
-            self.levels.fill(-1);
-            self.levels[self.s] = 0;
+            self.update_levels();
 
-            let mut q = VecDeque::new();
-            q.push_back(self.s);
-            // eprintln!("levels..");
-            while let Some(u) = q.pop_front() {
-                if u == self.t {
-                    continue;
-                }
-                // Reset iterators.
-                self.its[u] = self.starts[u];
-                // Update levels.
-                for ei in self.starts[u]..self.starts[u + 1] {
-                    let v = self.edges[ei];
-                    // eprintln!(
-                    // "edge {ei}:  {u} -> {v}: l{} -> l{} free {}",
-                    // self.levels[u], self.levels[v], self.free[ei]
-                    // );
-                    if self.levels[v] == -1 && self.free[ei] {
-                        self.levels[v] = self.levels[u] + 1;
-                        q.push_back(v);
-                    }
-                }
-            }
             // No more flow possible.
             if self.levels[self.t] < 0 {
                 // eprintln!("final flow: {flow} < {}", self.f);
@@ -211,31 +220,101 @@ impl Matcher {
             }
             // eprintln!("augmenting..");
 
-            while self.augment(self.s) {
+            // Reset iterators.
+            self.its.fill(0);
+            self.its_s = 0;
+
+            let mut level_flow = 0;
+            while flow < self.f && self.augment_s() {
+                level_flow += 1;
                 flow += 1;
-                // eprintln!("flow: {flow}");
-                if flow == self.f {
-                    let eis = self
-                        .free
-                        .iter_zeros()
-                        .take_while(|&ei| ei < self.e)
-                        .collect_vec();
-                    return Some(eis);
+            }
+            eprintln!(
+                "Flow at depth {:>2}: {:>9}   total {:>9}",
+                self.levels[self.t], level_flow, flow
+            );
+
+            let mut edge_position_cnt = vec![0; self.max_degree + 1];
+            let mut u = 0;
+            for ei in self.free.iter_zeros().take_while(|&ei| ei < self.e) {
+                while self.starts[u + 1] <= ei {
+                    u += 1;
+                }
+                edge_position_cnt[ei - self.starts[u]] += 1;
+            }
+            while edge_position_cnt.last() == Some(&0) {
+                edge_position_cnt.pop();
+            }
+            for cnt in &edge_position_cnt {
+                eprint!(" {}", cnt);
+            }
+            eprintln!();
+
+            if flow == self.f {
+                let eis = self
+                    .free
+                    .iter_zeros()
+                    .take_while(|&ei| ei < self.e)
+                    .collect_vec();
+                return Some(eis);
+            }
+        }
+    }
+
+    fn update_levels(&mut self) {
+        // Recompute layers.
+        self.levels.fill(-1);
+        self.levels[self.s] = 0;
+
+        // TODO: Can this be done faster by reusing previous levels and only updating changes?
+        let mut q = VecDeque::new();
+        q.push_back(self.s);
+        while let Some(u) = q.pop_front() {
+            if u == self.t {
+                continue;
+            }
+            // Update levels.
+            for ei in self.starts[u]..self.starts[u + 1] {
+                let v = self.edges[ei];
+                // eprintln!(
+                // "edge {ei}:  {u} -> {v}: l{} -> l{} free {}",
+                // self.levels[u], self.levels[v], self.free[ei]
+                // );
+                if self.levels[v] == -1 && self.free[ei] {
+                    self.levels[v] = self.levels[u] + 1;
+                    q.push_back(v);
                 }
             }
         }
     }
 
-    fn augment(&mut self, u: usize) -> bool {
-        while self.its[u] < self.starts[u + 1] {
-            let ei = self.its[u];
+    fn augment_s(&mut self) -> bool {
+        let u = self.s;
+        let mut ei = self.starts[u] + self.its_s;
+        while ei < self.starts[u + 1] {
             let v = self.edges[ei];
             if self.free[ei] && self.levels[u] < self.levels[v] {
                 if v == self.t || self.augment(v) {
                     self.free.set(ei, false);
-                    // TODO: UPDATE REVERSE EDGE!
-                    // Only matters for 'middle' edges.
-                    if ei < 2 * self.e + self.f && v != self.t {
+                    // Edges from s don't have a reverse.
+                    return true;
+                }
+            }
+            self.its_s += 1;
+            ei += 1;
+        }
+        return false;
+    }
+
+    fn augment(&mut self, u: usize) -> bool {
+        let mut ei = self.starts[u] + self.its[u] as usize;
+        while ei < self.starts[u + 1] {
+            let v = self.edges[ei];
+            if self.free[ei] && self.levels[u] < self.levels[v] {
+                if v == self.t || self.augment(v) {
+                    self.free.set(ei, false);
+                    // Edges to t don't have a reverse.
+                    if v != self.t {
                         if let Some(pos) = self.edges[self.starts[v]..self.starts[v + 1]]
                             .iter()
                             .position(|x| *x == u)
@@ -248,6 +327,7 @@ impl Matcher {
                 }
             }
             self.its[u] += 1;
+            ei += 1;
         }
         return false;
     }
