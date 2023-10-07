@@ -14,6 +14,7 @@ mod hash_inverse;
 mod index;
 mod matching;
 mod pack;
+mod peeling;
 pub mod reduce;
 mod sort_buckets;
 pub mod test;
