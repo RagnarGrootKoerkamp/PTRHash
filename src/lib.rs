@@ -363,7 +363,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                         break;
                     }
 
-                    k[b] = self.find_pilot(bucket, &mut taken);
+                    let Some(ki) = self.find_pilot(bucket, &mut taken) else {
+                        continue 's;
+                    };
+                    k[b] = ki;
                 }
             } else {
                 let mut bs = bucket_order_head.iter().peekable();
@@ -376,7 +379,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                         break;
                     }
 
-                    k[b] = self.find_pilot(bucket, &mut taken);
+                    let Some(ki) = self.find_pilot(bucket, &mut taken) else {
+                        continue 's;
+                    };
+                    k[b] = ki;
                 }
 
                 // Process smaller buckets as [Hash; BUCKET_SIZE] where the
@@ -387,7 +393,12 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                             bs.next_if(|&&b| starts[b + 1] - starts[b] == $BUCKET_SIZE)
                         {
                             let bucket = &hashes[starts[b]..].split_array_ref().0;
-                            k[b] = self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken);
+                            let Some(ki) =
+                                self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken)
+                            else {
+                                continue 's;
+                            };
+                            k[b] = ki;
                         }
                     };
                 }
@@ -513,18 +524,16 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         self.k = Packed::new(k);
     }
 
-    fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> u64 {
+    fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
         'k: for ki in 0u64.. {
-            // // Values of order n are only expected for the last few buckets.
-            // // The probability of failure after n tries is 1/e=0.36, so
-            // // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
-            // // (But not that I have seen cases where the minimum is around 16n.)
-            // if ki == 20 * self.n as u64 {
-            //     if LOG {
-            //         eprintln!("{bucket_size}: No ki found after 20n = {ki} tries.");
-            //     }
-            //     continue 's;
-            // }
+            // Values of order n are only expected for the last few buckets.
+            // The probability of failure after n tries is 1/e=0.36, so
+            // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
+            // (But note that I have seen cases where the minimum is around 16n.)
+            if ki == 20 * self.n as u64 {
+                eprintln!("{}: No ki found after 20n = {ki} tries.", bucket.len());
+                return None;
+            }
             let hki = self.hash_ki(ki);
             let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
@@ -558,7 +567,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             }
 
             // Found a suitable offset.
-            return ki;
+            return Some(ki);
         }
         unreachable!()
     }
@@ -567,8 +576,12 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         &mut self,
         bucket: &[Hash; L],
         taken: &mut bitvec::vec::BitVec,
-    ) -> u64 {
+    ) -> Option<u64> {
         'k: for ki in 0u64.. {
+            if ki == 20 * self.n as u64 {
+                eprintln!("{}: No ki found after 20n = {ki} tries.", bucket.len());
+                return None;
+            }
             let hki = self.hash_ki(ki);
             let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
@@ -602,7 +615,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             }
 
             // Found a suitable offset.
-            return ki;
+            return Some(ki);
         }
         unreachable!()
     }
