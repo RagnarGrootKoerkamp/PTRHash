@@ -408,19 +408,22 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 if !self.params.peel2 {
                     find_pilot_fixed!(2);
                 } else {
+                    let mut local_bs = vec![];
                     let mut local_hashes = vec![];
 
                     while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
+                        local_bs.push(b);
                         local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
                     }
-                    let free_slots = taken.iter_zeros().collect_vec();
                     // Use matching.
                     let kis = self.peel_size_2(local_hashes.into_iter(), &taken);
-                    for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
+                    for (b, ki) in std::iter::zip(local_bs, kis) {
+                        for i in 0..2 {
+                            let p = self.position(hashes[starts[b] + i], ki);
+                            assert!(!taken[p]);
+                            taken.set(p, true);
+                        }
                         k[b] = ki;
-                    }
-                    for f in free_slots {
-                        taken.set(f, true);
                     }
                 }
                 find_pilot_fixed!(1);
@@ -710,7 +713,9 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
     let mut it = bucket_sizes.clone();
     for i in 0..BINS {
         let count = pct_count[i];
-        assert!(count > 0);
+        if count == 0 {
+            continue;
+        }
         let sz = it.next().unwrap();
         it.advance_by(count - 1).unwrap();
         if pct_elems[i] == 0 {

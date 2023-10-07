@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use super::*;
 use bitvec::vec::BitVec;
 use rustc_hash::FxHashMap;
@@ -159,6 +160,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         taken: &BitVec,
     ) -> Vec<u64> {
         let b = hashes.clone().count();
+        if b == 0 {
+            return vec![];
+        }
         eprintln!("Buckets: {}", b);
         eprintln!("Slots: {}", taken.count_zeros());
         // TODO: How high should this threshold be?
@@ -167,19 +171,28 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             .ilog2();
         // Optimistically start a bit below the expected lower bound.
         // TODO: Instead of starting a new search in case of failure, we could add edges incrementally.
-        'bits: for bits in bits_min.saturating_sub(1).. {
+        'bits: for bits in bits_min.saturating_sub(3).. {
             let kmax = 1 << bits;
             eprintln!("bits: {bits} k_max: {kmax}");
 
             let mut edges = vec![];
             let mut kis = vec![];
             let mut starts = vec![0; b + 1];
+            let mut ps = Vec::with_capacity(2);
             for (i, hxs) in hashes.clone().enumerate() {
                 let mut count = 0;
                 'ki: for ki in 0..kmax {
+                    ps.clear();
                     for hx in hxs {
                         let p = self.position(*hx, ki);
+                        ps.push(p);
                         if taken[p] {
+                            continue 'ki;
+                        }
+                    }
+                    ps.sort_unstable();
+                    for i in 0..ps.len() - 1 {
+                        if ps[i] == ps[i + 1] {
                             continue 'ki;
                         }
                     }
@@ -198,15 +211,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 }
             }
 
-            // Accumulate starts.
-            let mut acc = 0;
-            for s in &mut starts[0..b] {
-                let tmp = acc;
-                acc += 2 * *s;
-                *s = tmp;
-            }
-            starts[b] = acc;
-
             // Here, construction should succeed with high probability.
 
             let e = edges.len() / 2;
@@ -219,9 +223,22 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 starts[0..b].iter().max().unwrap()
             );
 
+            // Accumulate starts.
+            let mut acc = 0;
+            for s in &mut starts[0..b] {
+                let tmp = acc;
+                acc += 2 * *s;
+                *s = tmp;
+            }
+            starts[b] = acc;
             eprintln!("edges: {edges:?}");
+            eprintln!("kis  : {kis:?}");
             eprintln!("starts: {starts:?}");
 
+            // if let Some(eis) = greedy_sorted_peeler(2, b, e, edges, starts) {
+            //     // eprintln!("eis: {:?}", eis);
+            //     return eis.iter().map(|&ei| kis[ei]).collect();
+            // }
             if let Some(eis) = SingleSidedPeeler::new(2, b, e, edges, starts).run() {
                 return eis.iter().map(|&ei| kis[ei]).collect();
             }
@@ -230,6 +247,52 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 }
 
+/// Sort buckets by increasing degree, and find first matching edge for each.
+pub fn greedy_sorted_peeler(
+    bucket_size: usize,
+    b: usize,
+    _e: usize,
+    mut edges: Vec<usize>,
+    starts: Vec<usize>,
+) -> Option<Vec<usize>> {
+    let mut bucket_order = (0..b).collect::<Vec<_>>();
+    bucket_order.sort_by_key(|&u| starts[u + 1] - starts[u]);
+
+    let mut taken = HashSet::new();
+    let mut matching = vec![usize::MAX; b];
+
+    for (i, &u) in bucket_order.iter().enumerate() {
+        let u_edges = &mut edges[starts[u]..starts[u + 1]];
+        let Some((pos, vs)) = u_edges
+            .chunks_exact(bucket_size)
+            .enumerate()
+            .find(|(_i, vs)| vs.iter().all(|v| !taken.contains(v)))
+        else {
+            eprintln!(
+                "Could not place {i}th bucket {u} with degree {}",
+                u_edges.len() / bucket_size
+            );
+            return None;
+        };
+        // eprintln!(
+        //     "MATCH {}: {} -> {} / {}",
+        //     i,
+        //     u,
+        //     pos,
+        //     u_edges.len() / bucket_size
+        // );
+        matching[u] = starts[u] / bucket_size + pos;
+        for &v in vs {
+            // eprintln!("  TAKE {}", v);
+            taken.insert(v);
+        }
+    }
+
+    Some(matching)
+}
+
+/// WIP
+///
 /// This allows a fixed bucket size.
 ///
 /// It requires some slack in the free slots, otherwise a matching will not be found.
@@ -395,7 +458,9 @@ impl SingleSidedPeeler {
                 }
                 let v_edges =
                     &mut self.slot_edges[self.slot_edge_starts[v]..self.slot_edge_starts[v + 1]];
-                *v_edges.iter_mut().find(|&&mut w| w == u).unwrap() = usize::MAX;
+                if let Some(x) = v_edges.iter_mut().find(|&&mut w| w == u) {
+                    *x = usize::MAX;
+                }
             }
 
             // Lower degrees of neighbours of vs.
@@ -452,6 +517,10 @@ impl SingleSidedPeeler {
                     //     *vprime = usize::MAX;
                     // }
                 }
+
+                // Clear the slot edges for all newly filled target slots.
+                self.slot_edges[self.slot_edge_starts[v]..self.slot_edge_starts[v + 1]]
+                    .fill(usize::MAX);
             }
 
             eprintln!(
