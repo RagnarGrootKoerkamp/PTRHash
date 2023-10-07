@@ -141,7 +141,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             }
 
             if peel {
-                if let Some(eis) = PeelingMatcher::new(f, e, edges, starts).run() {
+                if let (true, eis) = PeelingMatcher::new(f, e, edges, starts).run() {
                     return eis.iter().map(|&ei| kis[ei]).collect();
                 }
             } else {
@@ -397,7 +397,9 @@ impl PeelingMatcher {
         }
     }
 
-    fn run(&mut self) -> Option<Vec<usize>> {
+    /// Returns the (partial) matching. The bool is true if the matching is
+    /// complete.
+    fn run(mut self) -> (bool, Vec<usize>) {
         // Peel f edges.
         let mut min_degree = 1;
         let mut dd = vec![0; self.max_degree + 1];
@@ -429,7 +431,12 @@ impl PeelingMatcher {
             let (l, r) = (min(u, v), max(u, v));
             // eprintln!("Add edge {l} -> {r}");
             assert!(self.matching[l] == usize::MAX);
-            self.matching[l] = r;
+
+            // Find the edge index corresponding to (l, r).
+            let l_edges = &self.edges[self.starts[l]..self.starts[l + 1]];
+            let pos = l_edges.iter().position(|&w| w == r).unwrap();
+            self.matching[l] = self.starts[l] + pos;
+
             self.degrees[u] = u8::MAX;
             self.degrees[v] = u8::MAX;
 
@@ -445,7 +452,7 @@ impl PeelingMatcher {
                                 eprintln!("{}: {}", i, cnt);
                             }
                         }
-                        return None;
+                        return (false, self.matching);
                     }
                     self.degree_buckets[self.degrees[w] as usize].push(w);
                 }
@@ -462,7 +469,7 @@ impl PeelingMatcher {
                                 eprintln!("{}: {}", i, cnt);
                             }
                         }
-                        return None;
+                        return (false, self.matching);
                     }
                     self.degree_buckets[self.degrees[w] as usize].push(w);
                 }
@@ -475,17 +482,6 @@ impl PeelingMatcher {
                 eprintln!("{}: {}", i, cnt);
             }
         }
-        Some(
-            self.matching
-                .iter()
-                .enumerate()
-                .map(|(u, v)| {
-                    // eprintln!("u: {}, v: {}", u, v);
-                    let u_edges = &self.edges[self.starts[u]..self.starts[u + 1]];
-                    let pos = u_edges.iter().position(|&w| w == *v).unwrap();
-                    self.starts[u] + pos
-                })
-                .collect(),
-        )
+        (true, self.matching)
     }
 }
