@@ -46,7 +46,7 @@ fn main() {
         peel2,
     } = Args::parse();
 
-    type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, false>;
+    type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
 
     let keys = pthash_rs::test::generate_keys(n);
     if bucket_stats {

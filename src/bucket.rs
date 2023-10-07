@@ -17,9 +17,8 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
     /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
     pub(super) fn bucket_thirds_shift(&self, hx: Hash) -> usize {
         let mod_mp2 = hx.reduce(self.rem_mp2);
-        let small = (hx >= self.p1) as usize;
-        // FIXME: THE PRECEDENCE HERE WAS WRONG ALL ALONG!!!
-        self.mp2 * small + mod_mp2 >> small
+        let small = (hx < self.p1) as usize;
+        self.mp2 * small + (mod_mp2 >> small)
     }
 
     /// Branchless version of bucket() above that turns out to be slower.
