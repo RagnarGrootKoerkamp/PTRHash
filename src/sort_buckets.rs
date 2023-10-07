@@ -9,9 +9,8 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
     /// 2. Start indices of each bucket.
     /// 3. Order of the buckets.
     #[must_use]
-    pub(super) fn sort_buckets_flat(&self, keys: &Vec<u64>) -> (Vec<Hash>, Vec<usize>, Vec<usize>) {
-        let mut buckets: Vec<(usize, Hash)> = vec![];
-        buckets.reserve(keys.len());
+    pub(super) fn sort_buckets_flat(&self, keys: &[u64]) -> (Vec<Hash>, Vec<usize>, Vec<usize>) {
+        let mut buckets: Vec<(usize, Hash)> = Vec::with_capacity(keys.len());
 
         for key in keys {
             let h = self.hash_key(key);
@@ -20,8 +19,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
         }
         radsort::sort_by_key(&mut buckets, |(b, _h)| (*b));
 
-        let mut starts = vec![];
-        starts.reserve(self.m + 1);
+        let mut starts = Vec::with_capacity(self.m + 1);
         let mut end = 0;
         starts.push(end);
         for b in 0..self.m {
@@ -50,12 +48,11 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
     /// indices but recomputes them on the fly. For `FastReduce` this is even
     /// simpler, since hashes can be compared directly!
     #[must_use]
-    pub(super) fn sort_buckets_slim(&self, keys: &Vec<u64>) -> (Vec<Hash>, Vec<Range<usize>>) {
+    pub(super) fn sort_buckets_slim(&self, keys: &[u64]) -> (Vec<Hash>, Vec<Range<usize>>) {
         let mut hashes: Vec<Hash> = keys.iter().map(|key| self.hash_key(key)).collect();
         radsort::sort_by_key(&mut hashes, |h| self.bucket(*h));
 
-        let mut ranges = vec![];
-        ranges.reserve(self.m);
+        let mut ranges = Vec::with_capacity(self.m);
         let mut start = 0;
         for b in 0..self.m {
             let mut end = start;

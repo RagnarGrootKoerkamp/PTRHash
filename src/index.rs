@@ -22,8 +22,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
             // reading.
             unsafe { prefetch_read_data(self.k.address(next_i[idx]), 3) };
             let ki = self.k.index(cur_i);
-            let p = self.position(cur_hx, ki);
-            p
+            self.position(cur_hx, ki)
         })
     }
 
@@ -42,7 +41,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
             .copied()
             .array_chunks::<L>()
             .enumerate()
-            .map(move |(idx, next_x_vec)| {
+            .flat_map(move |(idx, next_x_vec)| {
                 let idx = (idx % K) * L;
                 let cur_hx_vec =
                     unsafe { *next_hx[idx..].array_chunks::<L>().next().unwrap_unchecked() };
@@ -62,7 +61,6 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
                         .unwrap_unchecked()
                 }
             })
-            .flatten()
     }
 
     #[inline(always)]
@@ -95,7 +93,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
             .array_chunks::<L>()
             .map(|c| c.into())
             .enumerate()
-            .map(move |(idx, next_x_vec): (usize, Simd<Key, L>)| {
+            .flat_map(move |(idx, next_x_vec): (usize, Simd<Key, L>)| {
                 let idx = idx % K;
                 let cur_hx_vec = next_hx[idx];
                 let cur_i_vec = next_i[idx];
@@ -120,6 +118,5 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
                 });
                 p_vec
             })
-            .flatten()
     }
 }

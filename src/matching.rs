@@ -72,12 +72,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             }
 
             // If there is a bucket without edges, try more bits.
-            for i in 0..2 * f {
-                if starts[i] == 0 {
-                    // eprintln!("There are vertices without matches :(: {i}");
-                    continue 'b;
-                }
+            if starts[0..2 * f].contains(&0) {
+                // eprintln!("There are vertices without matches :(: {i}");
+                continue 'b;
             }
+
             // Here, construction should succeed with high probability.
 
             let e = edges.len();
@@ -109,10 +108,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
             // Accumulate start positions.
             let mut acc = 0;
-            for i in 0..=2 * f {
+            for s in &mut starts[0..=2 * f] {
                 let tmp = acc;
-                acc += starts[i];
-                starts[i] = tmp;
+                acc += *s;
+                *s = tmp;
             }
             starts[2 * f + include_st_edges as usize] = acc;
 
@@ -153,10 +152,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 {
                     return eis.iter().map(|&ei| kis[ei]).collect();
                 }
-            } else {
-                if let Some(eis) = DinicMatcher::new(f, e, edges, starts, s, t).run() {
-                    return eis.iter().map(|&ei| kis[ei]).collect();
-                }
+            } else if let Some(eis) = DinicMatcher::new(f, e, edges, starts, s, t).run() {
+                return eis.iter().map(|&ei| kis[ei]).collect();
             }
         }
         unreachable!()
@@ -200,8 +197,8 @@ impl DinicMatcher {
         // Middle edges.
         free[starts[0]..starts[f]].fill(true);
         // Edges to t
-        for j in f..2 * f {
-            free.set(starts[j], true);
+        for &s in &starts[f..2 * f] {
+            free.set(s, true);
         }
         let mut max_degree = 0;
         for i in 0..2 * f {
@@ -299,42 +296,40 @@ impl DinicMatcher {
         let mut ei = self.starts[u] + self.its_s;
         while ei < self.starts[u + 1] {
             let v = self.edges[ei];
-            if self.free[ei] && self.levels[u] < self.levels[v] {
-                if v == self.t || self.augment(v) {
-                    self.free.set(ei, false);
-                    // Edges from s don't have a reverse.
-                    return true;
-                }
+            if self.free[ei] && self.levels[u] < self.levels[v] && (v == self.t || self.augment(v))
+            {
+                self.free.set(ei, false);
+                // Edges from s don't have a reverse.
+                return true;
             }
             self.its_s += 1;
             ei += 1;
         }
-        return false;
+        false
     }
 
     fn augment(&mut self, u: usize) -> bool {
         let mut ei = self.starts[u] + self.its[u] as usize;
         while ei < self.starts[u + 1] {
             let v = self.edges[ei];
-            if self.free[ei] && self.levels[u] < self.levels[v] {
-                if v == self.t || self.augment(v) {
-                    self.free.set(ei, false);
-                    // Edges to t don't have a reverse.
-                    if v != self.t {
-                        if let Some(pos) = self.edges[self.starts[v]..self.starts[v + 1]]
-                            .iter()
-                            .position(|x| *x == u)
-                        {
-                            let ej = self.starts[v] + pos;
-                            self.free.set(ej, true);
-                        }
+            if self.free[ei] && self.levels[u] < self.levels[v] && (v == self.t || self.augment(v))
+            {
+                self.free.set(ei, false);
+                // Edges to t don't have a reverse.
+                if v != self.t {
+                    if let Some(pos) = self.edges[self.starts[v]..self.starts[v + 1]]
+                        .iter()
+                        .position(|x| *x == u)
+                    {
+                        let ej = self.starts[v] + pos;
+                        self.free.set(ej, true);
                     }
-                    return true;
                 }
+                return true;
             }
             self.its[u] += 1;
             ei += 1;
         }
-        return false;
+        false
     }
 }

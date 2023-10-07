@@ -21,7 +21,7 @@ impl Packed for Vec<u64> {
         unsafe { *self.get_unchecked(index) }
     }
     fn address(&self, index: usize) -> *const u64 {
-        unsafe { self.as_ptr().offset(index as isize) }
+        unsafe { self.as_ptr().add(index) }
     }
     fn to_vec(&self) -> Vec<u64> {
         self.clone()

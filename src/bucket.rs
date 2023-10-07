@@ -18,6 +18,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
     pub(super) fn bucket_thirds_shift(&self, hx: Hash) -> usize {
         let mod_mp2 = hx.reduce(self.rem_mp2);
         let small = (hx >= self.p1) as usize;
+        // FIXME: THE PRECEDENCE HERE WAS WRONG ALL ALONG!!!
         self.mp2 * small + mod_mp2 >> small
     }
 

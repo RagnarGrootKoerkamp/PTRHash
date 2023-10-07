@@ -254,11 +254,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     fn bucket_naive(&self, hx: Hash) -> usize {
         // TODO: Branchless implementation.
-        (if hx < self.p1 {
+        if hx < self.p1 {
             hx.reduce(self.rem_p2)
         } else {
             self.p2 + hx.reduce(self.rem_mp2)
-        }) as usize
+        }
     }
 
     fn position(&self, hx: Hash, ki: u64) -> usize {
@@ -303,7 +303,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         (buckets, bucket_order)
     }
 
-    pub fn compute_pilots(&mut self, keys: &Vec<Key>) {
+    pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
         let mut k = vec![];

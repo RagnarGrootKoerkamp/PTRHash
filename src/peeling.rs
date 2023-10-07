@@ -200,10 +200,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
             // Accumulate starts.
             let mut acc = 0;
-            for i in 0..b {
+            for s in &mut starts[0..b] {
                 let tmp = acc;
-                acc += 2 * starts[i];
-                starts[i] = tmp;
+                acc += 2 * *s;
+                *s = tmp;
             }
             starts[b] = acc;
 
