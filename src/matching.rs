@@ -272,7 +272,9 @@ impl DinicMatcher {
         // TODO: Can this be done faster by reusing previous levels and only updating changes?
         let mut q = VecDeque::new();
         q.push_back(self.s);
-        while let Some(u) = q.pop_front() {
+        let mut max_level = 0;
+        'q: while let Some(u) = q.pop_front() {
+            max_level = max(max_level, self.levels[u]);
             if u == self.t {
                 continue;
             }
@@ -285,6 +287,11 @@ impl DinicMatcher {
                 // );
                 if self.levels[v] == -1 && self.free[ei] {
                     self.levels[v] = self.levels[u] + 1;
+                    // As soon as we determine the level for t, all vertices in
+                    // lower levels have been determined and we can stop.
+                    if v == self.t {
+                        break 'q;
+                    }
                     q.push_back(v);
                 }
             }
@@ -296,8 +303,7 @@ impl DinicMatcher {
         let mut ei = self.starts[u] + self.its_s;
         while ei < self.starts[u + 1] {
             let v = self.edges[ei];
-            if self.free[ei] && self.levels[u] < self.levels[v] && (v == self.t || self.augment(v))
-            {
+            if self.free[ei] && self.augment(v) {
                 self.free.set(ei, false);
                 // Edges from s don't have a reverse.
                 return true;
@@ -310,25 +316,38 @@ impl DinicMatcher {
 
     fn augment(&mut self, u: usize) -> bool {
         let mut ei = self.starts[u] + self.its[u] as usize;
-        while ei < self.starts[u + 1] {
-            let v = self.edges[ei];
-            if self.free[ei] && self.levels[u] < self.levels[v] && (v == self.t || self.augment(v))
-            {
+        // For vertices just before the end, only check the edge to t, which is the first outgoing edge.
+        // This saves ~10% of runtime.
+        if self.levels[u] == self.levels[self.t] - 1 {
+            let ei = self.starts[u];
+            if self.free[ei] {
                 self.free.set(ei, false);
-                // Edges to t don't have a reverse.
-                if v != self.t {
-                    if let Some(pos) = self.edges[self.starts[v]..self.starts[v + 1]]
-                        .iter()
-                        .position(|x| *x == u)
-                    {
-                        let ej = self.starts[v] + pos;
-                        self.free.set(ej, true);
-                    }
-                }
                 return true;
             }
-            self.its[u] += 1;
-            ei += 1;
+            return false;
+        } else {
+            while ei < self.starts[u + 1] {
+                let v = self.edges[ei];
+                if self.free[ei]
+                    && self.levels[v] > self.levels[u]
+                    && (v == self.t || self.augment(v))
+                {
+                    self.free.set(ei, false);
+                    // Edges to t don't have a reverse.
+                    if v != self.t {
+                        if let Some(pos) = self.edges[self.starts[v]..self.starts[v + 1]]
+                            .iter()
+                            .position(|x| *x == u)
+                        {
+                            let ej = self.starts[v] + pos;
+                            self.free.set(ej, true);
+                        }
+                    }
+                    return true;
+                }
+                self.its[u] += 1;
+                ei += 1;
+            }
         }
         false
     }
