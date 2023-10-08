@@ -5,7 +5,8 @@
     array_chunks,
     portable_simd,
     generic_const_exprs,
-    iter_advance_by
+    iter_advance_by,
+    slice_partition_dedup
 )]
 #![allow(incomplete_features)]
 pub mod bucket;
@@ -327,7 +328,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
+            let (mut hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
 
             if LOG {
                 print_bucket_sizes((0..self.m).map(|i| starts[i + 1] - starts[i]));
@@ -357,7 +358,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
             if !self.params.fast_small_buckets {
                 for &b in bucket_order_head {
-                    let bucket = &hashes[starts[b]..starts[b + 1]];
+                    let bucket = &mut hashes[starts[b]..starts[b + 1]];
                     let bucket_size = bucket.len();
                     if bucket_size == 0 {
                         break;
@@ -373,7 +374,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
                 // Iterate all buckets of size >= 5 as &[Hash].
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
-                    let bucket = &hashes[starts[b]..starts[b + 1]];
+                    let bucket = &mut hashes[starts[b]..starts[b + 1]];
                     let bucket_size = bucket.len();
                     if bucket_size == 0 {
                         break;
@@ -392,7 +393,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                         while let Some(&b) =
                             bs.next_if(|&&b| starts[b + 1] - starts[b] == $BUCKET_SIZE)
                         {
-                            let bucket = &hashes[starts[b]..].split_array_ref().0;
+                            let bucket = hashes[starts[b]..].split_array_mut().0;
                             let Some(ki) =
                                 self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken)
                             else {
@@ -527,7 +528,12 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         self.k = Packed::new(k);
     }
 
-    fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
+    fn find_pilot(&mut self, bucket: &mut [Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
+        bucket.sort_unstable();
+        // Duplicate hash detection.
+        if !bucket.partition_dedup().1.is_empty() {
+            return None;
+        }
         'k: for ki in 0u64.. {
             // Values of order n are only expected for the last few buckets.
             // The probability of failure after n tries is 1/e=0.36, so
@@ -577,9 +583,14 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     fn find_pilot_fixed<const L: usize>(
         &mut self,
-        bucket: &[Hash; L],
+        bucket: &mut [Hash; L],
         taken: &mut bitvec::vec::BitVec,
     ) -> Option<u64> {
+        bucket.sort_unstable();
+        // Duplicate hash detection.
+        if !bucket.partition_dedup().1.is_empty() {
+            return None;
+        }
         'k: for ki in 0u64.. {
             if ki == 20 * self.n as u64 {
                 eprintln!("{}: No ki found after 20n = {ki} tries.", bucket.len());
