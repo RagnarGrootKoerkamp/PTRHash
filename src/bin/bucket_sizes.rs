@@ -30,6 +30,10 @@ struct Args {
     peel: bool,
     #[arg(long)]
     peel2: bool,
+    #[arg(long)]
+    displace: bool,
+    #[arg(long, default_value_t = 10)]
+    bits: usize,
 }
 
 fn main() {
@@ -44,6 +48,8 @@ fn main() {
         matching,
         peel,
         peel2,
+        displace,
+        bits,
     } = Args::parse();
 
     type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
@@ -65,6 +71,8 @@ fn main() {
                 matching,
                 peel,
                 peel2,
+                displace,
+                bits,
             },
         );
     }

@@ -1,8 +1,10 @@
 #![allow(dead_code)]
 
-use std::{cmp::Reverse, collections::HashSet};
+use crate::types::BucketIdx;
 
+use super::*;
 use rustc_hash::FxHashMap;
+use std::{cmp::Reverse, collections::HashSet};
 
 /// Sort buckets by increasing degree, and find first matching edge for each.
 pub fn greedy_assign_by_degree(
@@ -212,6 +214,8 @@ impl Displace {
             edge.clone_from_slice(vs);
 
             // Drop conflicting matches.
+            // FIXME: For each displaced bucket we should clear all slots it maps to.
+            // That also prevents the double-pushing issue.
             displacement_size[cnt] += 1;
             for v in &edge {
                 if let Some(b) = self.taken.remove(v) {
@@ -238,5 +242,116 @@ impl Displace {
             self.matching[b] += self.starts[b] / self.bucket_size;
         }
         Some(self.matching)
+    }
+}
+
+impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+    PTHash<P, Rm, Rn, Hx, Hk, T>
+{
+    pub fn displace(
+        &self,
+        hashes: &[Hash],
+        starts: &BucketVec<usize>,
+        bucket_order: &[BucketIdx],
+        bits: usize,
+        kis: &mut BucketVec<u64>,
+    ) -> bool {
+        let kmax = 1u64 << bits;
+        eprintln!("DISPLACE 2^{bits}={kmax}");
+
+        kis.reset(0, u64::MAX);
+        let mut slots = vec![BucketIdx::NONE; self.n];
+        let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
+
+        let max_bucket_len = bucket_len(bucket_order[0]);
+        let mut positions_tmp = vec![0; max_bucket_len];
+        let mut displacements_tmp = Vec::with_capacity(max_bucket_len);
+
+        let mut stack = vec![];
+        let mut i = 0;
+
+        let positions = |b: BucketIdx, ki: Pilot| {
+            let hki = self.hash_ki(ki);
+            hashes[starts[b]..starts[b + 1]]
+                .iter()
+                .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+        };
+
+        for &b in bucket_order {
+            i += 1;
+            // Check for duplicate hashes inside bucket.
+            let bucket = &hashes[starts[b]..starts[b + 1]];
+
+            let mut displacements = 0;
+
+            stack.push(b);
+
+            while let Some(b) = stack.pop() {
+                let ki = kis[b] + 1;
+                // (collision count, ki)
+                let mut best = (usize::MAX, u64::MAX);
+                'k: for delta in 0u64..kmax {
+                    let ki = (ki + delta) % kmax;
+                    let hki = self.hash_ki(ki);
+                    let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
+                    let collisions = positions(b, ki).filter(|&p| slots[p].is_none()).count();
+                    if collisions < best.0 {
+                        // Check that the mapped positions are distinct.
+                        positions_tmp.clear();
+                        bucket
+                            .iter()
+                            .map(|&hx| position(hx))
+                            .collect_into(&mut positions_tmp);
+                        positions_tmp.sort_unstable();
+                        if !positions_tmp.partition_dedup().1.is_empty() {
+                            continue 'k;
+                        }
+
+                        best = (collisions, ki);
+                        if collisions == 0 {
+                            break;
+                        }
+                    }
+                }
+
+                let (collisions, ki) = best;
+                kis[b] = ki;
+                let hki = self.hash_ki(ki);
+                let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
+
+                // Drop the collisions and set the new ki.
+                // It may happen that a bucket displaces another bucket multiple times.
+                // To prevent pushing it twice, we collect them first.
+                // FIXME: For each displaced bucket we should clear all slots it maps to.
+                // That also prevents the double-pushing issue.
+                displacements_tmp.clear();
+                for &hx in bucket.iter() {
+                    let p = position(hx);
+                    let b = slots[p];
+                    if b.is_some() {
+                        let hkb = self.hash_ki(kis[b]);
+                        // DROP BUCKET b
+                        for hx in &hashes[starts[b]..starts[b + 1]] {
+                            slots[position(*hx)] = BucketIdx::NONE;
+                        }
+                        displacements_tmp.push(slots[p]);
+                    }
+                    slots[p] = b;
+                }
+                displacements_tmp.sort_unstable();
+                displacements_tmp.dedup();
+                for &displacement in &displacements_tmp {
+                    stack.push(displacement);
+                    displacements += 1;
+                }
+            }
+            eprintln!(
+                "bucket {b:>8} size {:>2}: {i:>8} / {:>8} displacements: {:>8}",
+                bucket.len(),
+                bucket_order.len(),
+                displacements
+            );
+        }
+        true
     }
 }
