@@ -10,6 +10,7 @@
 )]
 #![allow(incomplete_features)]
 pub mod bucket;
+mod displacing;
 pub mod hash;
 mod hash_inverse;
 mod index;
@@ -373,7 +374,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 let mut bs = bucket_order_head.iter().peekable();
 
                 // Iterate all buckets of size >= 5 as &[Hash].
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 6) {
                     let bucket = &mut hashes[starts[b]..starts[b + 1]];
                     let bucket_size = bucket.len();
                     if bucket_size == 0 {
@@ -404,27 +405,34 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     };
                 }
 
-                find_pilot_fixed!(4);
-                find_pilot_fixed!(3);
                 if !self.params.peel2 {
+                    find_pilot_fixed!(5);
+                    find_pilot_fixed!(4);
+                    find_pilot_fixed!(3);
                     find_pilot_fixed!(2);
                 } else {
-                    let mut local_bs = vec![];
-                    let mut local_hashes = vec![];
+                    find_pilot_fixed!(5);
+                    find_pilot_fixed!(4);
+                    for bucket_size in [3, 2] {
+                        let mut local_bs = vec![];
+                        let mut local_hashes = vec![];
 
-                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
-                        local_bs.push(b);
-                        local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
-                    }
-                    // Use matching.
-                    let kis = self.peel_size_2(local_hashes.into_iter(), &taken);
-                    for (b, ki) in std::iter::zip(local_bs, kis) {
-                        for i in 0..2 {
-                            let p = self.position(hashes[starts[b] + i], ki);
-                            assert!(!taken[p]);
-                            taken.set(p, true);
+                        while let Some(&b) =
+                            bs.next_if(|&&b| starts[b + 1] - starts[b] == bucket_size)
+                        {
+                            local_bs.push(b);
+                            local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
                         }
-                        k[b] = ki;
+                        // Use matching.
+                        let kis = self.peel_size(local_hashes.into_iter(), &taken, bucket_size);
+                        for (b, ki) in std::iter::zip(local_bs, kis) {
+                            for i in 0..bucket_size {
+                                let p = self.position(hashes[starts[b] + i], ki);
+                                assert!(!taken[p]);
+                                taken.set(p, true);
+                            }
+                            k[b] = ki;
+                        }
                     }
                 }
                 find_pilot_fixed!(1);

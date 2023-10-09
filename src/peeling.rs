@@ -1,4 +1,7 @@
 #![allow(dead_code)]
+
+use crate::displacing::greedy_assign_by_degree_iterative;
+
 use super::*;
 use bitvec::vec::BitVec;
 use rustc_hash::FxHashMap;
@@ -154,11 +157,13 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     PTHash<P, Rm, Rn, Hx, Hk, T>
 {
     /// Hashes: an iterator over a slice of hashes for each bucket.
-    pub fn peel_size_2<'a>(
+    pub fn peel_size<'a>(
         &self,
         hashes: impl Iterator<Item = &'a [Hash]> + Clone,
         taken: &BitVec,
+        bucket_size: usize,
     ) -> Vec<u64> {
+        eprintln!("PEEL SIZE {bucket_size}");
         let b = hashes.clone().count();
         if b == 0 {
             return vec![];
@@ -171,14 +176,14 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             .ilog2();
         // Optimistically start a bit below the expected lower bound.
         // TODO: Instead of starting a new search in case of failure, we could add edges incrementally.
-        'bits: for bits in bits_min.saturating_sub(3).. {
+        'bits: for bits in bits_min.saturating_sub(1).. {
             let kmax = 1 << bits;
             eprintln!("bits: {bits} k_max: {kmax}");
 
             let mut edges = vec![];
             let mut kis = vec![];
             let mut starts = vec![0; b + 1];
-            let mut ps = Vec::with_capacity(2);
+            let mut ps = Vec::with_capacity(bucket_size);
             for (i, hxs) in hashes.clone().enumerate() {
                 let mut count = 0;
                 'ki: for ki in 0..kmax {
@@ -213,7 +218,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
             // Here, construction should succeed with high probability.
 
-            let e = edges.len() / 2;
+            let e = edges.len() / bucket_size;
             eprintln!("edges: {e}");
 
             eprintln!("avg degree: {:>4.1}", e as f32 / b as f32);
@@ -227,75 +232,34 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             let mut acc = 0;
             for s in &mut starts[0..b] {
                 let tmp = acc;
-                acc += 2 * *s;
+                acc += bucket_size * *s;
                 *s = tmp;
             }
             starts[b] = acc;
-            eprintln!("edges: {edges:?}");
-            eprintln!("kis  : {kis:?}");
-            eprintln!("starts: {starts:?}");
+            // eprintln!("edges: {edges:?}");
+            // eprintln!("kis  : {kis:?}");
+            // eprintln!("starts: {starts:?}");
 
-            // if let Some(eis) = greedy_sorted_peeler(2, b, e, edges, starts) {
-            //     // eprintln!("eis: {:?}", eis);
-            //     return eis.iter().map(|&ei| kis[ei]).collect();
-            // }
-            if let Some(eis) = SingleSidedPeeler::new(2, b, e, edges, starts).run() {
+            // if let Some(eis) = greedy_assign_by_degree(bucket_size, b, e, edges, starts) {
+            if let Some(eis) =
+                greedy_assign_by_degree_iterative(bucket_size, b, e, edges, starts, &kis)
+            {
+                // eprintln!("eis: {:?}", eis);
                 return eis.iter().map(|&ei| kis[ei]).collect();
             }
+            // if let Some(eis) = SingleSidedPeeler::new(2, b, e, edges, starts).run() {
+            //     return eis.iter().map(|&ei| kis[ei]).collect();
+            // }
         }
         unreachable!()
     }
 }
 
-/// Sort buckets by increasing degree, and find first matching edge for each.
-pub fn greedy_sorted_peeler(
-    bucket_size: usize,
-    b: usize,
-    _e: usize,
-    mut edges: Vec<usize>,
-    starts: Vec<usize>,
-) -> Option<Vec<usize>> {
-    let mut bucket_order = (0..b).collect::<Vec<_>>();
-    bucket_order.sort_by_key(|&u| starts[u + 1] - starts[u]);
-
-    let mut taken = HashSet::new();
-    let mut matching = vec![usize::MAX; b];
-
-    for (i, &u) in bucket_order.iter().enumerate() {
-        let u_edges = &mut edges[starts[u]..starts[u + 1]];
-        let Some((pos, vs)) = u_edges
-            .chunks_exact(bucket_size)
-            .enumerate()
-            .find(|(_i, vs)| vs.iter().all(|v| !taken.contains(v)))
-        else {
-            eprintln!(
-                "Could not place {i}th bucket {u} with degree {}",
-                u_edges.len() / bucket_size
-            );
-            return None;
-        };
-        // eprintln!(
-        //     "MATCH {}: {} -> {} / {}",
-        //     i,
-        //     u,
-        //     pos,
-        //     u_edges.len() / bucket_size
-        // );
-        matching[u] = starts[u] / bucket_size + pos;
-        for &v in vs {
-            // eprintln!("  TAKE {}", v);
-            taken.insert(v);
-        }
-    }
-
-    Some(matching)
-}
-
-/// WIP
-///
 /// This allows a fixed bucket size.
 ///
 /// It requires some slack in the free slots, otherwise a matching will not be found.
+///
+/// FIXME: THIS IS STILL BROKEN.
 pub struct SingleSidedPeeler {
     // Input
     /// The fixed bucket size.
