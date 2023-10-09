@@ -259,13 +259,13 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let kmax = 1u64 << bits;
         eprintln!("DISPLACE 2^{bits}={kmax}");
 
-        kis.reset(0, u64::MAX);
+        kis.reset(self.m, u64::MAX);
+        // FIXME: STORE BUCKET SIZE INLINE.
         let mut slots = vec![BucketIdx::NONE; self.n];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
         let max_bucket_len = bucket_len(bucket_order[0]);
         let mut positions_tmp = vec![0; max_bucket_len];
-        let mut displacements_tmp = Vec::with_capacity(max_bucket_len);
 
         let mut stack = vec![];
         let mut i = 0;
@@ -277,81 +277,118 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
         };
 
+        let mut total_displacements = 0;
+        let mut max_len_delta = 0;
+
+        let mut recent = Vec::with_capacity(10);
+
         for &b in bucket_order {
             i += 1;
             // Check for duplicate hashes inside bucket.
             let bucket = &hashes[starts[b]..starts[b + 1]];
+            let b_len = bucket.len();
 
-            let mut displacements = 0;
+            let mut displacements = 0usize;
 
             stack.push(b);
+            recent.clear();
+            recent.push(b);
 
             while let Some(b) = stack.pop() {
+                if (stack.len() > 10 && stack.len().is_power_of_two())
+                    || (displacements > 100 && displacements.is_power_of_two())
+                {
+                    eprint!(
+                        "bucket {i:>9} / {:>9}  sz {:>2} stack {:>8} displacements {displacements}\r",
+                        bucket_order.len(),
+                        bucket.len(),
+                        stack.len()
+                    );
+                    // eprintln!("b {b:>8} ki {:>8} stack: {stack:?}", kis[b]);
+                }
                 let ki = kis[b] + 1;
-                // (collision count, ki)
+                // (worst colliding bucket size, ki)
                 let mut best = (usize::MAX, u64::MAX);
+                // TODO: First check if collision-free is possible.
                 'k: for delta in 0u64..kmax {
                     let ki = (ki + delta) % kmax;
-                    let hki = self.hash_ki(ki);
-                    let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
-                    let collisions = positions(b, ki).filter(|&p| slots[p].is_none()).count();
-                    if collisions < best.0 {
+                    let largest_colliding_bucket = positions(b, ki)
+                        .filter_map(|p| {
+                            // Heavily penalize recently moved buckets.
+                            if slots[p].is_none() {
+                                None
+                            } else if recent.contains(&slots[p]) {
+                                Some(1000)
+                            } else {
+                                Some(bucket_len(slots[p]))
+                            }
+                        })
+                        .map(|l| l * l)
+                        .sum();
+                    if largest_colliding_bucket < best.0 {
                         // Check that the mapped positions are distinct.
                         positions_tmp.clear();
-                        bucket
-                            .iter()
-                            .map(|&hx| position(hx))
-                            .collect_into(&mut positions_tmp);
+                        positions(b, ki).collect_into(&mut positions_tmp);
                         positions_tmp.sort_unstable();
                         if !positions_tmp.partition_dedup().1.is_empty() {
+                            // eprintln!("Duplicate positions!");
                             continue 'k;
                         }
 
-                        best = (collisions, ki);
-                        if collisions == 0 {
+                        // eprintln!("New num collisions: {}", num_collisions);
+                        best = (largest_colliding_bucket, ki);
+                        if largest_colliding_bucket == 0 {
                             break;
                         }
                     }
                 }
 
-                let (collisions, ki) = best;
+                let (_collision_score, ki) = best;
+                // eprintln!("{i:>8} {num_collisions:>2} collisions at ki {ki:>8}");
                 kis[b] = ki;
-                let hki = self.hash_ki(ki);
-                let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
 
                 // Drop the collisions and set the new ki.
-                // It may happen that a bucket displaces another bucket multiple times.
-                // To prevent pushing it twice, we collect them first.
-                // FIXME: For each displaced bucket we should clear all slots it maps to.
-                // That also prevents the double-pushing issue.
-                displacements_tmp.clear();
-                for &hx in bucket.iter() {
-                    let p = position(hx);
-                    let b = slots[p];
-                    if b.is_some() {
-                        let hkb = self.hash_ki(kis[b]);
+                for p in positions(b, ki) {
+                    let b2 = slots[p];
+                    if b2.is_some() {
                         // DROP BUCKET b
-                        for hx in &hashes[starts[b]..starts[b + 1]] {
-                            slots[position(*hx)] = BucketIdx::NONE;
+                        // eprintln!("{i:>8}/{:>8} Drop bucket {b2:>8}", self.n);
+                        stack.push(b2);
+                        displacements += 1;
+                        for p2 in positions(b2, kis[b2]) {
+                            slots[p2] = BucketIdx::NONE;
                         }
-                        displacements_tmp.push(slots[p]);
+                        let b2_len = bucket_len(b2);
+                        if b2_len - b_len > max_len_delta {
+                            eprintln!("NEW MAX DELTA: {b_len} << {b2_len}\x1b[K");
+                            max_len_delta = b2_len - b_len;
+                        }
                     }
+                    // eprintln!("Set slot {:>8} to {:>8}", p, b);
                     slots[p] = b;
                 }
-                displacements_tmp.sort_unstable();
-                displacements_tmp.dedup();
-                for &displacement in &displacements_tmp {
-                    stack.push(displacement);
-                    displacements += 1;
+
+                recent.insert(0, b);
+                if recent.len() > 1 {
+                    recent.pop();
                 }
             }
-            eprintln!(
-                "bucket {b:>8} size {:>2}: {i:>8} / {:>8} displacements: {:>8}",
-                bucket.len(),
-                bucket_order.len(),
-                displacements
-            );
+            total_displacements += displacements;
+            if i % 1024 == 0 {
+                eprint!(
+                    "bucket {i:>9} / {:>9}  sz {:>2} avg displacements: {:>8.5}\r",
+                    bucket_order.len(),
+                    bucket.len(),
+                    total_displacements as f32 / i as f32
+                );
+            }
         }
+        eprintln!();
+        eprintln!("MAX DELTA: {}", max_len_delta);
+        eprintln!(
+            "TOTAL DISPLACEMENTS: {total_displacements} per bucket {}",
+            total_displacements as f32 / self.m as f32
+        );
         true
     }
 }

@@ -73,6 +73,6 @@ impl<T> IndexMut<BucketIdx> for BucketVec<T> {
 
 impl Display for BucketIdx {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+        self.0.fmt(f)
     }
 }
