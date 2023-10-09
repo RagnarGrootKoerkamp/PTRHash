@@ -6,7 +6,9 @@
     portable_simd,
     generic_const_exprs,
     iter_advance_by,
-    slice_partition_dedup
+    slice_partition_dedup,
+    iter_collect_into,
+    slice_index_methods
 )]
 #![allow(incomplete_features)]
 pub mod bucket;
@@ -20,6 +22,7 @@ mod peeling;
 pub mod reduce;
 mod sort_buckets;
 pub mod test;
+mod types;
 
 use std::{
     cmp::{max, min},
@@ -40,8 +43,14 @@ use reduce::Reduce;
 type Key = u64;
 use hash::Hasher;
 use smallvec::SmallVec;
+// TODO: Shrink this to u32.
+type Pilot = u64;
 
-use crate::{hash::Hash, hash_inverse::Inverter};
+use crate::{
+    hash::Hash,
+    hash_inverse::Inverter,
+    types::{BucketIdx, BucketVec},
+};
 
 #[allow(unused)]
 const LOG: bool = false;
@@ -76,6 +85,10 @@ pub struct PTParams {
     pub peel: bool,
     /// When true, peel all buckets of size 2.
     pub peel2: bool,
+    /// When true, do global displacement hashing.
+    pub displace: bool,
+    /// For displacement, the number of target bits.
+    pub bits: usize,
 }
 
 impl Default for PTParams {
@@ -88,6 +101,8 @@ impl Default for PTParams {
             matching: false,
             peel: false,
             peel2: false,
+            displace: false,
+            bits: 10,
         }
     }
 }
@@ -308,7 +323,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
-        let mut k = vec![];
+        let mut k: BucketVec<_> = vec![].into();
 
         let mut tries = 0;
         const MAX_TRIES: usize = 3;
@@ -332,14 +347,21 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             let (mut hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
 
             if LOG {
-                print_bucket_sizes((0..self.m).map(|i| starts[i + 1] - starts[i]));
+                print_bucket_sizes(BucketIdx::range(self.m).map(|i| starts[i + 1] - starts[i]));
+            }
+
+            // Check for duplicate hashes inside bucket.
+            for b in BucketIdx::range(self.m) {
+                let bucket = &mut hashes[starts[b]..starts[b + 1]];
+                bucket.sort_unstable();
+                if !bucket.partition_dedup().1.is_empty() {
+                    // Duplicate hash found.
+                    continue 's;
+                }
             }
 
             // Reset memory.
-            taken.clear();
-            taken.resize(self.n, false);
-            k.clear();
-            k.resize(self.m, 0);
+            k.reset(self.m, 0);
 
             let num_empty_buckets = bucket_order
                 .iter()
@@ -348,154 +370,169 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 .count();
             let bucket_order_nonempty = &bucket_order[..self.m - num_empty_buckets];
             assert_eq!(
-                starts[bucket_order_nonempty.last().unwrap() + 1]
+                starts[*bucket_order_nonempty.last().unwrap() + 1]
                     - starts[*bucket_order_nonempty.last().unwrap()],
                 1
             );
-            let (bucket_order_head, bucket_order_tail) = bucket_order_nonempty
-                .split_at(self.m - num_empty_buckets - self.params.invert_tail_length);
 
-            // Step 5: For each bucket, find a suitable offset k_i.
-
-            if !self.params.fast_small_buckets {
-                for &b in bucket_order_head {
-                    let bucket = &mut hashes[starts[b]..starts[b + 1]];
-                    let bucket_size = bucket.len();
-                    if bucket_size == 0 {
-                        break;
-                    }
-
-                    let Some(ki) = self.find_pilot(bucket, &mut taken) else {
-                        continue 's;
-                    };
-                    k[b] = ki;
+            if self.params.displace {
+                if !self.displace(
+                    &hashes,
+                    &starts,
+                    bucket_order_nonempty,
+                    self.params.bits,
+                    &mut k,
+                ) {
+                    continue 's;
                 }
             } else {
-                let mut bs = bucket_order_head.iter().peekable();
+                taken.clear();
+                taken.resize(self.n, false);
+                let (bucket_order_head, bucket_order_tail) = bucket_order_nonempty
+                    .split_at(self.m - num_empty_buckets - self.params.invert_tail_length);
 
-                // Iterate all buckets of size >= 5 as &[Hash].
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 6) {
-                    let bucket = &mut hashes[starts[b]..starts[b + 1]];
-                    let bucket_size = bucket.len();
-                    if bucket_size == 0 {
-                        break;
-                    }
+                // Step 5: For each bucket, find a suitable offset k_i.
 
-                    let Some(ki) = self.find_pilot(bucket, &mut taken) else {
-                        continue 's;
-                    };
-                    k[b] = ki;
-                }
-
-                // Process smaller buckets as [Hash; BUCKET_SIZE] where the
-                // bucket size is known, for better codegen.
-                macro_rules! find_pilot_fixed {
-                    ($BUCKET_SIZE:literal) => {
-                        while let Some(&b) =
-                            bs.next_if(|&&b| starts[b + 1] - starts[b] == $BUCKET_SIZE)
-                        {
-                            let bucket = hashes[starts[b]..].split_array_mut().0;
-                            let Some(ki) =
-                                self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken)
-                            else {
-                                continue 's;
-                            };
-                            k[b] = ki;
+                if !self.params.fast_small_buckets {
+                    for &b in bucket_order_head {
+                        let bucket = &mut hashes[starts[b]..starts[b + 1]];
+                        let bucket_size = bucket.len();
+                        if bucket_size == 0 {
+                            break;
                         }
-                    };
-                }
 
-                if !self.params.peel2 {
-                    find_pilot_fixed!(5);
-                    find_pilot_fixed!(4);
-                    find_pilot_fixed!(3);
-                    find_pilot_fixed!(2);
+                        let Some(ki) = self.find_pilot(bucket, &mut taken) else {
+                            continue 's;
+                        };
+                        k[b] = ki;
+                    }
                 } else {
-                    find_pilot_fixed!(5);
-                    find_pilot_fixed!(4);
-                    for bucket_size in [3, 2] {
-                        let mut local_bs = vec![];
-                        let mut local_hashes = vec![];
+                    let mut bs = bucket_order_head.iter().peekable();
 
-                        while let Some(&b) =
-                            bs.next_if(|&&b| starts[b + 1] - starts[b] == bucket_size)
-                        {
-                            local_bs.push(b);
-                            local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
+                    // Iterate all buckets of size >= 5 as &[Hash].
+                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 6) {
+                        let bucket = &mut hashes[starts[b]..starts[b + 1]];
+                        let bucket_size = bucket.len();
+                        if bucket_size == 0 {
+                            break;
                         }
-                        // Use matching.
-                        let kis = self.peel_size(local_hashes.into_iter(), &taken, bucket_size);
-                        for (b, ki) in std::iter::zip(local_bs, kis) {
-                            for i in 0..bucket_size {
-                                let p = self.position(hashes[starts[b] + i], ki);
-                                assert!(!taken[p]);
-                                taken.set(p, true);
+
+                        let Some(ki) = self.find_pilot(bucket, &mut taken) else {
+                            continue 's;
+                        };
+                        k[b] = ki;
+                    }
+
+                    // Process smaller buckets as [Hash; BUCKET_SIZE] where the
+                    // bucket size is known, for better codegen.
+                    macro_rules! find_pilot_fixed {
+                        ($BUCKET_SIZE:literal) => {
+                            while let Some(&b) =
+                                bs.next_if(|&&b| starts[b + 1] - starts[b] == $BUCKET_SIZE)
+                            {
+                                let bucket = hashes[starts[b]..].split_array_mut().0;
+                                let Some(ki) =
+                                    self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken)
+                                else {
+                                    continue 's;
+                                };
+                                k[b] = ki;
                             }
-                            k[b] = ki;
+                        };
+                    }
+
+                    if !self.params.peel2 {
+                        find_pilot_fixed!(5);
+                        find_pilot_fixed!(4);
+                        find_pilot_fixed!(3);
+                        find_pilot_fixed!(2);
+                    } else {
+                        // find_pilot_fixed!(5);
+                        // find_pilot_fixed!(4);
+                        for bucket_size in [5, 4, 3, 2, 1] {
+                            let mut local_bs = vec![];
+                            let mut local_hashes = vec![];
+
+                            while let Some(&b) =
+                                bs.next_if(|&&b| starts[b + 1] - starts[b] == bucket_size)
+                            {
+                                local_bs.push(b);
+                                local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
+                            }
+                            // Use matching.
+                            let kis = self.peel_size(local_hashes.into_iter(), &taken, bucket_size);
+                            for (b, ki) in std::iter::zip(local_bs, kis) {
+                                for i in 0..bucket_size {
+                                    let p = self.position(hashes[starts[b] + i], ki);
+                                    assert!(!taken[p]);
+                                    taken.set(p, true);
+                                }
+                                k[b] = ki;
+                            }
                         }
                     }
+                    find_pilot_fixed!(1);
                 }
-                find_pilot_fixed!(1);
-            }
 
-            // Process the tail using direct inversion of the hash.
-            if !bucket_order_tail.is_empty() {
-                if !self.params.matching {
-                    let mut free_slots = taken.iter_zeros().map(|i| (i, true)).collect_vec();
-                    let inverter = Inverter::new(hash::MulHash::C);
-                    if !self.params.invert_minimal {
-                        // Match buckets to free slots one-to-one.
-                        for (&b, &(f, _)) in std::iter::zip(bucket_order_tail, &free_slots) {
-                            assert_eq!(
+                // Process the tail using direct inversion of the hash.
+                if !bucket_order_tail.is_empty() {
+                    if !self.params.matching {
+                        let mut free_slots = taken.iter_zeros().map(|i| (i, true)).collect_vec();
+                        let inverter = Inverter::new(hash::MulHash::C);
+                        if !self.params.invert_minimal {
+                            // Match buckets to free slots one-to-one.
+                            for (&b, &(f, _)) in std::iter::zip(bucket_order_tail, &free_slots) {
+                                assert_eq!(
                                 starts[b + 1] - starts[b],
                                 1,
                                 "All buckets in the tail must have size 1. Shrink the tail length."
                             );
-                            let hx = hashes[starts[b]];
-                            k[b] = inverter.invert_fr64(hx, self.n, f);
-                            // assert_eq!(self.position(hx, k[b]), f);
+                                let hx = hashes[starts[b]];
+                                k[b] = inverter.invert_fr64(hx, self.n, f);
+                                // assert_eq!(self.position(hx, k[b]), f);
+                            }
+                        } else {
+                            // For each bucket find the free slot with the minimal ki.
+                            // TODO: We can make an early break as soon as the value has the right number of bits.
+                            for &b in bucket_order_tail {
+                                // assert_eq!(
+                                //     starts[b + 1] - starts[b],
+                                //     1,
+                                //     "All buckets in the tail must have size 1. Shrink the tail length."
+                                // );
+                                let mut min_ki = (u64::MAX, 0);
+                                let hx = hashes[starts[b]];
+
+                                for (i, &(f, free)) in free_slots.iter().enumerate() {
+                                    if free {
+                                        let ki_f = inverter.invert_fr64(hx, self.n, f);
+                                        min_ki = min(min_ki, (ki_f, i));
+                                    }
+                                }
+                                k[b] = min_ki.0;
+                                free_slots[min_ki.1].1 = false;
+                                // assert_eq!(self.position(hx, k[b]), f);
+                            }
+                        }
+                        for (f, _) in free_slots {
+                            taken.set(f, true);
                         }
                     } else {
-                        // For each bucket find the free slot with the minimal ki.
-                        // TODO: We can make an early break as soon as the value has the right number of bits.
-                        for &b in bucket_order_tail {
-                            // assert_eq!(
-                            //     starts[b + 1] - starts[b],
-                            //     1,
-                            //     "All buckets in the tail must have size 1. Shrink the tail length."
-                            // );
-                            let mut min_ki = (u64::MAX, 0);
-                            let hx = hashes[starts[b]];
-
-                            for (i, &(f, free)) in free_slots.iter().enumerate() {
-                                if free {
-                                    let ki_f = inverter.invert_fr64(hx, self.n, f);
-                                    min_ki = min(min_ki, (ki_f, i));
-                                }
-                            }
-                            k[b] = min_ki.0;
-                            free_slots[min_ki.1].1 = false;
-                            // assert_eq!(self.position(hx, k[b]), f);
+                        let hashes = bucket_order_tail
+                            .iter()
+                            .map(|&b| hashes[starts[b]])
+                            .collect_vec();
+                        let free_slots = taken.iter_zeros().collect_vec();
+                        // Use matching.
+                        let kis = self.match_tail(&hashes, &taken, self.params.peel);
+                        for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
+                            k[b] = ki;
                         }
-                    }
-                    for (f, _) in free_slots {
-                        taken.set(f, true);
-                    }
-                } else {
-                    let hashes = bucket_order_tail
-                        .iter()
-                        .map(|&b| hashes[starts[b]])
-                        .collect_vec();
-                    let free_slots = taken.iter_zeros().collect_vec();
-                    // Use matching.
-                    let kis = self.match_tail(&hashes, &taken, self.params.peel);
-                    for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
-                        k[b] = ki;
-                    }
-                    for f in free_slots {
-                        taken.set(f, true);
-                    }
-                };
+                        for f in free_slots {
+                            taken.set(f, true);
+                        }
+                    };
+                }
             }
 
             // Found a suitable seed.
@@ -533,15 +570,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         // Pack the data.
-        self.k = Packed::new(k);
+        self.k = Packed::new(k.into_vec());
     }
 
-    fn find_pilot(&mut self, bucket: &mut [Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
-        bucket.sort_unstable();
-        // Duplicate hash detection.
-        if !bucket.partition_dedup().1.is_empty() {
-            return None;
-        }
+    fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
         'k: for ki in 0u64.. {
             // Values of order n are only expected for the last few buckets.
             // The probability of failure after n tries is 1/e=0.36, so
@@ -591,14 +623,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     fn find_pilot_fixed<const L: usize>(
         &mut self,
-        bucket: &mut [Hash; L],
+        bucket: &[Hash; L],
         taken: &mut bitvec::vec::BitVec,
     ) -> Option<u64> {
-        bucket.sort_unstable();
-        // Duplicate hash detection.
-        if !bucket.partition_dedup().1.is_empty() {
-            return None;
-        }
         'k: for ki in 0u64.. {
             if ki == 20 * self.n as u64 {
                 eprintln!("{}: No ki found after 20n = {ki} tries.", bucket.len());

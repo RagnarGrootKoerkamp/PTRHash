@@ -1,4 +1,6 @@
 #![allow(unused)]
+use crate::types::BucketIdx;
+
 use super::*;
 
 impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
@@ -9,7 +11,10 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
     /// 2. Start indices of each bucket.
     /// 3. Order of the buckets.
     #[must_use]
-    pub(super) fn sort_buckets_flat(&self, keys: &[u64]) -> (Vec<Hash>, Vec<usize>, Vec<usize>) {
+    pub(super) fn sort_buckets_flat(
+        &self,
+        keys: &[u64],
+    ) -> (Vec<Hash>, BucketVec<usize>, Vec<BucketIdx>) {
         let mut buckets: Vec<(usize, Hash)> = Vec::with_capacity(keys.len());
 
         for key in keys {
@@ -19,7 +24,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
         }
         radsort::sort_by_key(&mut buckets, |(b, _h)| (*b));
 
-        let mut starts = Vec::with_capacity(self.m + 1);
+        let mut starts = BucketVec::with_capacity(self.m + 1);
         let mut end = 0;
         starts.push(end);
         for b in 0..self.m {
@@ -29,7 +34,7 @@ impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const 
             starts.push(end);
         }
 
-        let mut order: Vec<_> = (0..self.m).collect();
+        let mut order: Vec<BucketIdx> = BucketIdx::range(self.m).collect();
         radsort::sort_by_cached_key(&mut order, |&v| -((starts[v + 1] - starts[v]) as isize));
 
         let max_bucket_size = starts[order[0] + 1] - starts[order[0]];
