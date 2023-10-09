@@ -2,6 +2,8 @@
 
 use std::{cmp::Reverse, collections::HashSet};
 
+use rustc_hash::FxHashMap;
+
 /// Sort buckets by increasing degree, and find first matching edge for each.
 pub fn greedy_assign_by_degree(
     bucket_size: usize,
@@ -47,6 +49,7 @@ pub fn greedy_assign_by_degree(
 }
 
 /// Same as `greedy_assign_by_degree`, but after each iteration pin the ones that didn't work.
+#[allow(clippy::ptr_arg)]
 pub fn greedy_assign_by_degree_iterative(
     bucket_size: usize,
     b: usize,
@@ -119,5 +122,121 @@ pub fn greedy_assign_by_degree_iterative(
         if added == 0 {
             return Some(matching);
         }
+    }
+}
+
+pub struct Displace {
+    bucket_size: usize,
+    num_buckets: usize,
+    edges: Vec<usize>,
+    starts: Vec<usize>,
+    taken: FxHashMap<usize, usize>,
+    matching: Vec<usize>,
+}
+
+impl Displace {
+    /// Cuckoo hashing approach.
+    pub fn new(bucket_size: usize, edges: Vec<usize>, starts: Vec<usize>) -> Self {
+        let taken: FxHashMap<usize, usize> = FxHashMap::default();
+        let num_buckets = starts.len() - 1;
+        let matching = vec![usize::MAX; num_buckets];
+
+        Displace {
+            bucket_size,
+            num_buckets,
+            edges,
+            starts,
+            taken,
+            matching,
+        }
+    }
+
+    fn drop(&mut self, b: usize) {
+        // eprintln!(
+        //     "Drop {b:>8} of degree {:>2}",
+        //     self.starts[b + 1] - self.starts[b]
+        // );
+        let ei = self.starts[b] + self.matching[b] * self.bucket_size;
+        for s in &self.edges[ei..ei + self.bucket_size] {
+            self.taken.remove(s);
+        }
+    }
+
+    fn set(&mut self, b: usize, pos: usize) {
+        let ei = self.starts[b] + pos * self.bucket_size;
+        // eprintln!(
+        //     "Set {b:>8} of degree {:>2}",
+        //     self.starts[b + 1] - self.starts[b]
+        // );
+        self.matching[b] = pos;
+        for s in &self.edges[ei..ei + self.bucket_size] {
+            self.taken.insert(*s, b);
+        }
+    }
+
+    pub fn run(mut self) -> Option<Vec<usize>> {
+        let mut stack = Vec::from_iter((0..self.num_buckets).rev());
+
+        let mut edge = vec![0; self.bucket_size];
+
+        let mut its = 0;
+        let mut displacements = 0;
+        let mut displacement_size = [0; 10];
+
+        while let Some(b) = stack.pop() {
+            its += 1;
+            if its % self.num_buckets == 0 {
+                eprintln!(
+                    "iteration {its:>8}: #stack: {:>8} / {:>8}",
+                    stack.len(),
+                    self.num_buckets
+                );
+            }
+            let edges = &mut self.edges[self.starts[b]..self.starts[b + 1]];
+            let degree = edges.len();
+            let cur_pos = self.matching[b].wrapping_add(1);
+            let (pos, vs, mut cnt) = edges
+                .chunks_exact(self.bucket_size)
+                .enumerate()
+                .map(|(i, vs)| {
+                    (
+                        i,
+                        vs,
+                        vs.iter().filter(|v| self.taken.contains_key(*v)).count(),
+                    )
+                })
+                .min_by_key(|&(i, _, c)| (c, (i + degree - cur_pos) % degree))
+                .unwrap();
+
+            // Clone the current edge to prevent simultaneous updates.
+            edge.clone_from_slice(vs);
+
+            // Drop conflicting matches.
+            displacement_size[cnt] += 1;
+            for v in &edge {
+                if let Some(b) = self.taken.remove(v) {
+                    displacements += 1;
+                    self.drop(b);
+                    stack.push(b);
+                    cnt -= 1;
+                }
+            }
+            assert_eq!(cnt, 0);
+
+            self.set(b, pos);
+        }
+
+        eprintln!("Done after {:>8} / {:8} iterations", its, self.num_buckets);
+        eprintln!("Displaced  {:>8}", displacements);
+        eprintln!(
+            "Displacement sizes: {:?}",
+            &displacement_size[0..self.bucket_size + 1]
+        );
+
+        // Convert from pos-per-edge to actual edge indices.
+        for b in 0..self.num_buckets {
+            self.matching[b] += self.starts[b] / self.bucket_size;
+        }
+        Some(self.matching)
     }
 }

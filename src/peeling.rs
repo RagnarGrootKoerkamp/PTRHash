@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use crate::displacing::greedy_assign_by_degree_iterative;
+use crate::displacing::Displace;
 
 use super::*;
 use bitvec::vec::BitVec;
@@ -241,9 +241,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             // eprintln!("starts: {starts:?}");
 
             // if let Some(eis) = greedy_assign_by_degree(bucket_size, b, e, edges, starts) {
-            if let Some(eis) =
-                greedy_assign_by_degree_iterative(bucket_size, b, e, edges, starts, &kis)
-            {
+            // if let Some(eis) = greedy_assign_by_degree_iterative(bucket_size, b, e, edges, starts, &kis) {
+            if let Some(eis) = Displace::new(bucket_size, edges, starts).run() {
                 // eprintln!("eis: {:?}", eis);
                 return eis.iter().map(|&ei| kis[ei]).collect();
             }
