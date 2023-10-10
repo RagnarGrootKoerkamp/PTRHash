@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::{hint::black_box, time::SystemTime};
 
-use rand::{Rng, SeedableRng};
+use rand::{seq::SliceRandom, Rng, SeedableRng};
 
 use crate::{hash::*, reduce::*};
 
@@ -20,6 +20,7 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
     radsort::sort(&mut keys);
     keys.dedup();
     assert_eq!(keys.len(), n, "duplicate keys generated");
+    keys.shuffle(&mut rng);
     keys
 }
 
@@ -106,6 +107,7 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32L, construct_r32h_r32l);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
+#[must_use]
 pub fn bench_index<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(
     loops: usize,
     keys: &Vec<u64>,
@@ -122,6 +124,7 @@ pub fn bench_index<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(
     start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
 }
 
+#[must_use]
 pub fn bench_index_stream<
     const L: usize,
     P: Packed,
@@ -154,7 +157,7 @@ fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bi
     let loops = total / n;
     let query = bench_index(loops, &keys, &mphf);
     eprint!(" (1): {query:>4.1}");
-    bench_index_stream::<16, P, Rm, Rn, T, H>(loops, &keys, &mphf);
+    let query = bench_index_stream::<16, P, Rm, Rn, T, H>(loops, &keys, &mphf);
     eprintln!(" (16): {query:>4.1}");
 }
 
