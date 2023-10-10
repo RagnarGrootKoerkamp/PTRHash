@@ -46,24 +46,24 @@ stat target='compact_fastmod64' *args='': build-tests
 ## Construction
 
 cr *args="":
-    cargo run -r --bin bucket_sizes -- {{args}}
+    cargo run -r --bin run -- {{args}}
 
 cf *args="":
-    cargo flamegraph --open --bin bucket_sizes -- {{args}}
+    cargo flamegraph --open --bin run -- {{args}}
 
 cp *args="": build
-    perf record cargo run -r --bin bucket_sizes -- {{args}}
+    perf record cargo run -r --bin run -- {{args}}
 
 cs *args="": build
-    perf stat -d cargo run -r --bin bucket_sizes -- {{args}}
+    perf stat -d cargo run -r --bin run -- {{args}}
 
 # TODO: This isn't really working yet; ideally we run the test binary directly
 # but it doesn't have a deterministic name.
 cm *args="":
-    heaptrack cargo run -r --bin bucket_sizes -- {{args}}
+    heaptrack cargo run -r --bin run -- {{args}}
 
 #### FURTHER COMMANDS FOR BINARIES/EXAMPLES
 
 # Bucket sizes
 buckets *args="":
-    cargo flamegraph --open --bin bucket_sizes -- {{args}}
+    cargo flamegraph --open --bin run -- {{args}}

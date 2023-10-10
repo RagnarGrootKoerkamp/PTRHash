@@ -106,53 +106,56 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32L, construct_r32h_r32l);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
-#[cfg(test)]
-fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bits: usize) {
-    // To prevent loop unrolling.
-    let total = black_box(100_000_000);
-    for n in [100_000_000] {
-        let keys = generate_keys(n);
-        let mphf = PTHash::<P, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
-
-        let start = SystemTime::now();
-        let loops = total / n;
-        let mut sum = 0;
-        for _ in 0..loops {
-            for key in &keys {
-                sum += mphf.index(key);
-            }
+pub fn bench_index<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(
+    loops: usize,
+    keys: &Vec<u64>,
+    mphf: &PTHash<P, Rm, Rn, H, MulHash, T>,
+) -> f32 {
+    let start = SystemTime::now();
+    let mut sum = 0;
+    for _ in 0..loops {
+        for key in keys {
+            sum += mphf.index(key);
         }
-        black_box(sum);
-        let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-        eprint!(" (1): {query:>4.1}");
-
-        test_stream::<16, P, Rm, Rn, H, MulHash, T>(total, n, &mphf, &keys);
     }
+    black_box(sum);
+    start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
 }
 
-fn test_stream<
+pub fn bench_index_stream<
     const L: usize,
     P: Packed,
     Rm: Reduce,
     Rn: Reduce,
-    Hx: Hasher,
-    Hk: Hasher,
     const T: bool,
+    H: Hasher,
 >(
-    total: usize,
-    n: usize,
-    mphf: &PTHash<P, Rm, Rn, Hx, Hk, T>,
-    keys: &[u64],
-) {
+    loops: usize,
+    keys: &Vec<u64>,
+    mphf: &PTHash<P, Rm, Rn, H, MulHash, T>,
+) -> f32 {
     let start = SystemTime::now();
-    let loops = total / n;
     let mut sum = 0;
     for _ in 0..loops {
         sum += mphf.index_stream::<L>(keys).sum::<usize>();
     }
     black_box(sum);
-    let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-    eprintln!(" ({L}): {query:>4.1}");
+    start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
+}
+
+#[cfg(test)]
+fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bits: usize) {
+    // To prevent loop unrolling.
+    let total = black_box(100_000_000);
+    let n = 100_000_000;
+    let keys = generate_keys(n);
+    let mphf = PTHash::<P, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
+
+    let loops = total / n;
+    let query = bench_index(loops, &keys, &mphf);
+    eprint!(" (1): {query:>4.1}");
+    bench_index_stream::<16, P, Rm, Rn, T, H>(loops, &keys, &mphf);
+    eprintln!(" (16): {query:>4.1}");
 }
 
 fn test_stream_chunks<
@@ -275,7 +278,8 @@ fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize)
     // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
     // eprint!(" {query:>2.1}");
 
-    test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
+    let q = bench_index_stream::<64, P, Rm, Rn, T, Murmur>(total, &keys, &mphf);
+    eprintln!("{q:>4.1}");
     test_stream_chunks::<4, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
     test_stream_chunks::<8, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
     test_stream_chunks::<16, 2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);

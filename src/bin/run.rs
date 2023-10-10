@@ -1,0 +1,129 @@
+use clap::{Parser, Subcommand};
+use pthash_rs::{
+    test::{bench_index, bench_index_stream},
+    *,
+};
+
+/// Print statistics on PTHash bucket sizes.
+#[derive(clap::Parser)]
+struct Args {
+    #[command(subcommand)]
+    command: Command,
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Only print bucket statistics, do not build the PTHash.
+    Stats {
+        #[arg(short)]
+        n: usize,
+        #[arg(short, default_value_t = 7.0)]
+        c: f32,
+        #[arg(short, default_value_t = 1.0)]
+        a: f32,
+    },
+    /// Construct PTHash.
+    Build {
+        #[arg(short)]
+        n: usize,
+        #[arg(short, default_value_t = 7.0)]
+        c: f32,
+        #[arg(short, default_value_t = 1.0)]
+        a: f32,
+        /// Disable fast small buckets.
+        #[arg(long, default_value_t = false)]
+        no_fast_buckets: bool,
+
+        #[arg(long, default_value_t = 0)]
+        tail: usize,
+
+        #[arg(long)]
+        minimal: bool,
+        #[arg(long)]
+        matching: bool,
+        #[arg(long)]
+        peel: bool,
+        #[arg(long)]
+        peel2: bool,
+        #[arg(long)]
+        displace: bool,
+        #[arg(long, default_value_t = 10)]
+        bits: usize,
+    },
+
+    /// Measure query time on randomly-constructed PTHash.
+    Query {
+        #[arg(short)]
+        n: usize,
+        #[arg(short, default_value_t = 7.0)]
+        c: f32,
+        #[arg(short, default_value_t = 1.0)]
+        a: f32,
+        #[arg(long, default_value_t = 10)]
+        bits: usize,
+        #[arg(long, default_value_t = 300000000)]
+        total: usize,
+    },
+}
+
+type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
+
+fn main() {
+    let Args { command } = Args::parse();
+
+    match command {
+        Command::Stats { n, c, a } => {
+            let keys = pthash_rs::test::generate_keys(n);
+            let pthash = PT::init(c, a, n);
+            let (buckets, _order) = pthash.sort_buckets(&keys);
+            print_bucket_sizes(buckets.iter().map(|b| b.len()));
+        }
+        Command::Build {
+            n,
+            c,
+            a,
+            no_fast_buckets,
+            tail,
+            minimal,
+            matching,
+            peel,
+            peel2,
+            displace,
+            bits,
+        } => {
+            let keys = pthash_rs::test::generate_keys(n);
+            PT::new_wth_params(
+                c,
+                a,
+                &keys,
+                PTParams {
+                    fast_small_buckets: !no_fast_buckets,
+                    invert_tail_length: tail,
+                    invert_minimal: minimal,
+                    matching,
+                    peel,
+                    peel2,
+                    displace,
+                    bits,
+                },
+            );
+        }
+        Command::Query {
+            n,
+            c,
+            a,
+            bits,
+            total,
+        } => {
+            let keys = pthash_rs::test::generate_keys(n);
+            type PT =
+                PTHash<Vec<u8>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
+            let mphf = PT::new_random(c, a, n, bits);
+            let loops = total.div_ceil(n);
+            let query = bench_index(loops, &keys, &mphf);
+            eprint!(" (1): {query:>4.1}");
+            let query = bench_index_stream::<16, _, _, _, true, _>(loops, &keys, &mphf);
+            eprintln!(" (16): {query:>4.1}");
+        }
+    }
+}
