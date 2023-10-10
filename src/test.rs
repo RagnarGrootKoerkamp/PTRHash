@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-
 use std::{hint::black_box, time::SystemTime};
 
 use rand::{Rng, SeedableRng};
@@ -108,13 +107,13 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
 #[cfg(test)]
-fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>() {
+fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize) {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
-    for n in [10_000_000] {
+    for n in [100_000_000] {
         let keys = generate_keys(n);
-        let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n);
+        let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
         let start = SystemTime::now();
         let loops = total / n;
@@ -146,7 +145,7 @@ fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>() {
         // test_stream::<32, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
         // test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
 
-        let mphf = PTHash::<P, Rm, Rn, NoHash, MulHash, T>::new_random(7.0, 1.0, n);
+        let mphf = PTHash::<P, Rm, Rn, NoHash, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
         let start = SystemTime::now();
         let loops = total / n;
@@ -241,7 +240,17 @@ macro_rules! test_query {
     ($rm:ty, $rn:ty, $t:expr, $name:ident) => {
         #[test]
         fn $name() {
-            queries_exact::<Vec<u64>, $rm, $rn, $t>();
+            use sucds::int_vectors::CompactVector;
+            use sux::bits::compact_array::CompactArray;
+
+            eprintln!("Vec<u64>");
+            queries_exact::<Vec<u64>, $rm, $rn, $t>(8);
+            eprintln!("Vec<u8>");
+            queries_exact::<Vec<u8>, $rm, $rn, $t>(8);
+            eprintln!("CompactVector");
+            queries_exact::<CompactVector, $rm, $rn, $t>(8);
+            eprintln!("CompactArray");
+            queries_exact::<CompactArray, $rm, $rn, $t>(8);
         }
     };
 }
@@ -289,13 +298,13 @@ test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 
 /// Primarily for `perf stat`.
 #[cfg(test)]
-fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>() {
+fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize) {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
     // let start = SystemTime::now();
     // let loops = total / n;
@@ -334,7 +343,7 @@ macro_rules! test_random {
     ($rm:ty, $rn:ty, $t:expr, $name:ident) => {
         #[test]
         fn $name() {
-            queries_random::<Vec<u64>, $rm, $rn, $t>();
+            queries_random::<Vec<u64>, $rm, $rn, $t>(8);
         }
     };
 }

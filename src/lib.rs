@@ -180,9 +180,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     /// PTHash with random pivots.
     #[cfg(test)]
-    pub fn new_random(c: f32, alpha: f32, n: usize) -> Self {
+    pub fn new_random(c: f32, alpha: f32, n: usize, bits: usize) -> Self {
         let mut pthash = Self::init(c, alpha, n);
-        let k = (0..pthash.m).map(|_| rand::random()).collect();
+        let k = (0..pthash.m)
+            .map(|_| rand::random::<u64>() & ((1 << bits) - 1))
+            .collect();
         pthash.k = Packed::new(k);
         pthash
     }
