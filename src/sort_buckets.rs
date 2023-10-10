@@ -3,7 +3,7 @@ use crate::types::BucketIdx;
 
 use super::*;
 
-impl<P: Packed + Default, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     PTHash<P, Rm, Rn, Hx, Hk, T>
 {
     /// Returns:

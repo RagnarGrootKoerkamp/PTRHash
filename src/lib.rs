@@ -110,14 +110,7 @@ impl Default for PTParams {
 /// P: Packing of `k` array.
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<
-    P: Packed + Default,
-    Rm: Reduce,
-    Rn: Reduce,
-    Hx: Hasher,
-    Hk: Hasher,
-    const T: bool,
-> {
+pub struct PTHash<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool> {
     params: PTParams,
 
     /// The number of keys.
@@ -155,7 +148,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     PTHash<P, Rm, Rn, Hx, Hk, T>
 {
     /// Convert an existing PTHash to a different packing.
-    pub fn convert<P2: Packed + Default>(&self) -> PTHash<P2, Rm, Rn, Hx, Hk, T> {
+    pub fn convert<P2: Packed>(&self) -> PTHash<P2, Rm, Rn, Hx, Hk, T> {
         PTHash {
             params: self.params,
             n0: self.n0,
@@ -245,7 +238,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             rem_p2: Rm::new(p2),
             rem_mp2: Rm::new(m - p2),
             s: 0,
-            k: Default::default(),
+            k: P::default(),
             free: vec![],
             _hk: PhantomData,
             _hx: PhantomData,

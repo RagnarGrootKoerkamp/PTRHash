@@ -335,7 +335,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 // TODO: First check if collision-free is possible.
                 // TODO: Use get_unchecked and similar.
                 if best.0 != 0 {
-                    'k: for delta in 0u64..kmax {
+                    for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
                         let largest_colliding_bucket = positions(b, ki)
                             .filter_map(|p| {
@@ -351,15 +351,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                             })
                             .map(|l| l * l)
                             .sum();
-                        if largest_colliding_bucket < best.0 {
-                            if duplicate_positions(b, ki) {
-                                // eprintln!("Duplicate positions!");
-                                continue 'k;
-                            }
-
-                            // eprintln!("New num collisions: {}", num_collisions);
+                        if largest_colliding_bucket < best.0 && !duplicate_positions(b, ki) {
                             best = (largest_colliding_bucket, ki);
-                            if largest_colliding_bucket == 0 {
+                            // Since we already checked for a collision-free solution,
+                            // the next best is a single collision of size b_len.
+                            if largest_colliding_bucket == b_len * b_len {
                                 break;
                             }
                         }
@@ -393,7 +389,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 }
 
                 recent.insert(0, b);
-                if recent.len() > 1 {
+                if recent.len() > 4 {
                     recent.pop();
                 }
             }

@@ -108,7 +108,7 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
 #[cfg(test)]
-fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
+fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
@@ -184,7 +184,7 @@ fn queries_exact<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
 
 fn test_stream<
     const L: usize,
-    P: Packed + Default,
+    P: Packed,
     Rm: Reduce,
     Rn: Reduce,
     Hx: Hasher,
@@ -210,7 +210,7 @@ fn test_stream<
 fn test_stream_chunks<
     const K: usize,
     const L: usize,
-    P: Packed + Default,
+    P: Packed,
     Rm: Reduce,
     Rn: Reduce,
     Hx: Hasher,
@@ -289,7 +289,7 @@ test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 
 /// Primarily for `perf stat`.
 #[cfg(test)]
-fn queries_random<P: Packed + Default, Rm: Reduce, Rn: Reduce, const T: bool>() {
+fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
