@@ -107,13 +107,12 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
 #[cfg(test)]
-fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize) {
-    eprintln!();
+fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bits: usize) {
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     for n in [100_000_000] {
         let keys = generate_keys(n);
-        let mphf = PTHash::<P, Rm, Rn, Murmur, MulHash, T>::new_random(7.0, 1.0, n, bits);
+        let mphf = PTHash::<P, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
         let start = SystemTime::now();
         let loops = total / n;
@@ -125,60 +124,10 @@ fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize) 
         }
         black_box(sum);
         let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-        eprint!(" {query:>2.1}");
+        eprint!(" (1): {query:>4.1}");
 
-        // let start = SystemTime::now();
-        // let loops = total / n;
-        // let mut sum = 0;
-        // for _ in 0..loops {
-        //     sum += mphf.index_stream(&keys).sum::<usize>();
-        // }
-        // black_box(sum);
-        // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-        // eprint!(" {query:>2.1}");
-
-        // test_stream::<1, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<2, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<4, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<8, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        test_stream::<16, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<32, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<64, P, Rm, Rn, Murmur, MulHash, T>(total, n, &mphf, &keys);
-
-        let mphf = PTHash::<P, Rm, Rn, NoHash, MulHash, T>::new_random(7.0, 1.0, n, bits);
-
-        let start = SystemTime::now();
-        let loops = total / n;
-        let mut sum = 0;
-        for _ in 0..loops {
-            for key in &keys {
-                sum += mphf.index(key);
-            }
-        }
-        black_box(sum);
-        let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-        eprint!(" {query:>2.1}");
-
-        // let start = SystemTime::now();
-        // let loops = total / n;
-        // let mut sum = 0;
-        // for _ in 0..loops {
-        //     sum += mphf.index_stream(&keys).sum::<usize>();
-        // }
-
-        // black_box(sum);
-        // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-        // eprint!(" {query:>2.1}");
-
-        // test_stream::<1, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<2, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<4, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<8, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
-        test_stream::<16, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<32, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
-        // test_stream::<64, P, Rm, Rn, NoHash, MulHash, T>(total, n, &mphf, &keys);
+        test_stream::<16, P, Rm, Rn, H, MulHash, T>(total, n, &mphf, &keys);
     }
-    eprintln!();
 }
 
 fn test_stream<
@@ -203,7 +152,7 @@ fn test_stream<
     }
     black_box(sum);
     let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
-    eprintln!(" {L}: {query:>2.1}");
+    eprintln!(" ({L}): {query:>4.1}");
 }
 
 fn test_stream_chunks<
@@ -244,13 +193,21 @@ macro_rules! test_query {
             use sux::bits::compact_array::CompactArray;
 
             eprintln!("Vec<u64>");
-            queries_exact::<Vec<u64>, $rm, $rn, $t>(8);
+            queries_exact::<Vec<u64>, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<Vec<u64>, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<Vec<u64>, $rm, $rn, $t, NoHash>(8);
             eprintln!("Vec<u8>");
-            queries_exact::<Vec<u8>, $rm, $rn, $t>(8);
+            queries_exact::<Vec<u8>, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<Vec<u8>, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<Vec<u8>, $rm, $rn, $t, NoHash>(8);
             eprintln!("CompactVector");
-            queries_exact::<CompactVector, $rm, $rn, $t>(8);
+            queries_exact::<CompactVector, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<CompactVector, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<CompactVector, $rm, $rn, $t, NoHash>(8);
             eprintln!("CompactArray");
-            queries_exact::<CompactArray, $rm, $rn, $t>(8);
+            queries_exact::<CompactArray, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<CompactArray, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<CompactArray, $rm, $rn, $t, NoHash>(8);
         }
     };
 }
