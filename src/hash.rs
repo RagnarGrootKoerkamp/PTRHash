@@ -88,3 +88,11 @@ impl Hasher for NoHash {
         Hash(*x)
     }
 }
+
+pub struct FxHash;
+
+impl Hasher for FxHash {
+    fn hash(x: &Key, _seed: u64) -> Hash {
+        Hash(fxhash::hash64(x))
+    }
+}

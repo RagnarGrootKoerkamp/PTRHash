@@ -15,6 +15,7 @@ incremental = true
 [dependencies]
 bitvec = "1.0.1"
 clap = { version = "4.4.6", features = ["derive"] }
+fxhash = "0.2.1"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
 murmur2 = "0.1.0"
