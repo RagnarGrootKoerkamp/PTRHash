@@ -117,13 +117,14 @@ fn main() {
         } => {
             let keys = pthash_rs::test::generate_keys(n);
             type PT =
-                PTHash<Vec<u8>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
+                PTHash<Vec<u8>, reduce::FR32L, reduce::FR64, hash::FxHash, hash::MulHash, true>;
             let mphf = PT::new_random(c, a, n, bits);
             let loops = total.div_ceil(n);
             let query = bench_index(loops, &keys, &mphf);
             eprint!(" (1): {query:>4.1}");
-            let query = bench_index_stream::<16, _, _, _, true, _>(loops, &keys, &mphf);
-            eprintln!(" (16): {query:>4.1}");
+            let query = bench_index_stream::<32, _, _, _, true, _>(loops, &keys, &mphf);
+            eprint!(" (32): {query:>4.1}");
+            eprintln!();
         }
     }
 }
