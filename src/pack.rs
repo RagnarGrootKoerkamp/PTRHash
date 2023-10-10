@@ -10,11 +10,8 @@ pub trait Packed {
     /// Index the pack.
     /// It is guaranteed that the index is within bounds.
     fn index(&self, index: usize) -> u64;
-    /// Address of the element for prefetching.
-    /// NOTE: The default implementation is useless.
-    fn address(&self, _index: usize) -> *const u64 {
-        self as *const Self as *const u64
-    }
+    /// Prefetch the element at the given index.
+    fn prefetch(&self, _index: usize) {}
     /// Convert to a vector.
     fn to_vec(&self) -> Vec<u64>;
 }
@@ -31,8 +28,11 @@ macro_rules! vec_impl {
             fn index(&self, index: usize) -> u64 {
                 unsafe { (*self.get_unchecked(index)) as u64 }
             }
-            fn address(&self, index: usize) -> *const u64 {
-                unsafe { self.as_ptr().add(index) as *const u64 }
+            fn prefetch(&self, index: usize) {
+                unsafe {
+                    let address = self.as_ptr().add(index) as *const u64;
+                    std::intrinsics::prefetch_read_data(address, 3);
+                }
             }
             fn to_vec(&self) -> Vec<u64> {
                 self.iter()
@@ -60,9 +60,6 @@ impl Packed for CompactVector {
     }
     fn index(&self, index: usize) -> u64 {
         self.get_int(index).unwrap() as u64
-    }
-    fn address(&self, _index: usize) -> *const u64 {
-        self as *const Self as *const u64
     }
     fn to_vec(&self) -> Vec<u64> {
         self.iter().map(|x| x as u64).collect()

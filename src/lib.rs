@@ -28,7 +28,6 @@ use std::{
     cmp::{max, min},
     collections::HashSet,
     default::Default,
-    intrinsics::prefetch_read_data,
     marker::PhantomData,
     ops::Range,
     simd::{LaneCount, Simd, SupportedLaneCount},

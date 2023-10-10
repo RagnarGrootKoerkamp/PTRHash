@@ -20,7 +20,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             // I.e. populate caches or do a 'Non-temporal access', meaning the
             // cache line can skip caches and be immediately discarded after
             // reading.
-            unsafe { prefetch_read_data(self.k.address(next_i[idx]), 3) };
+            self.k.prefetch(next_i[idx]);
             let ki = self.k.index(cur_i);
             self.position(cur_hx, ki)
         })
@@ -51,7 +51,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     next_hx[idx + i] = self.hash_key(&next_x_vec[i]);
                     next_i[idx + i] = self.bucket(next_hx[idx + i]);
                     // TODO: Use 0 or 3 here?
-                    unsafe { prefetch_read_data(self.k.address(next_i[idx + i]), 3) };
+                    self.k.prefetch(next_i[idx + i]);
                 }
                 unsafe {
                     (0..L)
@@ -107,7 +107,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     .into();
                 // TODO: Use 0 or 3 here?
                 for i in 0..L {
-                    unsafe { prefetch_read_data(self.k.address(next_i[idx][i]), 3) };
+                    self.k.prefetch(next_i[idx][i]);
                 }
                 let ki_vec = cur_i_vec.as_array().map(|cur_i| self.k.index(cur_i));
                 let mut i = 0;
