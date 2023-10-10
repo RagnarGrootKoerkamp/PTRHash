@@ -265,7 +265,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
         let max_bucket_len = bucket_len(bucket_order[0]);
-        let mut positions_tmp = vec![0; max_bucket_len];
 
         let mut stack = vec![];
         let mut i = 0;
@@ -275,6 +274,15 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             hashes[starts[b]..starts[b + 1]]
                 .iter()
                 .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+        };
+        let mut duplicate_positions = {
+            let mut positions_tmp = vec![0; max_bucket_len];
+            move |b: BucketIdx, ki: Pilot| {
+                positions_tmp.clear();
+                positions(b, ki).collect_into(&mut positions_tmp);
+                positions_tmp.sort_unstable();
+                !positions_tmp.partition_dedup().1.is_empty()
+            }
         };
 
         let mut total_displacements = 0;
@@ -309,36 +317,51 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 let ki = kis[b] + 1;
                 // (worst colliding bucket size, ki)
                 let mut best = (usize::MAX, u64::MAX);
-                // TODO: First check if collision-free is possible.
-                'k: for delta in 0u64..kmax {
-                    let ki = (ki + delta) % kmax;
-                    let largest_colliding_bucket = positions(b, ki)
-                        .filter_map(|p| {
-                            // Heavily penalize recently moved buckets.
-                            if slots[p].is_none() {
-                                None
-                            } else if recent.contains(&slots[p]) {
-                                Some(1000)
-                            } else {
-                                Some(bucket_len(slots[p]))
-                            }
-                        })
-                        .map(|l| l * l)
-                        .sum();
-                    if largest_colliding_bucket < best.0 {
-                        // Check that the mapped positions are distinct.
-                        positions_tmp.clear();
-                        positions(b, ki).collect_into(&mut positions_tmp);
-                        positions_tmp.sort_unstable();
-                        if !positions_tmp.partition_dedup().1.is_empty() {
-                            // eprintln!("Duplicate positions!");
-                            continue 'k;
-                        }
 
-                        // eprintln!("New num collisions: {}", num_collisions);
-                        best = (largest_colliding_bucket, ki);
-                        if largest_colliding_bucket == 0 {
-                            break;
+                // Check for a solution without collisions.
+
+                for delta in 0..kmax {
+                    // TODO: Start at previous ki here?
+                    let ki = (delta) % kmax;
+                    // Check if all are free.
+                    let all_free =
+                        positions(b, ki).all(|p| unsafe { slots.get_unchecked(p).is_none() });
+                    if all_free && !duplicate_positions(b, ki) {
+                        best = (0, ki);
+                        break;
+                    }
+                }
+
+                // TODO: First check if collision-free is possible.
+                // TODO: Use get_unchecked and similar.
+                if best.0 != 0 {
+                    'k: for delta in 0u64..kmax {
+                        let ki = (ki + delta) % kmax;
+                        let largest_colliding_bucket = positions(b, ki)
+                            .filter_map(|p| {
+                                let s = unsafe { *slots.get_unchecked(p) };
+                                // Heavily penalize recently moved buckets.
+                                if s.is_none() {
+                                    None
+                                } else if recent.contains(&s) {
+                                    Some(1000)
+                                } else {
+                                    Some(bucket_len(s))
+                                }
+                            })
+                            .map(|l| l * l)
+                            .sum();
+                        if largest_colliding_bucket < best.0 {
+                            if duplicate_positions(b, ki) {
+                                // eprintln!("Duplicate positions!");
+                                continue 'k;
+                            }
+
+                            // eprintln!("New num collisions: {}", num_collisions);
+                            best = (largest_colliding_bucket, ki);
+                            if largest_colliding_bucket == 0 {
+                                break;
+                            }
                         }
                     }
                 }
@@ -351,6 +374,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 for p in positions(b, ki) {
                     let b2 = slots[p];
                     if b2.is_some() {
+                        assert!(b2 != b);
                         // DROP BUCKET b
                         // eprintln!("{i:>8}/{:>8} Drop bucket {b2:>8}", self.n);
                         stack.push(b2);
