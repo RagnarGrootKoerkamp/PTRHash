@@ -181,9 +181,12 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     pub fn new_random(c: f32, alpha: f32, n: usize, bits: usize) -> Self {
         let mut pthash = Self::init(c, alpha, n);
         let k = (0..pthash.m)
-            .map(|_| rand::random::<u64>() & ((1 << bits) - 1))
+            .map(|_| random::<u64>() & ((1 << bits) - 1))
             .collect();
         pthash.k = Packed::new(k);
+        pthash.free = (pthash.n0..pthash.n)
+            .map(|_| pthash.rem_n.reduce(Hash::new(random::<u64>())))
+            .collect();
         pthash
     }
 
@@ -263,7 +266,6 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     fn bucket_naive(&self, hx: Hash) -> usize {
-        // TODO: Branchless implementation.
         if hx < self.p1 {
             hx.reduce(self.rem_p2)
         } else {
@@ -271,6 +273,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
     }
 
+    /// TODO: Do things break if we sum instead of xor here?
     fn position(&self, hx: Hash, ki: u64) -> usize {
         (hx ^ self.hash_ki(ki)).reduce(self.rem_n)
     }
@@ -281,13 +284,21 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let hx = self.hash_key(x);
         let i = self.bucket(hx);
         let ki = self.k.index(i);
+        self.position(hx, ki)
+    }
+
+    /// An implementation that also works for alpha<1.
+    #[inline(always)]
+    pub fn index_remap(&self, x: &Key) -> usize {
+        let hx = self.hash_key(x);
+        let i = self.bucket(hx);
+        let ki = self.k.index(i);
         let p = self.position(hx, ki);
-        assert!(p < self.n);
-        // if likely(p < self.n0) {
-        p
-        // } else {
-        //     unsafe { *self.free.get_unchecked(p - self.n0) }
-        // }
+        if std::intrinsics::likely(p < self.n0) {
+            p
+        } else {
+            unsafe { *self.free.get_unchecked(p - self.n0) }
+        }
     }
 
     /// Return the hashes in each bucket and the order of the buckets.

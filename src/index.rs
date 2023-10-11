@@ -27,6 +27,34 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     #[inline(always)]
+    pub fn index_remap_stream<'a, const K: usize>(
+        &'a self,
+        xs: &'a [Key],
+    ) -> impl Iterator<Item = usize> + 'a {
+        let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
+        let mut next_i: [usize; K] = next_hx.map(|hx| self.bucket(hx));
+        xs[K..].iter().enumerate().map(move |(idx, next_x)| {
+            let idx = idx % K;
+            let cur_hx = next_hx[idx];
+            let cur_i = next_i[idx];
+            next_hx[idx] = self.hash_key(next_x);
+            next_i[idx] = self.bucket(next_hx[idx]);
+            // TODO: Use 0 or 3 here?
+            // I.e. populate caches or do a 'Non-temporal access', meaning the
+            // cache line can skip caches and be immediately discarded after
+            // reading.
+            self.k.prefetch(next_i[idx]);
+            let ki = self.k.index(cur_i);
+            let p = self.position(cur_hx, ki);
+            if std::intrinsics::likely(p < self.n0) {
+                p
+            } else {
+                unsafe { *self.free.get_unchecked(p - self.n0) }
+            }
+        })
+    }
+
+    #[inline(always)]
     pub fn index_stream_chunks<'a, const K: usize, const L: usize>(
         &'a self,
         xs: &'a [Key],

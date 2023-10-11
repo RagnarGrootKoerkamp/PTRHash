@@ -148,6 +148,11 @@ fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bi
     eprint!(" (1): {query:>4.1}");
     let query = bench_index_all(loops, &keys, |keys| mphf.index_stream::<32>(keys));
     eprint!(" (32): {query:>4.1}");
+    let query = bench_index(loops, &keys, |key| mphf.index_remap(key));
+    eprint!(" REMAP: ");
+    eprint!(" (1): {query:>4.1}");
+    let query = bench_index_all(loops, &keys, |keys| mphf.index_remap_stream::<32>(keys));
+    eprint!(" (32): {query:>4.1}");
     eprintln!();
 }
 
