@@ -383,7 +383,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 if !self.displace(
                     &hashes,
                     &starts,
-                    bucket_order_nonempty,
+                    &bucket_order,
                     self.params.bits,
                     &mut k,
                     &mut taken,

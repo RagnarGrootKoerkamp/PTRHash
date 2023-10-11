@@ -294,10 +294,13 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let mut recent = Vec::with_capacity(10);
 
         for &b in bucket_order {
-            i += 1;
             // Check for duplicate hashes inside bucket.
             let bucket = &hashes[starts[b]..starts[b + 1]];
+            if bucket.is_empty() {
+                break;
+            }
             let b_len = bucket.len();
+            i += 1;
 
             let mut displacements = 0usize;
 
@@ -406,6 +409,15 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 );
             }
         }
+        // Set k for empty buckets.
+        for &b in &bucket_order[i..] {
+            kis[b] = 0;
+        }
+        let max = kis.iter().copied().max().unwrap();
+        assert!(
+            max < kmax,
+            "Max k found is {max} which is not less than {kmax}"
+        );
         *taken = slots.iter().map(|&b| b.is_some()).collect();
 
         eprintln!();

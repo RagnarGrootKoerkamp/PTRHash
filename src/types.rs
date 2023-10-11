@@ -41,6 +41,10 @@ impl<T: Clone> BucketVec<T> {
     pub fn into_vec(self) -> Vec<T> {
         self.0
     }
+
+    pub fn iter(&self) -> core::slice::Iter<'_, T> {
+        self.0.iter()
+    }
 }
 
 impl<T> From<Vec<T>> for BucketVec<T> {
