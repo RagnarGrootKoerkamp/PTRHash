@@ -66,7 +66,7 @@ enum Command {
     },
 }
 
-type PT = PTHash<Vec<u64>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
+type PT = PTHash<Vec<u8>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
 
 fn main() {
     let Args { command } = Args::parse();
