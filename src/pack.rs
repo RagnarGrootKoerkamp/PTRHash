@@ -1,4 +1,7 @@
-use sucds::int_vectors::CompactVector;
+use sucds::{
+    int_vectors::CompactVector,
+    mii_sequences::{EliasFano, EliasFanoBuilder},
+};
 use sux::{
     bits::compact_array::CompactArray,
     prelude::{BitFieldSlice, BitFieldSliceCore, BitFieldSliceMut},
@@ -102,5 +105,35 @@ impl Packed for CompactArray {
     }
     fn size_in_bytes(&self) -> usize {
         self.bit_width() * self.len() / 8
+    }
+}
+
+impl Packed for EliasFano {
+    fn default() -> Self {
+        Default::default()
+    }
+
+    fn new(vals: Vec<u64>) -> Self {
+        if vals.is_empty() {
+            Default::default()
+        } else {
+            let mut builder =
+                EliasFanoBuilder::new(*vals.last().unwrap() as usize + 1, vals.len()).unwrap();
+            builder.extend(vals.iter().map(|&x| x as usize)).unwrap();
+            builder.build()
+        }
+    }
+
+    #[inline(always)]
+    fn index(&self, index: usize) -> u64 {
+        self.select(index as _).unwrap() as u64
+    }
+
+    fn to_vec(&self) -> Vec<u64> {
+        todo!()
+    }
+
+    fn size_in_bytes(&self) -> usize {
+        sucds::Serializable::size_in_bytes(self)
     }
 }

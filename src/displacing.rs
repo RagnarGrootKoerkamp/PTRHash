@@ -387,6 +387,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 for p in positions(b, ki) {
                     let b2 = slots[p];
                     if b2.is_some() {
+                        // FIXME: This assertion still fails from time to time but it really shouldn't.
                         assert!(b2 != b);
                         // DROP BUCKET b
                         // eprintln!("{i:>8}/{:>8} Drop bucket {b2:>8}", self.n);

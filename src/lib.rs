@@ -42,9 +42,13 @@ use reduce::Reduce;
 type Key = u64;
 use hash::Hasher;
 use smallvec::SmallVec;
+
 // TODO: Shrink this to u32.
 type Pilot = u64;
 type SlotIdx = u32;
+
+// type Remap = sucds::mii_sequences::EliasFano;
+type Remap = Vec<SlotIdx>;
 
 use crate::{
     hash::Hash,
@@ -137,9 +141,8 @@ pub struct PTHash<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, con
     s: u64,
     /// The pivots.
     k: P,
-    /// The free slots.
-    free: Vec<SlotIdx>,
-
+    /// Remap the out-of-bound slots to free slots.
+    remap: Remap,
     _hx: PhantomData<Hx>,
     _hk: PhantomData<Hk>,
 }
@@ -162,7 +165,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             rem_mp2: self.rem_mp2,
             s: self.s,
             k: P2::new(self.k.to_vec()),
-            free: self.free.clone(),
+            remap: self.remap.clone(),
             _hk: PhantomData,
             _hx: PhantomData,
         }
@@ -185,9 +188,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             .map(|_| random::<u64>() & ((1 << bits) - 1))
             .collect();
         pthash.k = Packed::new(k);
-        pthash.free = (pthash.n0..pthash.n)
-            .map(|_| pthash.rem_n.reduce(Hash::new(random::<u64>())) as SlotIdx)
-            .collect();
+        let mut remap_vals = (pthash.n0..pthash.n)
+            .map(|_| pthash.rem_n.reduce(Hash::new(random::<u64>())) as _)
+            .collect_vec();
+        remap_vals.sort_unstable();
+        pthash.remap = Packed::new(remap_vals);
         pthash
     }
 
@@ -243,7 +248,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             rem_mp2: Rm::new(m - p2),
             s: 0,
             k: P::default(),
-            free: vec![],
+            remap: Default::default(),
             _hk: PhantomData,
             _hx: PhantomData,
         }
@@ -298,7 +303,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         if std::intrinsics::likely(p < self.n0) {
             p
         } else {
-            unsafe { *self.free.get_unchecked(p - self.n0) as usize }
+            self.remap.index(p - self.n0) as usize
         }
     }
 
@@ -576,12 +581,14 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         // Compute the free spots.
-        self.free = vec![SlotIdx::MAX; self.n - self.n0];
-        for (out_of_range, target) in
-            std::iter::zip(taken[self.n..].iter_ones(), taken[..self.n].iter_zeros())
-        {
-            self.free[out_of_range] = target as SlotIdx;
+        let mut v = Vec::with_capacity(self.n - self.n0);
+        for i in taken[..self.n0].iter_zeros() {
+            while !taken[self.n0 + v.len()] {
+                v.push(i as u64);
+            }
+            v.push(i as u64);
         }
+        self.remap = Packed::new(v);
     }
 
     fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
@@ -682,11 +689,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
 
     pub fn bits_per_element(&self) -> f32 {
         let pilots = self.k.size_in_bytes();
-        let remap = if self.free.is_empty() {
-            0
-        } else {
-            self.free.len() * std::mem::size_of_val(&self.free[0])
-        };
+        let remap = self.remap.size_in_bytes();
         (8 * pilots + 8 * remap) as f32 / self.n0 as f32
     }
 }
