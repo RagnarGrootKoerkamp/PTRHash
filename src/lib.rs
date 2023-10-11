@@ -386,6 +386,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     bucket_order_nonempty,
                     self.params.bits,
                     &mut k,
+                    &mut taken,
                 ) {
                     continue 's;
                 }
@@ -556,25 +557,30 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             break 's;
         }
 
-        if self.n == self.n0 {
-            assert_eq!(taken.count_zeros(), 0, "All slots must be taken.");
-        } else {
-            // Compute the free spots.
-            self.free = vec![usize::MAX; self.n - self.n0];
-            let mut next_unmapped = self.n0;
-            for i in 0..self.n0 {
-                if !taken[i] {
-                    while !taken[next_unmapped] {
-                        next_unmapped += 1;
-                    }
-                    self.free[next_unmapped - self.n0] = i;
-                    next_unmapped += 1;
-                }
-            }
-        }
+        self.remap_free_slots(taken);
 
         // Pack the data.
         self.k = Packed::new(k.into_vec());
+    }
+
+    fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {
+        assert_eq!(
+            taken.count_zeros(),
+            self.n - self.n0,
+            "Not the right number of free slots left!"
+        );
+
+        if self.n == self.n0 {
+            return;
+        }
+
+        // Compute the free spots.
+        self.free = vec![usize::MAX; self.n - self.n0];
+        for (out_of_range, target) in
+            std::iter::zip(taken[self.n..].iter_ones(), taken[..self.n].iter_zeros())
+        {
+            self.free[out_of_range] = target;
+        }
     }
 
     fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {

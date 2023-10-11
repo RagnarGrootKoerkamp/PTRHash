@@ -3,6 +3,7 @@
 use crate::types::BucketIdx;
 
 use super::*;
+use bitvec::vec::BitVec;
 use rustc_hash::FxHashMap;
 use std::{cmp::Reverse, collections::HashSet};
 
@@ -255,12 +256,14 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         bucket_order: &[BucketIdx],
         bits: usize,
         kis: &mut BucketVec<u64>,
+        taken: &mut BitVec,
     ) -> bool {
         let kmax = 1u64 << bits;
         eprintln!("DISPLACE 2^{bits}={kmax}");
 
         kis.reset(self.m, u64::MAX);
         // FIXME: STORE BUCKET SIZE INLINE.
+        // FIXME: Use `taken` directly?
         let mut slots = vec![BucketIdx::NONE; self.n];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
@@ -403,6 +406,8 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 );
             }
         }
+        *taken = slots.iter().map(|&b| b.is_some()).collect();
+
         eprintln!();
         eprintln!("MAX DELTA: {}", max_len_delta);
         eprintln!(
