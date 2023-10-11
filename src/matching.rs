@@ -7,8 +7,8 @@ use rustc_hash::FxHashMap;
 
 use super::*;
 
-impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<P, Rm, Rn, Hx, Hk, T>
+impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+    PTHash<P, F, Rm, Rn, Hx, Hk, T>
 {
     pub fn match_tail(&self, hashes: &Vec<Hash>, taken: &BitVec, peel: bool) -> Vec<u64> {
         let include_st_edges = !peel;

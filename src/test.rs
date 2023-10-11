@@ -29,7 +29,9 @@ fn construct<Rm: Reduce, Rn: Reduce>() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash = PTHash::<Vec<u64>, Rm, Rn, FxHash, MulHash, false>::new(7.0, 1.0, &keys);
+            let pthash = PTHash::<Vec<u64>, Vec<SlotIdx>, Rm, Rn, FxHash, MulHash, false>::new(
+                7.0, 1.0, &keys,
+            );
 
             let mut done = vec![false; n];
 
@@ -136,12 +138,14 @@ where
 }
 
 #[cfg(test)]
-fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bits: usize) {
+fn queries_exact<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(
+    bits: usize,
+) {
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<P, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
+    let mphf = PTHash::<P, F, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -160,6 +164,7 @@ fn test_stream_chunks<
     const K: usize,
     const L: usize,
     P: Packed,
+    F: Packed,
     Rm: Reduce,
     Rn: Reduce,
     Hx: Hasher,
@@ -168,7 +173,7 @@ fn test_stream_chunks<
 >(
     total: usize,
     n: usize,
-    mphf: &PTHash<P, Rm, Rn, Hx, Hk, T>,
+    mphf: &PTHash<P, F, Rm, Rn, Hx, Hk, T>,
     keys: &[u64],
 ) where
     [(); K * L]: Sized,
@@ -195,32 +200,32 @@ macro_rules! test_query {
 
             eprintln!("Vec<u64>");
             eprint!(" murmur");
-            queries_exact::<Vec<u64>, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<Vec<u64>, Vec<SlotIdx>, $rm, $rn, $t, Murmur>(8);
             eprint!(" fxhash");
-            queries_exact::<Vec<u64>, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<Vec<u64>, Vec<SlotIdx>, $rm, $rn, $t, FxHash>(8);
             eprint!(" nohash");
-            queries_exact::<Vec<u64>, $rm, $rn, $t, NoHash>(8);
+            queries_exact::<Vec<u64>, Vec<SlotIdx>, $rm, $rn, $t, NoHash>(8);
             eprintln!("Vec<u8>");
             eprint!(" murmur");
-            queries_exact::<Vec<u8>, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<Vec<u8>, Vec<SlotIdx>, $rm, $rn, $t, Murmur>(8);
             eprint!(" fxhash");
-            queries_exact::<Vec<u8>, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<Vec<u8>, Vec<SlotIdx>, $rm, $rn, $t, FxHash>(8);
             eprint!(" nohash");
-            queries_exact::<Vec<u8>, $rm, $rn, $t, NoHash>(8);
+            queries_exact::<Vec<u8>, Vec<SlotIdx>, $rm, $rn, $t, NoHash>(8);
             eprintln!("CompactVector");
             eprint!(" murmur");
-            queries_exact::<CompactVector, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<CompactVector, Vec<SlotIdx>, $rm, $rn, $t, Murmur>(8);
             eprint!(" fxhash");
-            queries_exact::<CompactVector, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<CompactVector, Vec<SlotIdx>, $rm, $rn, $t, FxHash>(8);
             eprint!(" nohash");
-            queries_exact::<CompactVector, $rm, $rn, $t, NoHash>(8);
+            queries_exact::<CompactVector, Vec<SlotIdx>, $rm, $rn, $t, NoHash>(8);
             eprintln!("CompactArray");
             eprint!(" murmur");
-            queries_exact::<CompactArray, $rm, $rn, $t, Murmur>(8);
+            queries_exact::<CompactArray, Vec<SlotIdx>, $rm, $rn, $t, Murmur>(8);
             eprint!(" fxhash");
-            queries_exact::<CompactArray, $rm, $rn, $t, FxHash>(8);
+            queries_exact::<CompactArray, Vec<SlotIdx>, $rm, $rn, $t, FxHash>(8);
             eprint!(" nohash");
-            queries_exact::<CompactArray, $rm, $rn, $t, NoHash>(8);
+            queries_exact::<CompactArray, Vec<SlotIdx>, $rm, $rn, $t, NoHash>(8);
         }
     };
 }
@@ -268,13 +273,13 @@ test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 
 /// Primarily for `perf stat`.
 #[cfg(test)]
-fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize) {
+fn queries_random<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize) {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<P, Rm, Rn, FxHash, MulHash, T>::new_random(7.0, 1.0, n, bits);
+    let mphf = PTHash::<P, F, Rm, Rn, FxHash, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
     // let start = SystemTime::now();
     // let loops = total / n;
@@ -290,21 +295,21 @@ fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize)
 
     let q = bench_index_all(total, &keys, |keys| mphf.index_stream::<64>(keys));
     eprintln!("{q:>4.1}");
-    test_stream_chunks::<4, 2, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 2, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 2, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 2, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 8, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 8, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 8, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 8, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 2, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 2, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 2, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 2, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 8, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 8, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 8, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 8, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, P, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
 
     eprintln!();
 }
@@ -314,7 +319,7 @@ macro_rules! test_random {
     ($rm:ty, $rn:ty, $t:expr, $name:ident) => {
         #[test]
         fn $name() {
-            queries_random::<Vec<u8>, $rm, $rn, $t>(8);
+            queries_random::<Vec<u8>, Vec<SlotIdx>, $rm, $rn, $t>(8);
         }
     };
 }

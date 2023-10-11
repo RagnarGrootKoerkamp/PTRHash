@@ -45,10 +45,10 @@ use smallvec::SmallVec;
 
 // TODO: Shrink this to u32.
 type Pilot = u64;
-type SlotIdx = u32;
+pub type SlotIdx = u32;
 
-// type Remap = sucds::mii_sequences::EliasFano;
-type Remap = Vec<SlotIdx>;
+type Remap = sucds::mii_sequences::EliasFano;
+// type Remap = Vec<SlotIdx>;
 
 use crate::{
     hash::Hash,
@@ -114,7 +114,15 @@ impl Default for PTParams {
 /// P: Packing of `k` array.
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool> {
+pub struct PTHash<
+    P: Packed,
+    F: Packed,
+    Rm: Reduce,
+    Rn: Reduce,
+    Hx: Hasher,
+    Hk: Hasher,
+    const T: bool,
+> {
     params: PTParams,
 
     /// The number of keys.
@@ -142,16 +150,16 @@ pub struct PTHash<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, con
     /// The pivots.
     k: P,
     /// Remap the out-of-bound slots to free slots.
-    remap: Remap,
+    remap: F,
     _hx: PhantomData<Hx>,
     _hk: PhantomData<Hk>,
 }
 
-impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<P, Rm, Rn, Hx, Hk, T>
+impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+    PTHash<P, F, Rm, Rn, Hx, Hk, T>
 {
     /// Convert an existing PTHash to a different packing.
-    pub fn convert<P2: Packed>(&self) -> PTHash<P2, Rm, Rn, Hx, Hk, T> {
+    pub fn convert<P2: Packed>(&self) -> PTHash<P2, F, Rm, Rn, Hx, Hk, T> {
         PTHash {
             params: self.params,
             n0: self.n0,
@@ -165,7 +173,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             rem_mp2: self.rem_mp2,
             s: self.s,
             k: P2::new(self.k.to_vec()),
-            remap: self.remap.clone(),
+            remap: F::new(self.remap.to_vec()),
             _hk: PhantomData,
             _hx: PhantomData,
         }
@@ -248,7 +256,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             rem_mp2: Rm::new(m - p2),
             s: 0,
             k: P::default(),
-            remap: Default::default(),
+            remap: F::default(),
             _hk: PhantomData,
             _hx: PhantomData,
         }
