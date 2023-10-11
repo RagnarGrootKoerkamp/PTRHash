@@ -678,6 +678,16 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
         unreachable!()
     }
+
+    pub fn bits_per_element(&self) -> f32 {
+        let pilots = self.k.size_in_bytes();
+        let remap = if self.free.is_empty() {
+            0
+        } else {
+            self.free.len() * std::mem::size_of_val(&self.free[0])
+        };
+        (8 * pilots + 8 * remap) as f32 / self.n0 as f32
+    }
 }
 
 pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {

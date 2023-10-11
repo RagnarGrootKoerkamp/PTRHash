@@ -1,7 +1,7 @@
 use sucds::int_vectors::CompactVector;
 use sux::{
     bits::compact_array::CompactArray,
-    prelude::{BitFieldSlice, BitFieldSliceMut},
+    prelude::{BitFieldSlice, BitFieldSliceCore, BitFieldSliceMut},
 };
 
 pub trait Packed {
@@ -14,6 +14,8 @@ pub trait Packed {
     fn prefetch(&self, _index: usize) {}
     /// Convert to a vector.
     fn to_vec(&self) -> Vec<u64>;
+    /// Size in bytes.
+    fn size_in_bytes(&self) -> usize;
 }
 
 macro_rules! vec_impl {
@@ -42,6 +44,9 @@ macro_rules! vec_impl {
                     })
                     .collect()
             }
+            fn size_in_bytes(&self) -> usize {
+                self.len() * std::mem::size_of::<$t>()
+            }
         }
     };
 }
@@ -64,6 +69,9 @@ impl Packed for CompactVector {
     fn to_vec(&self) -> Vec<u64> {
         self.iter().map(|x| x as u64).collect()
     }
+    fn size_in_bytes(&self) -> usize {
+        self.width() * self.len() / 8
+    }
 }
 
 impl Packed for CompactArray {
@@ -85,5 +93,8 @@ impl Packed for CompactArray {
     }
     fn to_vec(&self) -> Vec<u64> {
         unimplemented!()
+    }
+    fn size_in_bytes(&self) -> usize {
+        self.bit_width() * self.len() / 8
     }
 }

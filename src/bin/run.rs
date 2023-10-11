@@ -92,7 +92,7 @@ fn main() {
             bits,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
-            PT::new_wth_params(
+            let pt = PT::new_with_params(
                 c,
                 a,
                 &keys,
@@ -107,6 +107,7 @@ fn main() {
                     bits,
                 },
             );
+            eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
         }
         Command::Query {
             n,
@@ -118,16 +119,17 @@ fn main() {
             let keys = pthash_rs::test::generate_keys(n);
             type PT =
                 PTHash<Vec<u8>, reduce::FR32L, reduce::FR64, hash::FxHash, hash::MulHash, true>;
-            let mphf = PT::new_random(c, a, n, bits);
+            let pt = PT::new_random(c, a, n, bits);
+            eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
             let loops = total.div_ceil(n);
-            let query = bench_index(loops, &keys, |key| mphf.index(key));
+            let query = bench_index(loops, &keys, |key| pt.index(key));
             eprint!(" (1): {query:>4.1}");
-            let query = bench_index_all(loops, &keys, |keys| mphf.index_stream::<32>(keys));
+            let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<32>(keys));
             eprint!(" (32): {query:>4.1}");
             eprint!("    | Remap: ");
-            let query = bench_index(loops, &keys, |key| mphf.index_remap(key));
+            let query = bench_index(loops, &keys, |key| pt.index_remap(key));
             eprint!(" (1): {query:>4.1}");
-            let query = bench_index_all(loops, &keys, |keys| mphf.index_remap_stream::<32>(keys));
+            let query = bench_index_all(loops, &keys, |keys| pt.index_remap_stream::<32>(keys));
             eprint!(" (32): {query:>4.1}");
             eprintln!();
         }
