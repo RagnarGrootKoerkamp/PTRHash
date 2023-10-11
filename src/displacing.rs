@@ -291,9 +291,20 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         let mut total_displacements = 0;
         let mut max_len_delta = 0;
 
-        let mut recent = Vec::with_capacity(10);
+        let mut recent = [BucketIdx::NONE; 4];
 
-        for &b in bucket_order {
+        let nonempty = bucket_order.len()
+            - bucket_order
+                .iter()
+                .rev()
+                .take_while(|&&b| starts[b + 1] - starts[b] == 0)
+                .count();
+        // Set k for empty buckets.
+        for &b in &bucket_order[nonempty..] {
+            kis[b] = 0;
+        }
+
+        for &b in &bucket_order[..nonempty] {
             // Check for duplicate hashes inside bucket.
             let bucket = &hashes[starts[b]..starts[b + 1]];
             if bucket.is_empty() {
@@ -305,8 +316,9 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             let mut displacements = 0usize;
 
             stack.push(b);
-            recent.clear();
-            recent.push(b);
+            recent.fill(BucketIdx::NONE);
+            let mut recent_idx = 0;
+            recent[0] = b;
 
             while let Some(b) = stack.pop() {
                 if (stack.len() > 10 && stack.len().is_power_of_two())
@@ -314,7 +326,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 {
                     eprint!(
                         "bucket {i:>9} / {:>9}  sz {:>2} stack {:>8} displacements {displacements}\r",
-                        bucket_order.len(),
+                        nonempty,
                         bucket.len(),
                         stack.len()
                     );
@@ -343,25 +355,24 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                 if best.0 != 0 {
                     for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
-                        let largest_colliding_bucket = positions(b, ki)
-                            .filter_map(|p| {
+                        let collision_score = positions(b, ki)
+                            .map(|p| {
                                 let s = unsafe { *slots.get_unchecked(p) };
                                 // Heavily penalize recently moved buckets.
                                 if s.is_none() {
-                                    None
+                                    0
                                 } else if recent.contains(&s) {
-                                    Some(1000)
+                                    1000
                                 } else {
-                                    Some(bucket_len(s))
+                                    bucket_len(s).pow(2)
                                 }
                             })
-                            .map(|l| l * l)
                             .sum();
-                        if largest_colliding_bucket < best.0 && !duplicate_positions(b, ki) {
-                            best = (largest_colliding_bucket, ki);
+                        if collision_score < best.0 && !duplicate_positions(b, ki) {
+                            best = (collision_score, ki);
                             // Since we already checked for a collision-free solution,
                             // the next best is a single collision of size b_len.
-                            if largest_colliding_bucket == b_len * b_len {
+                            if collision_score == b_len * b_len {
                                 break;
                             }
                         }
@@ -394,24 +405,19 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
                     slots[p] = b;
                 }
 
-                recent.insert(0, b);
-                if recent.len() > 4 {
-                    recent.pop();
-                }
+                recent_idx += 1;
+                recent_idx %= 4;
+                recent[recent_idx] = b;
             }
             total_displacements += displacements;
             if i % 1024 == 0 {
                 eprint!(
                     "bucket {i:>9} / {:>9}  sz {:>2} avg displacements: {:>8.5}\r",
-                    bucket_order.len(),
+                    nonempty,
                     bucket.len(),
                     total_displacements as f32 / i as f32
                 );
             }
-        }
-        // Set k for empty buckets.
-        for &b in &bucket_order[i..] {
-            kis[b] = 0;
         }
         let max = kis.iter().copied().max().unwrap();
         assert!(

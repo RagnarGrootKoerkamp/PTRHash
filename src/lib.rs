@@ -168,10 +168,10 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     }
 
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
-        Self::new_wth_params(c, alpha, keys, Default::default())
+        Self::new_with_params(c, alpha, keys, Default::default())
     }
 
-    pub fn new_wth_params(c: f32, alpha: f32, keys: &Vec<Key>, params: PTParams) -> Self {
+    pub fn new_with_params(c: f32, alpha: f32, keys: &Vec<Key>, params: PTParams) -> Self {
         let mut pthash = Self::init_with_params(c, alpha, keys.len(), params);
         pthash.compute_pilots(keys);
         pthash
