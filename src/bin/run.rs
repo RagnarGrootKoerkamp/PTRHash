@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use pthash_rs::{
-    test::{bench_index, bench_index_stream},
+    test::{bench_index, bench_index_all},
     *,
 };
 
@@ -120,9 +120,14 @@ fn main() {
                 PTHash<Vec<u8>, reduce::FR32L, reduce::FR64, hash::FxHash, hash::MulHash, true>;
             let mphf = PT::new_random(c, a, n, bits);
             let loops = total.div_ceil(n);
-            let query = bench_index(loops, &keys, &mphf);
+            let query = bench_index(loops, &keys, |key| mphf.index(key));
             eprint!(" (1): {query:>4.1}");
-            let query = bench_index_stream::<32, _, _, _, true, _>(loops, &keys, &mphf);
+            let query = bench_index_all(loops, &keys, |keys| mphf.index_stream::<32>(keys));
+            eprint!(" (32): {query:>4.1}");
+            let query = bench_index(loops, &keys, |key| mphf.index(key));
+            eprintln!("  remapping ");
+            eprint!(" (1): {query:>4.1}");
+            let query = bench_index_all(loops, &keys, |keys| mphf.index_stream::<32>(keys));
             eprint!(" (32): {query:>4.1}");
             eprintln!();
         }

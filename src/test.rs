@@ -108,16 +108,12 @@ test_construct!(FR32L, FR64, construct_r32l_r64);
 // test_construct!(FR32H, FR32H, construct_r32h);
 
 #[must_use]
-pub fn bench_index<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(
-    loops: usize,
-    keys: &Vec<u64>,
-    mphf: &PTHash<P, Rm, Rn, H, MulHash, T>,
-) -> f32 {
+pub fn bench_index(loops: usize, keys: &Vec<u64>, index: impl Fn(&Key) -> usize) -> f32 {
     let start = SystemTime::now();
     let mut sum = 0;
     for _ in 0..loops {
         for key in keys {
-            sum += mphf.index(key);
+            sum += index(key);
         }
     }
     black_box(sum);
@@ -125,22 +121,15 @@ pub fn bench_index<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(
 }
 
 #[must_use]
-pub fn bench_index_stream<
-    const L: usize,
-    P: Packed,
-    Rm: Reduce,
-    Rn: Reduce,
-    const T: bool,
-    H: Hasher,
->(
-    loops: usize,
-    keys: &Vec<u64>,
-    mphf: &PTHash<P, Rm, Rn, H, MulHash, T>,
-) -> f32 {
+pub fn bench_index_all<'a, F, I>(loops: usize, keys: &'a Vec<u64>, index_all: F) -> f32
+where
+    F: Fn(&'a [Key]) -> I,
+    I: Iterator<Item = usize> + 'a,
+{
     let start = SystemTime::now();
     let mut sum = 0;
     for _ in 0..loops {
-        sum += mphf.index_stream::<L>(keys).sum::<usize>();
+        sum += index_all(keys).sum::<usize>();
     }
     black_box(sum);
     start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
@@ -155,9 +144,9 @@ fn queries_exact<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bi
     let mphf = PTHash::<P, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
 
     let loops = total / n;
-    let query = bench_index(loops, &keys, &mphf);
+    let query = bench_index(loops, &keys, |key| mphf.index(key));
     eprint!(" (1): {query:>4.1}");
-    let query = bench_index_stream::<32, P, Rm, Rn, T, H>(loops, &keys, &mphf);
+    let query = bench_index_all(loops, &keys, |keys| mphf.index_stream::<32>(keys));
     eprint!(" (32): {query:>4.1}");
     eprintln!();
 }
@@ -294,7 +283,7 @@ fn queries_random<P: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize)
     // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
     // eprint!(" {query:>2.1}");
 
-    let q = bench_index_stream::<64, P, Rm, Rn, T, FxHash>(total, &keys, &mphf);
+    let q = bench_index_all(total, &keys, |keys| mphf.index_stream::<64>(keys));
     eprintln!("{q:>4.1}");
     test_stream_chunks::<4, 2, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
     test_stream_chunks::<8, 2, P, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
