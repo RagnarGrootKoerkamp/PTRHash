@@ -19,6 +19,7 @@ mod index;
 mod matching;
 mod pack;
 mod peeling;
+mod pilots;
 pub mod reduce;
 mod sort_buckets;
 pub mod test;
@@ -420,7 +421,8 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                             break;
                         }
 
-                        let Some(ki) = self.find_pilot(bucket, &mut taken) else {
+                        let Some(ki) = self.find_pilot(20 * self.n as u64, bucket, &mut taken)
+                        else {
                             continue 's;
                         };
                         k[b] = ki;
@@ -429,42 +431,22 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     let mut bs = bucket_order_head.iter().peekable();
 
                     // Iterate all buckets of size >= 5 as &[Hash].
-                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 6) {
+                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 0) {
                         let bucket = &mut hashes[starts[b]..starts[b + 1]];
                         let bucket_size = bucket.len();
                         if bucket_size == 0 {
                             break;
                         }
 
-                        let Some(ki) = self.find_pilot(bucket, &mut taken) else {
+                        let Some(ki) = self.find_pilot(20 * self.n as u64, bucket, &mut taken)
+                        else {
                             continue 's;
                         };
                         k[b] = ki;
                     }
 
-                    // Process smaller buckets as [Hash; BUCKET_SIZE] where the
-                    // bucket size is known, for better codegen.
-                    macro_rules! find_pilot_fixed {
-                        ($BUCKET_SIZE:literal) => {
-                            while let Some(&b) =
-                                bs.next_if(|&&b| starts[b + 1] - starts[b] == $BUCKET_SIZE)
-                            {
-                                let bucket = hashes[starts[b]..].split_array_mut().0;
-                                let Some(ki) =
-                                    self.find_pilot_fixed::<$BUCKET_SIZE>(bucket, &mut taken)
-                                else {
-                                    continue 's;
-                                };
-                                k[b] = ki;
-                            }
-                        };
-                    }
-
                     if !self.params.peel2 {
-                        find_pilot_fixed!(5);
-                        find_pilot_fixed!(4);
-                        find_pilot_fixed!(3);
-                        find_pilot_fixed!(2);
+                        // todo!("Find_pilot_fixed");
                     } else {
                         // find_pilot_fixed!(5);
                         // find_pilot_fixed!(4);
@@ -490,7 +472,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                             }
                         }
                     }
-                    find_pilot_fixed!(1);
                 }
 
                 // Process the tail using direct inversion of the hash.
@@ -597,102 +578,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             v.push(i as u64);
         }
         self.remap = Packed::new(v);
-    }
-
-    fn find_pilot(&mut self, bucket: &[Hash], taken: &mut bitvec::vec::BitVec) -> Option<u64> {
-        'k: for ki in 0u64.. {
-            // Values of order n are only expected for the last few buckets.
-            // The probability of failure after n tries is 1/e=0.36, so
-            // the probability of failure after 20n tries is only 1/e^20 < 1e-10.
-            // (But note that I have seen cases where the minimum is around 16n.)
-            if ki == 20 * self.n as u64 {
-                eprintln!("{}: No ki found after 20n = {ki} tries.", bucket.len());
-                return None;
-            }
-            let hki = self.hash_ki(ki);
-            let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
-
-            // Check if all are free.
-            let all_free = bucket
-                .iter()
-                .all(|&hx| unsafe { !*taken.get_unchecked(position(hx)) });
-            if !all_free {
-                continue 'k;
-            }
-
-            // for hx in bucket {
-            //     let position = position(*hx);
-            //     if taken[position] {
-            //         continue 'k;
-            //     }
-            // }
-
-            // This bucket does not collide with previous buckets!
-            // But there may still be collisions within the bucket!
-            for (i, &hx) in bucket.iter().enumerate() {
-                let p = position(hx);
-                if taken[p] {
-                    // Collision within the bucket. Clean already set entries.
-                    for &hx in &bucket[..i] {
-                        taken.set(position(hx), false);
-                    }
-                    continue 'k;
-                }
-                taken.set(p, true);
-            }
-
-            // Found a suitable offset.
-            return Some(ki);
-        }
-        unreachable!()
-    }
-
-    fn find_pilot_fixed<const L: usize>(
-        &mut self,
-        bucket: &[Hash; L],
-        taken: &mut bitvec::vec::BitVec,
-    ) -> Option<u64> {
-        'k: for ki in 0u64.. {
-            if ki == 20 * self.n as u64 {
-                eprintln!("{}: No ki found after 20n = {ki} tries.", bucket.len());
-                return None;
-            }
-            let hki = self.hash_ki(ki);
-            let position = |hx: Hash| (hx ^ hki).reduce(self.rem_n);
-
-            // Check if all are free.
-            let all_free = bucket
-                .iter()
-                .all(|&hx| unsafe { !*taken.get_unchecked(position(hx)) });
-            if !all_free {
-                continue 'k;
-            }
-
-            // for hx in bucket {
-            //     let position = position(*hx);
-            //     if taken[position] {
-            //         continue 'k;
-            //     }
-            // }
-
-            // This bucket does not collide with previous buckets!
-            // But there may still be collisions within the bucket!
-            for (i, &hx) in bucket.iter().enumerate() {
-                let p = position(hx);
-                if taken[p] {
-                    // Collision within the bucket. Clean already set entries.
-                    for &hx in &bucket[..i] {
-                        taken.set(position(hx), false);
-                    }
-                    continue 'k;
-                }
-                taken.set(p, true);
-            }
-
-            // Found a suitable offset.
-            return Some(ki);
-        }
-        unreachable!()
     }
 
     pub fn bits_per_element(&self) -> f32 {
