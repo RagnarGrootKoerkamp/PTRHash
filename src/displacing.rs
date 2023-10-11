@@ -262,8 +262,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         eprintln!("DISPLACE 2^{bits}={kmax}");
 
         kis.reset(self.m, u64::MAX);
-        // FIXME: STORE BUCKET SIZE INLINE.
-        // FIXME: Use `taken` directly?
         let mut slots = vec![BucketIdx::NONE; self.n];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
@@ -408,7 +406,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         displacements += 1;
                         for p2 in positions(b2, kis[b2]) {
                             slots[p2] = BucketIdx::NONE;
-                            taken.set(p2, false);
+                            unsafe { taken.set_unchecked(p2, false) };
                         }
                         let b2_len = bucket_len(b2);
                         if b2_len - b_len > max_len_delta {
@@ -418,7 +416,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     }
                     // eprintln!("Set slot {:>8} to {:>8}", p, b);
                     slots[p] = b;
-                    taken.set(p, true);
+                    unsafe { taken.set_unchecked(p, true) };
                 }
 
                 recent_idx += 1;
@@ -448,6 +446,175 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             "TOTAL DISPLACEMENTS: {total_displacements} per bucket {}",
             total_displacements as f32 / self.m as f32
         );
+        true
+    }
+
+    pub fn displace_iterative(
+        &self,
+        hashes: &[Hash],
+        starts: &BucketVec<usize>,
+        bucket_order: &mut [BucketIdx],
+        bits: usize,
+        kis: &mut BucketVec<u64>,
+        taken: &mut BitVec,
+    ) -> bool {
+        let kmax = 1u64 << bits;
+        eprintln!("DISPLACE 2^{bits}={kmax}");
+
+        kis.reset(self.m, 0);
+
+        let mut slot_len: Vec<u8> = vec![];
+
+        let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
+        let max_bucket_len = bucket_len(bucket_order[0]);
+
+        let mut positions_tmp = vec![0; max_bucket_len];
+
+        let mut priority = vec![];
+
+        let mut iteration = 0;
+        loop {
+            eprintln!("Iteration {}", iteration);
+            let mut new_priority = 0;
+            let mut changed = 0;
+            let mut new_per_size = FxHashMap::default();
+
+            taken.clear();
+            taken.resize(self.n, false);
+            slot_len.clear();
+            slot_len.resize(self.n, 0);
+
+            'b: for b in &priority {
+                let b_positions = |ki: Pilot| {
+                    let hki = self.hash_ki(ki);
+                    unsafe {
+                        hashes
+                            .get_unchecked(starts[*b]..starts[*b + 1])
+                            .iter()
+                            .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+                    }
+                };
+
+                for ki in (kis[*b]..kmax).chain(0..kis[*b]) {
+                    positions_tmp.clear();
+                    b_positions(ki).collect_into(&mut positions_tmp);
+                    let all_free = positions_tmp
+                        .iter()
+                        .all(|&p| unsafe { !taken.get_unchecked(p) });
+                    if all_free {
+                        // Check duplicate positions.
+                        positions_tmp.sort_unstable();
+                        if positions_tmp.partition_dedup().1.is_empty() {
+                            if ki != kis[*b] {
+                                changed += 1;
+                            }
+                            kis[*b] = ki;
+                            for &p in &positions_tmp {
+                                unsafe {
+                                    taken.set_unchecked(p, true);
+                                    slot_len[p] = u8::MAX;
+                                }
+                            }
+
+                            continue 'b;
+                        }
+                    }
+                }
+                panic!("Priority bucket could not be placed!");
+            }
+            'b: for b in bucket_order.iter_mut() {
+                if *b == BucketIdx::NONE {
+                    continue;
+                }
+                let b_len = bucket_len(*b);
+                let b_positions = |ki: Pilot| {
+                    let hki = self.hash_ki(ki);
+                    unsafe {
+                        hashes
+                            .get_unchecked(starts[*b]..starts[*b + 1])
+                            .iter()
+                            .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+                    }
+                };
+
+                let mut chosen_ki = u64::MAX;
+
+                for ki in (kis[*b]..kmax).chain(0..kis[*b]) {
+                    positions_tmp.clear();
+                    b_positions(ki).collect_into(&mut positions_tmp);
+                    let all_free = positions_tmp
+                        .iter()
+                        .all(|&p| unsafe { !taken.get_unchecked(p) });
+                    if all_free {
+                        // Check duplicate positions.
+                        positions_tmp.sort_unstable();
+                        if positions_tmp.partition_dedup().1.is_empty() {
+                            chosen_ki = ki;
+                            break;
+                        }
+                    }
+                }
+                if chosen_ki < u64::MAX {
+                    if chosen_ki != kis[*b] {
+                        changed += 1;
+                    }
+                    kis[*b] = chosen_ki;
+                    for &p in &positions_tmp {
+                        unsafe {
+                            taken.set_unchecked(p, true);
+                            slot_len[p] = b_len as u8;
+                        }
+                    }
+
+                    continue 'b;
+                }
+
+                // No pilot found!
+                // Find one that minimizes the colliding bucket length and number of collisions.
+                let mut best = (usize::MAX, 0);
+                for ki in 0..kmax {
+                    positions_tmp.clear();
+                    b_positions(ki).collect_into(&mut positions_tmp);
+                    let score = positions_tmp
+                        .iter()
+                        .map(|&p| unsafe { (*slot_len.get_unchecked(p) as usize).pow(2) })
+                        .min()
+                        .unwrap();
+                    if score < best.0 {
+                        // Check duplicate positions.
+                        positions_tmp.sort_unstable();
+                        if positions_tmp.partition_dedup().1.is_empty() {
+                            best = (score, ki)
+                        }
+                    }
+                }
+                if best.0 >= 255 {
+                    panic!("Forced collision with priority element!");
+                }
+                kis[*b] = best.1;
+                priority.push(*b);
+                new_priority += 1;
+                new_per_size
+                    .entry(bucket_len(*b))
+                    .and_modify(|e| *e += 1)
+                    .or_insert(1);
+                *b = BucketIdx::NONE;
+            }
+            iteration += 1;
+            eprintln!(
+                "iteration {iteration:>2}: changed {changed:>8} #prio: += {new_priority:>8} -> {:>8} / {}",
+                priority.len(),
+                bucket_order.len(),
+            );
+            let mut new_per_size = new_per_size.iter().collect::<Vec<_>>();
+            new_per_size.sort();
+            eprintln!("New per size: {new_per_size:?}",);
+            if new_priority == 0 {
+                break;
+            }
+        }
+        eprintln!("Done after {} iterations", iteration);
+        assert_eq!(taken.count_ones(), self.n0);
         true
     }
 }

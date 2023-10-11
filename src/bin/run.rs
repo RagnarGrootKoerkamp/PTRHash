@@ -47,6 +47,8 @@ enum Command {
         peel2: bool,
         #[arg(long)]
         displace: bool,
+        #[arg(long)]
+        displace_it: bool,
         #[arg(long, default_value_t = 10)]
         bits: usize,
     },
@@ -90,6 +92,7 @@ fn main() {
             peel,
             peel2,
             displace,
+            displace_it,
             bits,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
@@ -105,6 +108,7 @@ fn main() {
                     peel,
                     peel2,
                     displace,
+                    displace_it,
                     bits,
                 },
             );

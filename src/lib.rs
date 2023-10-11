@@ -92,6 +92,7 @@ pub struct PTParams {
     pub peel2: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
+    pub displace_it: bool,
     /// For displacement, the number of target bits.
     pub bits: usize,
 }
@@ -107,6 +108,7 @@ impl Default for PTParams {
             peel: false,
             peel2: false,
             displace: false,
+            displace_it: false,
             bits: 10,
         }
     }
@@ -363,7 +365,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (mut hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
+            let (mut hashes, starts, mut bucket_order) = self.sort_buckets_flat(keys);
 
             if LOG {
                 print_bucket_sizes(BucketIdx::range(self.m).map(|i| starts[i + 1] - starts[i]));
@@ -401,6 +403,17 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     &hashes,
                     &starts,
                     &bucket_order,
+                    self.params.bits,
+                    &mut k,
+                    &mut taken,
+                ) {
+                    continue 's;
+                }
+            } else if self.params.displace_it {
+                if !self.displace_iterative(
+                    &hashes,
+                    &starts,
+                    &mut bucket_order,
                     self.params.bits,
                     &mut k,
                     &mut taken,
