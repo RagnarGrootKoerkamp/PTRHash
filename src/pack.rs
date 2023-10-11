@@ -25,7 +25,13 @@ macro_rules! vec_impl {
                 Default::default()
             }
             fn new(vals: Vec<u64>) -> Self {
-                vals.into_iter().map(|x| x as $t).collect()
+                vals.into_iter()
+                    .map(|x| {
+                        x.try_into().expect(&format!(
+                            "Computed pilot {x} is larger than backing type can hold."
+                        ))
+                    })
+                    .collect()
             }
             fn index(&self, index: usize) -> u64 {
                 unsafe { (*self.get_unchecked(index)) as u64 }
