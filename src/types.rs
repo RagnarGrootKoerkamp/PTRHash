@@ -65,13 +65,13 @@ impl<T> Index<BucketIdx> for BucketVec<T> {
     type Output = T;
 
     fn index(&self, index: BucketIdx) -> &Self::Output {
-        &self.0[index.0 as usize]
+        unsafe { self.0.get_unchecked(index.0 as usize) }
     }
 }
 
 impl<T> IndexMut<BucketIdx> for BucketVec<T> {
     fn index_mut(&mut self, index: BucketIdx) -> &mut Self::Output {
-        &mut self.0[index.0 as usize]
+        unsafe { self.0.get_unchecked_mut(index.0 as usize) }
     }
 }
 

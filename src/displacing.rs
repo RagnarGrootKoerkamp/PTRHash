@@ -274,9 +274,12 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
         let positions = |b: BucketIdx, ki: Pilot| {
             let hki = self.hash_ki(ki);
-            hashes[starts[b]..starts[b + 1]]
-                .iter()
-                .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+            unsafe {
+                hashes
+                    .get_unchecked(starts[b]..starts[b + 1])
+                    .iter()
+                    .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+            }
         };
         let mut duplicate_positions = {
             let mut positions_tmp = vec![0; max_bucket_len];
@@ -290,6 +293,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
         let mut total_displacements = 0;
         let mut max_len_delta = 0;
+        let mut max_chain_len = 0;
 
         let mut recent = [BucketIdx::NONE; 4];
 
@@ -338,12 +342,21 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
                 // Check for a solution without collisions.
 
-                for delta in 0..kmax {
+                let b_positions = |ki: Pilot| {
+                    let hki = self.hash_ki(ki);
+                    unsafe {
+                        hashes
+                            .get_unchecked(starts[b]..starts[b + 1])
+                            .iter()
+                            .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+                    }
+                };
+
+                for ki in 0..kmax {
                     // TODO: Start at previous ki here?
-                    let ki = (delta) % kmax;
+                    // let ki = (delta) % kmax;
                     // Check if all are free.
-                    let all_free =
-                        positions(b, ki).all(|p| unsafe { slots.get_unchecked(p).is_none() });
+                    let all_free = b_positions(ki).all(|p| unsafe { !taken.get_unchecked(p) });
                     if all_free && !duplicate_positions(b, ki) {
                         best = (0, ki);
                         break;
@@ -355,7 +368,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 if best.0 != 0 {
                     for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
-                        let collision_score = positions(b, ki)
+                        let collision_score = b_positions(ki)
                             .map(|p| {
                                 let s = unsafe { *slots.get_unchecked(p) };
                                 // Heavily penalize recently moved buckets.
@@ -384,7 +397,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 kis[b] = ki;
 
                 // Drop the collisions and set the new ki.
-                for p in positions(b, ki) {
+                for p in b_positions(ki) {
                     let b2 = slots[p];
                     if b2.is_some() {
                         // FIXME: This assertion still fails from time to time but it really shouldn't.
@@ -395,6 +408,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         displacements += 1;
                         for p2 in positions(b2, kis[b2]) {
                             slots[p2] = BucketIdx::NONE;
+                            taken.set(p2, false);
                         }
                         let b2_len = bucket_len(b2);
                         if b2_len - b_len > max_len_delta {
@@ -404,6 +418,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     }
                     // eprintln!("Set slot {:>8} to {:>8}", p, b);
                     slots[p] = b;
+                    taken.set(p, true);
                 }
 
                 recent_idx += 1;
@@ -411,9 +426,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 recent[recent_idx] = b;
             }
             total_displacements += displacements;
+            max_chain_len = max_chain_len.max(displacements);
             if i % 1024 == 0 {
                 eprint!(
-                    "bucket {i:>9} / {:>9}  sz {:>2} avg displacements: {:>8.5}\r",
+                    "bucket {i:>9} / {:>9}  sz {:>2} avg displacements: {:>8.5} max chain {max_chain_len:>8}\r",
                     nonempty,
                     bucket.len(),
                     total_displacements as f32 / i as f32
@@ -425,7 +441,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             max < kmax,
             "Max k found is {max} which is not less than {kmax}"
         );
-        *taken = slots.iter().map(|&b| b.is_some()).collect();
 
         eprintln!();
         eprintln!("MAX DELTA: {}", max_len_delta);

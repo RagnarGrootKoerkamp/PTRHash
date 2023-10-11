@@ -47,7 +47,7 @@ use smallvec::SmallVec;
 type Pilot = u64;
 pub type SlotIdx = u32;
 
-type Remap = sucds::mii_sequences::EliasFano;
+// type Remap = sucds::mii_sequences::EliasFano;
 // type Remap = Vec<SlotIdx>;
 
 use crate::{
@@ -393,6 +393,8 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 1
             );
 
+            taken.clear();
+            taken.resize(self.n, false);
             if self.params.displace {
                 if !self.displace(
                     &hashes,
@@ -405,8 +407,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     continue 's;
                 }
             } else {
-                taken.clear();
-                taken.resize(self.n, false);
                 let (bucket_order_head, bucket_order_tail) = bucket_order_nonempty
                     .split_at(self.m - num_empty_buckets - self.params.invert_tail_length);
 
