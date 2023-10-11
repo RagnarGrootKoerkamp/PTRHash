@@ -49,7 +49,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             if std::intrinsics::likely(p < self.n0) {
                 p
             } else {
-                unsafe { *self.free.get_unchecked(p - self.n0) }
+                unsafe { *self.free.get_unchecked(p - self.n0) as usize }
             }
         })
     }

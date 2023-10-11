@@ -44,6 +44,7 @@ use hash::Hasher;
 use smallvec::SmallVec;
 // TODO: Shrink this to u32.
 type Pilot = u64;
+type SlotIdx = u32;
 
 use crate::{
     hash::Hash,
@@ -137,7 +138,7 @@ pub struct PTHash<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, con
     /// The pivots.
     k: P,
     /// The free slots.
-    free: Vec<usize>,
+    free: Vec<SlotIdx>,
 
     _hx: PhantomData<Hx>,
     _hk: PhantomData<Hk>,
@@ -185,7 +186,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             .collect();
         pthash.k = Packed::new(k);
         pthash.free = (pthash.n0..pthash.n)
-            .map(|_| pthash.rem_n.reduce(Hash::new(random::<u64>())))
+            .map(|_| pthash.rem_n.reduce(Hash::new(random::<u64>())) as SlotIdx)
             .collect();
         pthash
     }
@@ -297,7 +298,7 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         if std::intrinsics::likely(p < self.n0) {
             p
         } else {
-            unsafe { *self.free.get_unchecked(p - self.n0) }
+            unsafe { *self.free.get_unchecked(p - self.n0) as usize }
         }
     }
 
@@ -575,11 +576,11 @@ impl<P: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
         }
 
         // Compute the free spots.
-        self.free = vec![usize::MAX; self.n - self.n0];
+        self.free = vec![SlotIdx::MAX; self.n - self.n0];
         for (out_of_range, target) in
             std::iter::zip(taken[self.n..].iter_ones(), taken[..self.n].iter_zeros())
         {
-            self.free[out_of_range] = target;
+            self.free[out_of_range] = target as SlotIdx;
         }
     }
 
