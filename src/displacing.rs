@@ -81,7 +81,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             let mut recent_idx = 0;
             recent[0] = b;
 
-            while let Some(b) = stack.pop() {
+            'b: while let Some(b) = stack.pop() {
                 if (stack.len() > 10 && stack.len().is_power_of_two())
                     || (displacements > 100 && displacements.is_power_of_two())
                 {
@@ -110,13 +110,15 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 };
 
                 for ki in 0..kmax {
-                    // TODO: Start at previous ki here?
-                    // let ki = (delta) % kmax;
-                    // Check if all are free.
                     let all_free = b_positions(ki).all(|p| unsafe { !taken.get_unchecked(p) });
                     if all_free && !duplicate_positions(b, ki) {
-                        best = (0, ki);
-                        break;
+                        // Set the new ki.
+                        kis[b] = ki;
+                        for p in b_positions(ki) {
+                            slots[p] = b;
+                            unsafe { taken.set_unchecked(p, true) };
+                        }
+                        continue 'b;
                     }
                 }
 
@@ -155,6 +157,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
                 // Drop the collisions and set the new ki.
                 for p in b_positions(ki) {
+                    // THIS IS A HOT INSTRUCTION.
                     let b2 = slots[p];
                     if b2.is_some() {
                         // FIXME: This assertion still fails from time to time but it really shouldn't.
