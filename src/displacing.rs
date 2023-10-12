@@ -60,16 +60,14 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 .rev()
                 .take_while(|&&b| starts[b + 1] - starts[b] == 0)
                 .count();
-        // Set k for empty buckets.
-        for &b in &bucket_order[nonempty..] {
-            kis[b] = 0;
-        }
 
-        for &b in &bucket_order[..nonempty] {
+        // TODO: Permute the buckets by bucket_order up-front to make memory access linear afterwards.
+        for &b in bucket_order {
             // Check for duplicate hashes inside bucket.
             let bucket = &hashes[starts[b]..starts[b + 1]];
             if bucket.is_empty() {
-                break;
+                kis[b] = 0;
+                continue;
             }
             let b_len = bucket.len();
             i += 1;
@@ -113,7 +111,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 // (worst colliding bucket size, ki)
                 let mut best = (usize::MAX, u64::MAX);
 
-                // TODO: First check if collision-free is possible.
                 // TODO: Use get_unchecked and similar.
                 if best.0 != 0 {
                     for delta in 0u64..kmax {
@@ -165,7 +162,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         }
                         let b2_len = bucket_len(b2);
                         if b2_len - b_len > max_len_delta {
-                            eprintln!("NEW MAX DELTA: {b_len} << {b2_len}\x1b[K");
+                            eprint!("NEW MAX DELTA: {b_len} << {b2_len}\r");
                             max_len_delta = b2_len - b_len;
                         }
                     }

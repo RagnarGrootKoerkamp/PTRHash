@@ -1,3 +1,5 @@
+use std::time::SystemTime;
+
 use clap::{Parser, Subcommand};
 use pthash_rs::{
     test::{bench_index, bench_index_all},
@@ -32,7 +34,7 @@ enum Command {
         a: f32,
         #[arg(long)]
         displace: bool,
-        #[arg(long, default_value_t = 10)]
+        #[arg(long, default_value_t = 8)]
         bits: usize,
         #[arg(long)]
         stats: bool,
@@ -46,7 +48,7 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 1.0)]
         a: f32,
-        #[arg(long, default_value_t = 10)]
+        #[arg(long, default_value_t = 8)]
         bits: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
@@ -77,6 +79,7 @@ fn main() {
             stats,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
+            let start = SystemTime::now();
             let pt = PT::new_with_params(
                 c,
                 a,
@@ -87,6 +90,8 @@ fn main() {
                     print_stats: stats,
                 },
             );
+            let t = start.elapsed().unwrap().as_secs_f32();
+            eprintln!("time: {t:5.2}");
             eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
         }
         Command::Query {
