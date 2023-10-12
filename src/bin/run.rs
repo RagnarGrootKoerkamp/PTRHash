@@ -40,8 +40,6 @@ enum Command {
         #[arg(long)]
         minimal: bool,
         #[arg(long)]
-        matching: bool,
-        #[arg(long)]
         displace: bool,
         #[arg(long)]
         displace_it: bool,
@@ -84,7 +82,6 @@ fn main() {
             no_fast_buckets,
             tail,
             minimal,
-            matching,
             displace,
             displace_it,
             bits,
@@ -98,7 +95,6 @@ fn main() {
                     fast_small_buckets: !no_fast_buckets,
                     invert_tail_length: tail,
                     invert_minimal: minimal,
-                    matching,
                     displace,
                     displace_it,
                     bits,

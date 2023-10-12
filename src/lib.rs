@@ -16,7 +16,6 @@ mod displacing;
 pub mod hash;
 mod hash_inverse;
 mod index;
-mod matching;
 mod pack;
 mod pilots;
 pub mod reduce;
@@ -83,8 +82,6 @@ pub struct PTParams {
     pub invert_tail_length: usize,
     /// When true, all free positions are tried and the one with minimal k_i is used.
     pub invert_minimal: bool,
-    /// When true, run a matching for the tail.
-    pub matching: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
     pub displace_it: bool,
@@ -99,7 +96,6 @@ impl Default for PTParams {
             // invert_tail_length: |_, _| 0,
             invert_tail_length: 0,
             invert_minimal: false,
-            matching: false,
             displace: false,
             displace_it: false,
             bits: 10,
@@ -449,62 +445,46 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
                 // Process the tail using direct inversion of the hash.
                 if !bucket_order_tail.is_empty() {
-                    if !self.params.matching {
-                        let mut free_slots = taken.iter_zeros().map(|i| (i, true)).collect_vec();
-                        let inverter = Inverter::new(hash::MulHash::C);
-                        if !self.params.invert_minimal {
-                            // Match buckets to free slots one-to-one.
-                            for (&b, &(f, _)) in std::iter::zip(bucket_order_tail, &free_slots) {
-                                assert_eq!(
+                    let mut free_slots = taken.iter_zeros().map(|i| (i, true)).collect_vec();
+                    let inverter = Inverter::new(hash::MulHash::C);
+                    if !self.params.invert_minimal {
+                        // Match buckets to free slots one-to-one.
+                        for (&b, &(f, _)) in std::iter::zip(bucket_order_tail, &free_slots) {
+                            assert_eq!(
                                 starts[b + 1] - starts[b],
                                 1,
                                 "All buckets in the tail must have size 1. Shrink the tail length."
                             );
-                                let hx = hashes[starts[b]];
-                                k[b] = inverter.invert_fr64(hx, self.n, f);
-                                // assert_eq!(self.position(hx, k[b]), f);
-                            }
-                        } else {
-                            // For each bucket find the free slot with the minimal ki.
-                            // TODO: We can make an early break as soon as the value has the right number of bits.
-                            for &b in bucket_order_tail {
-                                // assert_eq!(
-                                //     starts[b + 1] - starts[b],
-                                //     1,
-                                //     "All buckets in the tail must have size 1. Shrink the tail length."
-                                // );
-                                let mut min_ki = (u64::MAX, 0);
-                                let hx = hashes[starts[b]];
-
-                                for (i, &(f, free)) in free_slots.iter().enumerate() {
-                                    if free {
-                                        let ki_f = inverter.invert_fr64(hx, self.n, f);
-                                        min_ki = min(min_ki, (ki_f, i));
-                                    }
-                                }
-                                k[b] = min_ki.0;
-                                free_slots[min_ki.1].1 = false;
-                                // assert_eq!(self.position(hx, k[b]), f);
-                            }
-                        }
-                        for (f, _) in free_slots {
-                            taken.set(f, true);
+                            let hx = hashes[starts[b]];
+                            k[b] = inverter.invert_fr64(hx, self.n, f);
+                            // assert_eq!(self.position(hx, k[b]), f);
                         }
                     } else {
-                        let hashes = bucket_order_tail
-                            .iter()
-                            .map(|&b| hashes[starts[b]])
-                            .collect_vec();
-                        let free_slots = taken.iter_zeros().collect_vec();
-                        // Use matching.
-                        let kis = self.match_tail(&hashes, &taken);
-                        for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
-                            k[b] = ki;
+                        // For each bucket find the free slot with the minimal ki.
+                        // TODO: We can make an early break as soon as the value has the right number of bits.
+                        for &b in bucket_order_tail {
+                            // assert_eq!(
+                            //     starts[b + 1] - starts[b],
+                            //     1,
+                            //     "All buckets in the tail must have size 1. Shrink the tail length."
+                            // );
+                            let mut min_ki = (u64::MAX, 0);
+                            let hx = hashes[starts[b]];
+
+                            for (i, &(f, free)) in free_slots.iter().enumerate() {
+                                if free {
+                                    let ki_f = inverter.invert_fr64(hx, self.n, f);
+                                    min_ki = min(min_ki, (ki_f, i));
+                                }
+                            }
+                            k[b] = min_ki.0;
+                            free_slots[min_ki.1].1 = false;
+                            // assert_eq!(self.position(hx, k[b]), f);
                         }
-                        for f in free_slots {
-                            taken.set(f, true);
-                        }
-                    };
+                    }
+                    for (f, _) in free_slots {
+                        taken.set(f, true);
+                    }
                 }
             }
 
