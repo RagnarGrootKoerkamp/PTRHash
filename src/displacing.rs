@@ -113,22 +113,25 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
                 // TODO: Use get_unchecked and similar.
                 if best.0 != 0 {
-                    for delta in 0u64..kmax {
+                    'ki: for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
                         let hki = self.hash_ki(ki);
-                        let collision_score = b_positions(hki)
-                            .map(|p| {
-                                let s = unsafe { *slots.get_unchecked(p) };
-                                // Heavily penalize recently moved buckets.
-                                if s.is_none() {
-                                    0
-                                } else if recent.contains(&s) {
-                                    1000
-                                } else {
-                                    bucket_len(s).pow(2)
-                                }
-                            })
-                            .sum();
+                        let mut collision_score = 0;
+                        for p in b_positions(hki) {
+                            let s = unsafe { *slots.get_unchecked(p) };
+                            // Heavily penalize recently moved buckets.
+                            let new_score = if s.is_none() {
+                                continue;
+                            } else if recent.contains(&s) {
+                                1000
+                            } else {
+                                bucket_len(s).pow(2)
+                            };
+                            collision_score += new_score;
+                            if collision_score >= best.0 {
+                                continue 'ki;
+                            }
+                        }
                         if collision_score < best.0 && !duplicate_positions(b, ki) {
                             best = (collision_score, ki);
                             // Since we already checked for a collision-free solution,
