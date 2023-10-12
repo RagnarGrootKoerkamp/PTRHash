@@ -34,11 +34,6 @@ enum Command {
         #[arg(long, default_value_t = false)]
         no_fast_buckets: bool,
 
-        #[arg(long, default_value_t = 0)]
-        tail: usize,
-
-        #[arg(long)]
-        minimal: bool,
         #[arg(long)]
         displace: bool,
         #[arg(long, default_value_t = 10)]
@@ -78,8 +73,6 @@ fn main() {
             c,
             a,
             no_fast_buckets,
-            tail,
-            minimal,
             displace,
             bits,
         } => {
@@ -90,8 +83,6 @@ fn main() {
                 &keys,
                 PTParams {
                     fast_small_buckets: !no_fast_buckets,
-                    invert_tail_length: tail,
-                    invert_minimal: minimal,
                     displace,
                     bits,
                 },

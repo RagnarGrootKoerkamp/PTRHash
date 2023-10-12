@@ -14,7 +14,6 @@
 pub mod bucket;
 mod displacing;
 pub mod hash;
-mod hash_inverse;
 mod index;
 mod pack;
 mod pilots;
@@ -24,7 +23,7 @@ pub mod test;
 mod types;
 
 use std::{
-    cmp::{max, min},
+    cmp::max,
     collections::HashSet,
     default::Default,
     marker::PhantomData,
@@ -51,7 +50,6 @@ pub type SlotIdx = u32;
 
 use crate::{
     hash::Hash,
-    hash_inverse::Inverter,
     types::{BucketIdx, BucketVec},
 };
 
@@ -76,12 +74,6 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 pub struct PTParams {
     /// Dedicated functions for buckets up to size 4.
     pub fast_small_buckets: bool,
-    /// A function that returns the number of non-empty buckets at the end of size 1 for
-    /// which inversion is used instead of trial and error.
-    // pub invert_tail_length: fn(n: usize, m: usize) -> usize,
-    pub invert_tail_length: usize,
-    /// When true, all free positions are tried and the one with minimal k_i is used.
-    pub invert_minimal: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
     /// For displacement, the number of target bits.
@@ -92,9 +84,6 @@ impl Default for PTParams {
     fn default() -> Self {
         Self {
             fast_small_buckets: true,
-            // invert_tail_length: |_, _| 0,
-            invert_tail_length: 0,
-            invert_minimal: false,
             displace: false,
             bits: 10,
         }
@@ -352,7 +341,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (mut hashes, starts, mut bucket_order) = self.sort_buckets_flat(keys);
+            let (mut hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
 
             if LOG {
                 print_bucket_sizes(BucketIdx::range(self.m).map(|i| starts[i + 1] - starts[i]));
@@ -397,13 +386,9 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     continue 's;
                 }
             } else {
-                let (bucket_order_head, bucket_order_tail) = bucket_order_nonempty
-                    .split_at(self.m - num_empty_buckets - self.params.invert_tail_length);
-
                 // Step 5: For each bucket, find a suitable offset k_i.
-
                 if !self.params.fast_small_buckets {
-                    for &b in bucket_order_head {
+                    for &b in bucket_order_nonempty {
                         let bucket = &mut hashes[starts[b]..starts[b + 1]];
                         let bucket_size = bucket.len();
                         if bucket_size == 0 {
@@ -417,7 +402,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         k[b] = ki;
                     }
                 } else {
-                    let mut bs = bucket_order_head.iter().peekable();
+                    let mut bs = bucket_order_nonempty.iter().peekable();
 
                     // Iterate all buckets of size >= 5 as &[Hash].
                     while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] > 0) {
@@ -427,50 +412,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                             continue 's;
                         };
                         k[b] = ki;
-                    }
-                }
-
-                // Process the tail using direct inversion of the hash.
-                if !bucket_order_tail.is_empty() {
-                    let mut free_slots = taken.iter_zeros().map(|i| (i, true)).collect_vec();
-                    let inverter = Inverter::new(hash::MulHash::C);
-                    if !self.params.invert_minimal {
-                        // Match buckets to free slots one-to-one.
-                        for (&b, &(f, _)) in std::iter::zip(bucket_order_tail, &free_slots) {
-                            assert_eq!(
-                                starts[b + 1] - starts[b],
-                                1,
-                                "All buckets in the tail must have size 1. Shrink the tail length."
-                            );
-                            let hx = hashes[starts[b]];
-                            k[b] = inverter.invert_fr64(hx, self.n, f);
-                            // assert_eq!(self.position(hx, k[b]), f);
-                        }
-                    } else {
-                        // For each bucket find the free slot with the minimal ki.
-                        // TODO: We can make an early break as soon as the value has the right number of bits.
-                        for &b in bucket_order_tail {
-                            // assert_eq!(
-                            //     starts[b + 1] - starts[b],
-                            //     1,
-                            //     "All buckets in the tail must have size 1. Shrink the tail length."
-                            // );
-                            let mut min_ki = (u64::MAX, 0);
-                            let hx = hashes[starts[b]];
-
-                            for (i, &(f, free)) in free_slots.iter().enumerate() {
-                                if free {
-                                    let ki_f = inverter.invert_fr64(hx, self.n, f);
-                                    min_ki = min(min_ki, (ki_f, i));
-                                }
-                            }
-                            k[b] = min_ki.0;
-                            free_slots[min_ki.1].1 = false;
-                            // assert_eq!(self.position(hx, k[b]), f);
-                        }
-                    }
-                    for (f, _) in free_slots {
-                        taken.set(f, true);
                     }
                 }
             }
