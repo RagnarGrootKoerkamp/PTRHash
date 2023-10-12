@@ -93,41 +93,33 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     );
                     // eprintln!("b {b:>8} ki {:>8} stack: {stack:?}", kis[b]);
                 }
-                let ki = kis[b] + 1;
-                // (worst colliding bucket size, ki)
-                let mut best = (usize::MAX, u64::MAX);
 
                 // Check for a solution without collisions.
 
-                let b_positions = |ki: Pilot| {
-                    let hki = self.hash_ki(ki);
-                    unsafe {
-                        hashes
-                            .get_unchecked(starts[b]..starts[b + 1])
-                            .iter()
-                            .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
-                    }
-                };
+                let bucket = unsafe { &hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                let b_positions =
+                    |hki: Hash| bucket.iter().map(move |&hx| self.position_hki(hx, hki));
 
-                for ki in 0..kmax {
-                    let all_free = b_positions(ki).all(|p| unsafe { !taken.get_unchecked(p) });
-                    if all_free && !duplicate_positions(b, ki) {
-                        // Set the new ki.
-                        kis[b] = ki;
-                        for p in b_positions(ki) {
-                            slots[p] = b;
-                            unsafe { taken.set_unchecked(p, true) };
-                        }
-                        continue 'b;
+                // Hot-path for when there are no collisions, which is most of the buckets.
+                if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken) {
+                    kis[b] = ki;
+                    for p in b_positions(hki) {
+                        slots[p] = b;
                     }
+                    continue 'b;
                 }
+
+                let ki = kis[b] + 1;
+                // (worst colliding bucket size, ki)
+                let mut best = (usize::MAX, u64::MAX);
 
                 // TODO: First check if collision-free is possible.
                 // TODO: Use get_unchecked and similar.
                 if best.0 != 0 {
                     for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
-                        let collision_score = b_positions(ki)
+                        let hki = self.hash_ki(ki);
+                        let collision_score = b_positions(hki)
                             .map(|p| {
                                 let s = unsafe { *slots.get_unchecked(p) };
                                 // Heavily penalize recently moved buckets.
@@ -154,9 +146,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 let (_collision_score, ki) = best;
                 // eprintln!("{i:>8} {num_collisions:>2} collisions at ki {ki:>8}");
                 kis[b] = ki;
+                let hki = self.hash_ki(ki);
 
                 // Drop the collisions and set the new ki.
-                for p in b_positions(ki) {
+                for p in b_positions(hki) {
                     // THIS IS A HOT INSTRUCTION.
                     let b2 = slots[p];
                     if b2.is_some() {

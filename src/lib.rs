@@ -268,6 +268,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         (hx ^ self.hash_ki(ki)).reduce(self.rem_n)
     }
 
+    fn position_hki(&self, hx: Hash, hki: Hash) -> usize {
+        (hx ^ hki).reduce(self.rem_n)
+    }
+
     /// See index.rs for additional streaming/SIMD implementations.
     #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
@@ -387,7 +391,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 let kmax = 20 * self.n as u64;
                 for &b in bucket_order_nonempty {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some(ki) = self.find_pilot(kmax, bucket, &mut taken) else {
+                    let Some((ki, _hki)) = self.find_pilot(kmax, bucket, &mut taken) else {
                         continue 's;
                     };
                     k[b] = ki;
