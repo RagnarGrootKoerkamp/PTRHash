@@ -41,8 +41,6 @@ enum Command {
         minimal: bool,
         #[arg(long)]
         displace: bool,
-        #[arg(long)]
-        displace_it: bool,
         #[arg(long, default_value_t = 10)]
         bits: usize,
     },
@@ -83,7 +81,6 @@ fn main() {
             tail,
             minimal,
             displace,
-            displace_it,
             bits,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
@@ -96,7 +93,6 @@ fn main() {
                     invert_tail_length: tail,
                     invert_minimal: minimal,
                     displace,
-                    displace_it,
                     bits,
                 },
             );

@@ -84,7 +84,6 @@ pub struct PTParams {
     pub invert_minimal: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
-    pub displace_it: bool,
     /// For displacement, the number of target bits.
     pub bits: usize,
 }
@@ -97,7 +96,6 @@ impl Default for PTParams {
             invert_tail_length: 0,
             invert_minimal: false,
             displace: false,
-            displace_it: false,
             bits: 10,
         }
     }
@@ -392,17 +390,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     &hashes,
                     &starts,
                     &bucket_order,
-                    self.params.bits,
-                    &mut k,
-                    &mut taken,
-                ) {
-                    continue 's;
-                }
-            } else if self.params.displace_it {
-                if !self.displace_iterative(
-                    &hashes,
-                    &starts,
-                    &mut bucket_order,
                     self.params.bits,
                     &mut k,
                     &mut taken,
