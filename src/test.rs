@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 use std::{hint::black_box, time::SystemTime};
 
-use rand::{seq::SliceRandom, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 
 use crate::{hash::*, reduce::*};
 
@@ -17,10 +17,12 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
     for _ in 0..n {
         keys.push(rng.gen());
     }
-    radsort::sort(&mut keys);
-    keys.dedup();
-    assert_eq!(keys.len(), n, "duplicate keys generated");
-    keys.shuffle(&mut rng);
+    let mut keys2 = keys.clone();
+    radsort::sort(&mut keys2);
+    assert!(
+        keys2.partition_dedup().1.is_empty(),
+        "duplicate keys generated"
+    );
     keys
 }
 
