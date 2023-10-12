@@ -34,6 +34,8 @@ enum Command {
         displace: bool,
         #[arg(long, default_value_t = 10)]
         bits: usize,
+        #[arg(long)]
+        stats: bool,
     },
 
     /// Measure query time on randomly-constructed PTHash.
@@ -48,6 +50,8 @@ enum Command {
         bits: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
+        #[arg(long)]
+        stats: bool,
     },
 }
 
@@ -70,9 +74,19 @@ fn main() {
             a,
             displace,
             bits,
+            stats,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
-            let pt = PT::new_with_params(c, a, &keys, PTParams { displace, bits });
+            let pt = PT::new_with_params(
+                c,
+                a,
+                &keys,
+                PTParams {
+                    displace,
+                    bits,
+                    print_stats: stats,
+                },
+            );
             eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
         }
         Command::Query {
@@ -81,6 +95,7 @@ fn main() {
             a,
             bits,
             total,
+            stats,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
             type PT = PTHash<
@@ -92,7 +107,16 @@ fn main() {
                 hash::MulHash,
                 true,
             >;
-            let pt = PT::new_random(c, a, n, bits);
+            let pt = PT::new_random_params(
+                c,
+                a,
+                n,
+                PTParams {
+                    print_stats: stats,
+                    bits,
+                    ..Default::default()
+                },
+            );
             eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
             let loops = total.div_ceil(n);
 

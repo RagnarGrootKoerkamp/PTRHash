@@ -72,6 +72,8 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Clone, Copy, Debug)]
 pub struct PTParams {
+    /// Print bucket size and ki stats after construction.
+    pub print_stats: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
     /// For displacement, the number of target bits.
@@ -81,6 +83,7 @@ pub struct PTParams {
 impl Default for PTParams {
     fn default() -> Self {
         Self {
+            print_stats: false,
             displace: false,
             bits: 10,
         }
@@ -167,9 +170,20 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
     /// PTHash with random pivots.
     pub fn new_random(c: f32, alpha: f32, n: usize, bits: usize) -> Self {
-        let mut pthash = Self::init(c, alpha, n);
+        Self::new_random_params(
+            c,
+            alpha,
+            n,
+            PTParams {
+                bits,
+                ..Default::default()
+            },
+        )
+    }
+    pub fn new_random_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
+        let mut pthash = Self::init_with_params(c, alpha, n, params);
         let k = (0..pthash.m)
-            .map(|_| random::<u64>() & ((1 << bits) - 1))
+            .map(|_| random::<u64>() & ((1 << params.bits) - 1))
             .collect();
         pthash.k = Packed::new(k);
         let mut remap_vals = (pthash.n0..pthash.n)
@@ -344,10 +358,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             // Step 2: Determine the buckets.
             let (mut hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
 
-            if LOG {
-                print_bucket_sizes(BucketIdx::range(self.m).map(|i| starts[i + 1] - starts[i]));
-            }
-
             // Check for duplicate hashes inside bucket.
             for b in BucketIdx::range(self.m) {
                 let bucket = &mut hashes[starts[b]..starts[b + 1]];
@@ -403,14 +413,13 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 eprintln!("Found seed after {tries} tries.");
             }
 
-            // if LOG {
-            // print_bucket_sizes_with_ki(bucket_order.iter().map(|&b| (buckets[b].len(), k[b])));
-            print_bucket_sizes_with_ki(
-                bucket_order
-                    .iter()
-                    .map(|&b| (starts[b + 1] - starts[b], k[b])),
-            );
-            // }
+            if self.params.print_stats {
+                print_bucket_sizes_with_ki(
+                    bucket_order
+                        .iter()
+                        .map(|&b| (starts[b + 1] - starts[b], k[b])),
+                );
+            }
 
             break 's;
         }
