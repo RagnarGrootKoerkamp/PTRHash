@@ -42,10 +42,6 @@ enum Command {
         #[arg(long)]
         matching: bool,
         #[arg(long)]
-        peel: bool,
-        #[arg(long)]
-        peel2: bool,
-        #[arg(long)]
         displace: bool,
         #[arg(long)]
         displace_it: bool,
@@ -89,8 +85,6 @@ fn main() {
             tail,
             minimal,
             matching,
-            peel,
-            peel2,
             displace,
             displace_it,
             bits,
@@ -105,8 +99,6 @@ fn main() {
                     invert_tail_length: tail,
                     invert_minimal: minimal,
                     matching,
-                    peel,
-                    peel2,
                     displace,
                     displace_it,
                     bits,

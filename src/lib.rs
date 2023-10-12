@@ -18,7 +18,6 @@ mod hash_inverse;
 mod index;
 mod matching;
 mod pack;
-mod peeling;
 mod pilots;
 pub mod reduce;
 mod sort_buckets;
@@ -86,10 +85,6 @@ pub struct PTParams {
     pub invert_minimal: bool,
     /// When true, run a matching for the tail.
     pub matching: bool,
-    /// When true, peel the tail.
-    pub peel: bool,
-    /// When true, peel all buckets of size 2.
-    pub peel2: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
     pub displace_it: bool,
@@ -105,8 +100,6 @@ impl Default for PTParams {
             invert_tail_length: 0,
             invert_minimal: false,
             matching: false,
-            peel: false,
-            peel2: false,
             displace: false,
             displace_it: false,
             bits: 10,
@@ -444,46 +437,13 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     let mut bs = bucket_order_head.iter().peekable();
 
                     // Iterate all buckets of size >= 5 as &[Hash].
-                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 0) {
-                        let bucket = &mut hashes[starts[b]..starts[b + 1]];
-                        let bucket_size = bucket.len();
-                        if bucket_size == 0 {
-                            break;
-                        }
-
+                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] > 0) {
+                        let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
                         let Some(ki) = self.find_pilot(20 * self.n as u64, bucket, &mut taken)
                         else {
                             continue 's;
                         };
                         k[b] = ki;
-                    }
-
-                    if !self.params.peel2 {
-                        // todo!("Find_pilot_fixed");
-                    } else {
-                        // find_pilot_fixed!(5);
-                        // find_pilot_fixed!(4);
-                        for bucket_size in [5, 4, 3, 2, 1] {
-                            let mut local_bs = vec![];
-                            let mut local_hashes = vec![];
-
-                            while let Some(&b) =
-                                bs.next_if(|&&b| starts[b + 1] - starts[b] == bucket_size)
-                            {
-                                local_bs.push(b);
-                                local_hashes.push(&hashes[starts[b]..starts[b + 1]]);
-                            }
-                            // Use matching.
-                            let kis = self.peel_size(local_hashes.into_iter(), &taken, bucket_size);
-                            for (b, ki) in std::iter::zip(local_bs, kis) {
-                                for i in 0..bucket_size {
-                                    let p = self.position(hashes[starts[b] + i], ki);
-                                    assert!(!taken[p]);
-                                    taken.set(p, true);
-                                }
-                                k[b] = ki;
-                            }
-                        }
                     }
                 }
 
@@ -537,7 +497,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                             .collect_vec();
                         let free_slots = taken.iter_zeros().collect_vec();
                         // Use matching.
-                        let kis = self.match_tail(&hashes, &taken, self.params.peel);
+                        let kis = self.match_tail(&hashes, &taken);
                         for (&b, ki) in std::iter::zip(bucket_order_tail, kis) {
                             k[b] = ki;
                         }

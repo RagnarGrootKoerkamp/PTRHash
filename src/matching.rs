@@ -10,8 +10,8 @@ use super::*;
 impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
     PTHash<P, F, Rm, Rn, Hx, Hk, T>
 {
-    pub fn match_tail(&self, hashes: &Vec<Hash>, taken: &BitVec, peel: bool) -> Vec<u64> {
-        let include_st_edges = !peel;
+    pub fn match_tail(&self, hashes: &Vec<Hash>, taken: &BitVec) -> Vec<u64> {
+        let include_st_edges = true;
 
         // eprintln!("MATCH");
         // Map free slots to integers in [0, n) using a hash map, using less
@@ -146,13 +146,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     .sort_unstable_by_key(|&u| starts[u + 1] - starts[u]);
             }
 
-            if peel {
-                if let (true, eis) =
-                    crate::peeling::DoubleSidedPeeler::new(f, e, edges, starts).run()
-                {
-                    return eis.iter().map(|&ei| kis[ei]).collect();
-                }
-            } else if let Some(eis) = DinicMatcher::new(f, e, edges, starts, s, t).run() {
+            if let Some(eis) = DinicMatcher::new(f, e, edges, starts, s, t).run() {
                 return eis.iter().map(|&ei| kis[ei]).collect();
             }
         }
