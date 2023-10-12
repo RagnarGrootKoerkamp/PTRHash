@@ -72,8 +72,6 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Clone, Copy, Debug)]
 pub struct PTParams {
-    /// Dedicated functions for buckets up to size 4.
-    pub fast_small_buckets: bool,
     /// When true, do global displacement hashing.
     pub displace: bool,
     /// For displacement, the number of target bits.
@@ -83,7 +81,6 @@ pub struct PTParams {
 impl Default for PTParams {
     fn default() -> Self {
         Self {
-            fast_small_buckets: true,
             displace: false,
             bits: 10,
         }
@@ -386,33 +383,14 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     continue 's;
                 }
             } else {
-                // Step 5: For each bucket, find a suitable offset k_i.
-                if !self.params.fast_small_buckets {
-                    for &b in bucket_order_nonempty {
-                        let bucket = &mut hashes[starts[b]..starts[b + 1]];
-                        let bucket_size = bucket.len();
-                        if bucket_size == 0 {
-                            break;
-                        }
-
-                        let Some(ki) = self.find_pilot(20 * self.n as u64, bucket, &mut taken)
-                        else {
-                            continue 's;
-                        };
-                        k[b] = ki;
-                    }
-                } else {
-                    let mut bs = bucket_order_nonempty.iter().peekable();
-
-                    // Iterate all buckets of size >= 5 as &[Hash].
-                    while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] > 0) {
-                        let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                        let Some(ki) = self.find_pilot(20 * self.n as u64, bucket, &mut taken)
-                        else {
-                            continue 's;
-                        };
-                        k[b] = ki;
-                    }
+                // Iterate all buckets of size >= 5 as &[Hash].
+                let kmax = 20 * self.n as u64;
+                for &b in bucket_order_nonempty {
+                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                    let Some(ki) = self.find_pilot(kmax, bucket, &mut taken) else {
+                        continue 's;
+                    };
+                    k[b] = ki;
                 }
             }
 

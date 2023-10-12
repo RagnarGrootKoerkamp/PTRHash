@@ -30,10 +30,6 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 1.0)]
         a: f32,
-        /// Disable fast small buckets.
-        #[arg(long, default_value_t = false)]
-        no_fast_buckets: bool,
-
         #[arg(long)]
         displace: bool,
         #[arg(long, default_value_t = 10)]
@@ -72,21 +68,11 @@ fn main() {
             n,
             c,
             a,
-            no_fast_buckets,
             displace,
             bits,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
-            let pt = PT::new_with_params(
-                c,
-                a,
-                &keys,
-                PTParams {
-                    fast_small_buckets: !no_fast_buckets,
-                    displace,
-                    bits,
-                },
-            );
+            let pt = PT::new_with_params(c, a, &keys, PTParams { displace, bits });
             eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
         }
         Command::Query {
