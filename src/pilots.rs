@@ -8,6 +8,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 {
     /// TODO: Prefetching for higher ki.
     /// TODO: Vectorization over ki?
+    /// TODO: Instead of looping over hx for each ki, loop over 16 ki in
+    /// parallel and only prefetch for the next hx when the previous hx wasn't taken.
+    /// For buckets of size 2-4 this could save quite some prefetches, and may
+    /// allow better vectorization.
     #[inline(always)]
     pub fn find_pilot(
         &self,
@@ -18,7 +22,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         let addr = taken.as_raw_slice().as_ptr();
 
         const L: u64 = 16;
-        let lookahead = L / bucket.len() as u64;
+        let lookahead = L.div_ceil(bucket.len() as u64);
 
         let prefetch = |ki| {
             let hki = self.hash_ki(ki);
@@ -70,5 +74,15 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             unsafe { taken.set_unchecked(p, true) };
         }
         true
+    }
+
+    #[inline(always)]
+    pub fn find_pilot_array<const L: usize>(
+        &self,
+        kmax: u64,
+        bucket: &[Hash; L],
+        taken: &mut BitVec,
+    ) -> Option<(u64, Hash)> {
+        self.find_pilot(kmax, bucket, taken)
     }
 }

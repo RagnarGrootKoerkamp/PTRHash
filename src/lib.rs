@@ -375,9 +375,46 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             } else {
                 // Iterate all buckets of size >= 5 as &[Hash].
                 let kmax = 20 * self.n as u64;
-                for &b in bucket_order_nonempty {
+                let mut bs = bucket_order.iter().peekable();
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
                     let Some((ki, _hki)) = self.find_pilot(kmax, bucket, &mut taken) else {
+                        continue 's;
+                    };
+                    k[b] = ki;
+                }
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 4) {
+                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                    let Some((ki, _hki)) =
+                        self.find_pilot_array::<4>(kmax, bucket.split_array_ref().0, &mut taken)
+                    else {
+                        continue 's;
+                    };
+                    k[b] = ki;
+                }
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 3) {
+                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                    let Some((ki, _hki)) =
+                        self.find_pilot_array::<3>(kmax, bucket.split_array_ref().0, &mut taken)
+                    else {
+                        continue 's;
+                    };
+                    k[b] = ki;
+                }
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
+                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                    let Some((ki, _hki)) =
+                        self.find_pilot_array::<2>(kmax, bucket.split_array_ref().0, &mut taken)
+                    else {
+                        continue 's;
+                    };
+                    k[b] = ki;
+                }
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 1) {
+                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                    let Some((ki, _hki)) =
+                        self.find_pilot_array::<1>(kmax, bucket.split_array_ref().0, &mut taken)
+                    else {
                         continue 's;
                     };
                     k[b] = ki;
