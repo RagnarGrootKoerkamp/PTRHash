@@ -47,10 +47,7 @@ pub type SlotIdx = u32;
 // type Remap = sucds::mii_sequences::EliasFano;
 // type Remap = Vec<SlotIdx>;
 
-use crate::{
-    hash::Hash,
-    types::{BucketIdx, BucketVec},
-};
+use crate::{hash::Hash, types::BucketVec};
 
 #[allow(unused)]
 const LOG: bool = false;
@@ -332,17 +329,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (mut hashes, starts, bucket_order) = self.sort_buckets(keys);
-
-            // Check for duplicate hashes inside bucket.
-            for b in BucketIdx::range(self.m) {
-                let bucket = &mut hashes[starts[b]..starts[b + 1]];
-                bucket.sort_unstable();
-                if !bucket.partition_dedup().1.is_empty() {
-                    // Duplicate hash found.
-                    continue 's;
-                }
-            }
+            let Some((hashes, starts, bucket_order)) = self.sort_buckets(keys) else {
+                // Found duplicate hashes.
+                continue 's;
+            };
 
             // Reset memory.
             k.reset(self.m, 0);

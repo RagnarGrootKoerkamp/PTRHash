@@ -10,8 +10,13 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
     /// 2. Start indices of each bucket.
     /// 3. Order of the buckets.
     ///
+    /// This guarantees that hashes within each bucket are sorted, and returns
+    /// None if that's not the case.
     #[must_use]
-    pub fn sort_buckets(&self, keys: &[u64]) -> (Vec<Hash>, BucketVec<usize>, Vec<BucketIdx>) {
+    pub fn sort_buckets(
+        &self,
+        keys: &[u64],
+    ) -> Option<(Vec<Hash>, BucketVec<usize>, Vec<BucketIdx>)> {
         // NOTE: For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
         // <self.p1 and those >=self.p1, and then sort each group using the low
@@ -19,6 +24,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         // TODO: Generalize to other reduction methods.
         let mut hashes = keys.iter().map(|key| self.hash_key(key)).collect_vec();
         radsort::sort_by_key(&mut hashes, |&h| (h >= self.p1, h.get_low()));
+
+        if !hashes.partition_dedup().1.is_empty() {
+            return None;
+        }
 
         // We shouldn't have buckets that large.
         let mut pos_for_size = vec![0; 2];
@@ -61,9 +70,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         let expected_bucket_size = self.n as f32 / self.m as f32;
         assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
 
-        (
-            hashes, // buckets.into_iter().map(|(_b, h)| h).collect(),
-            starts, order,
-        )
+        Some((hashes, starts, order))
     }
 }
