@@ -58,7 +58,7 @@ enum Command {
 }
 
 type PT =
-    PTHash<Vec<u8>, Vec<SlotIdx>, reduce::FR32L, reduce::FR64, hash::Murmur, hash::MulHash, true>;
+    PTHash<Vec<u8>, Vec<SlotIdx>, reduce::FR32L, reduce::FR64, hash::FxHash, hash::MulHash, true>;
 
 fn main() {
     let Args { command } = Args::parse();
@@ -103,15 +103,6 @@ fn main() {
             stats,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
-            type PT = PTHash<
-                Vec<u8>,
-                Vec<SlotIdx>,
-                reduce::FR32L,
-                reduce::FR64,
-                hash::FxHash,
-                hash::MulHash,
-                true,
-            >;
             let pt = PT::new_random_params(
                 c,
                 a,

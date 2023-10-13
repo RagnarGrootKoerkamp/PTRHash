@@ -24,6 +24,12 @@ impl BucketIdx {
 /// Can only be indexed by `BucketIdx`.
 pub struct BucketVec<T>(Vec<T>);
 
+impl<T> Extend<T> for BucketVec<T> {
+    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
+        <Vec<T> as Extend<T>>::extend(&mut self.0, iter)
+    }
+}
+
 impl<T: Clone> BucketVec<T> {
     pub fn reset(&mut self, len: usize, value: T) {
         self.0.clear();
