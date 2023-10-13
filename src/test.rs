@@ -7,18 +7,28 @@ use crate::{hash::*, reduce::*};
 
 use super::*;
 
+/// First sort by the 32 high bits, followed by a slower sort on the remaining buckets.
+fn sort_by_high_half(hashes: &mut [u64]) {
+    let n = hashes.len();
+    radsort::sort_by_key(hashes, |h| h >> 32);
+    hashes
+        .group_by_mut(|h1, h2| h1 >> 32 == h2 >> 32)
+        .for_each(|range| {
+            if range.len() > 1 {
+                range.sort()
+            }
+        });
+}
+
 pub fn generate_keys(n: usize) -> Vec<Key> {
     let seed = random();
     if LOG {
         eprintln!("seed for {n}: {seed}");
     }
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-    let mut keys = Vec::with_capacity(n);
-    for _ in 0..n {
-        keys.push(rng.gen());
-    }
+    let keys = (0..n).map(|_| rng.gen()).collect_vec();
     let mut keys2 = keys.clone();
-    radsort::sort(&mut keys2);
+    sort_by_high_half(&mut keys2);
     assert!(
         keys2.partition_dedup().1.is_empty(),
         "duplicate keys generated"
