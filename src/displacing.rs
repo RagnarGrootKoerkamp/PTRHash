@@ -111,7 +111,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 // (worst colliding bucket size, ki)
                 let mut best = (usize::MAX, u64::MAX);
 
-                // TODO: Use get_unchecked and similar.
                 if best.0 != 0 {
                     'ki: for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
@@ -123,7 +122,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                             let new_score = if s.is_none() {
                                 continue;
                             } else if recent.contains(&s) {
-                                1000
+                                continue 'ki;
                             } else {
                                 bucket_len(s).pow(2)
                             };
@@ -132,7 +131,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                                 continue 'ki;
                             }
                         }
-                        if collision_score < best.0 && !duplicate_positions(b, ki) {
+                        // This check takes 2% of times even though it almost
+                        // always passes. Can we delay it to filling of the
+                        // positions table, and backtrack if needed.
+                        if !duplicate_positions(b, ki) {
                             best = (collision_score, ki);
                             // Since we already checked for a collision-free solution,
                             // the next best is a single collision of size b_len.
@@ -160,8 +162,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         stack.push(b2);
                         displacements += 1;
                         for p2 in positions(b2, kis[b2]) {
-                            slots[p2] = BucketIdx::NONE;
-                            unsafe { taken.set_unchecked(p2, false) };
+                            unsafe {
+                                *slots.get_unchecked_mut(p2) = BucketIdx::NONE;
+                                taken.set_unchecked(p2, false);
+                            }
                         }
                         let b2_len = bucket_len(b2);
                         if b2_len - b_len > max_len_delta {
@@ -170,8 +174,10 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         }
                     }
                     // eprintln!("Set slot {:>8} to {:>8}", p, b);
-                    slots[p] = b;
-                    unsafe { taken.set_unchecked(p, true) };
+                    unsafe {
+                        *slots.get_unchecked_mut(p) = b;
+                        taken.set_unchecked(p, true);
+                    }
                 }
 
                 recent_idx += 1;
