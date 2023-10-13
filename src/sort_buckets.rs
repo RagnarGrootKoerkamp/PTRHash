@@ -1,4 +1,6 @@
 #![allow(unused)]
+use std::{cmp::Reverse, default};
+
 use crate::types::BucketIdx;
 
 use super::*;
@@ -26,7 +28,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         radsort::sort_by_key(&mut buckets, |(b, _h)| (*b));
 
         // We shouldn't have buckets that large.
-        let mut sizes = vec![0; 2];
+        let mut pos_for_size = vec![0; 2];
 
         let mut starts = BucketVec::with_capacity(self.m + 1);
         let mut end = 0;
@@ -39,20 +41,29 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             starts.push(end);
 
             let l = end - start;
-            if l >= sizes.len() {
-                sizes.resize(l + 1, 0);
+            if l >= pos_for_size.len() {
+                pos_for_size.resize(l + 1, 0);
             }
-            sizes[l] += 1;
+            pos_for_size[l] += 1;
         }
 
-        // TODO: Accumulate sizes; write bucket numbers directly to the right position.
+        // NOTE: We sort in reverse so long buckets come first.
+        let max_bucket_size = pos_for_size.len() - 1;
+        let mut acc = 0;
+        for i in (0..=max_bucket_size).rev() {
+            let mut tmp = pos_for_size[i];
+            pos_for_size[i] = acc;
+            acc += tmp;
+        }
 
-        let mut order: Vec<BucketIdx> = BucketIdx::range(self.m).collect();
-        // TODO: This is better done by first counting the number of buckets of
-        // each size and then inserting them directly in the right slot.
-        radsort::sort_by_cached_key(&mut order, |&v| -((starts[v + 1] - starts[v]) as isize));
+        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.m];
 
-        let max_bucket_size = starts[order[0] + 1] - starts[order[0]];
+        for b in BucketIdx::range(self.m) {
+            let l = starts[b + 1] - starts[b];
+            order[pos_for_size[l]] = b;
+            pos_for_size[l] += 1;
+        }
+
         let expected_bucket_size = self.n as f32 / self.m as f32;
         assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
 
