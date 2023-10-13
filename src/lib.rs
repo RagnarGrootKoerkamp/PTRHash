@@ -8,7 +8,8 @@
     iter_advance_by,
     slice_partition_dedup,
     iter_collect_into,
-    slice_index_methods
+    slice_index_methods,
+    is_sorted
 )]
 #![allow(incomplete_features)]
 pub mod bucket;
@@ -27,7 +28,6 @@ use std::{
     collections::HashSet,
     default::Default,
     marker::PhantomData,
-    ops::Range,
     simd::{LaneCount, Simd, SupportedLaneCount},
 };
 
@@ -39,9 +39,8 @@ use reduce::Reduce;
 
 type Key = u64;
 use hash::Hasher;
-use smallvec::SmallVec;
 
-// TODO: Shrink this to u32.
+// TODO: Shrink this to u32 or u8.
 type Pilot = u64;
 pub type SlotIdx = u32;
 
@@ -309,29 +308,6 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         }
     }
 
-    /// Return the hashes in each bucket and the order of the buckets.
-    /// See sort_buckets.rs for additional implementations.
-    #[must_use]
-    pub fn sort_buckets(&self, keys: &Vec<u64>) -> (Vec<SmallVec<[Hash; 4]>>, Vec<usize>) {
-        // TODO: Rewrite to non-nested vec?
-        let mut buckets: Vec<SmallVec<[Hash; 4]>> = vec![Default::default(); self.m];
-        for key in keys {
-            let h = self.hash_key(key);
-            let b = self.bucket(h);
-            buckets[b].push(h);
-        }
-
-        // Step 3: Sort buckets by size.
-        let mut bucket_order: Vec<_> = (0..self.m).collect();
-        radsort::sort_by_key(&mut bucket_order, |v| usize::MAX - buckets[*v].len());
-
-        let max_bucket_size = buckets[bucket_order[0]].len();
-        let expected_bucket_size = self.n as f32 / self.m as f32;
-        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
-
-        (buckets, bucket_order)
-    }
-
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
@@ -356,7 +332,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             self.s = random();
 
             // Step 2: Determine the buckets.
-            let (mut hashes, starts, bucket_order) = self.sort_buckets_flat(keys);
+            let (mut hashes, starts, bucket_order) = self.sort_buckets(keys);
 
             // Check for duplicate hashes inside bucket.
             for b in BucketIdx::range(self.m) {

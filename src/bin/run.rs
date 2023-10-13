@@ -67,8 +67,8 @@ fn main() {
         Command::Stats { n, c, a } => {
             let keys = pthash_rs::test::generate_keys(n);
             let pthash = PT::init(c, a, n);
-            let (buckets, _order) = pthash.sort_buckets(&keys);
-            print_bucket_sizes(buckets.iter().map(|b| b.len()));
+            let (_buckets, starts, _order) = pthash.sort_buckets(&keys);
+            print_bucket_sizes(starts.iter().zip(starts.iter().skip(1)).map(|(a, b)| b - a));
         }
         Command::Build {
             n,

@@ -17,6 +17,16 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
     /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
     pub(super) fn bucket_thirds_shift(&self, hx: Hash) -> usize {
         let mod_mp2 = hx.reduce(self.rem_mp2);
+        let large = (hx >= self.p1) as usize;
+        self.p2 * large + (mod_mp2 >> (1 - large))
+    }
+
+    /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
+    /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
+    ///
+    /// NOTE: This one saves an instruction over `bucket_thirds_shift`, but does not respect the order of h.
+    pub(super) fn bucket_thirds_shift_inverted(&self, hx: Hash) -> usize {
+        let mod_mp2 = hx.reduce(self.rem_mp2);
         let small = (hx < self.p1) as usize;
         self.mp2 * small + (mod_mp2 >> small)
     }
