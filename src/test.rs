@@ -9,7 +9,6 @@ use super::*;
 
 /// First sort by the 32 high bits, followed by a slower sort on the remaining buckets.
 fn sort_by_high_half(hashes: &mut [u64]) {
-    let n = hashes.len();
     radsort::sort_by_key(hashes, |h| h >> 32);
     hashes
         .group_by_mut(|h1, h2| h1 >> 32 == h2 >> 32)
