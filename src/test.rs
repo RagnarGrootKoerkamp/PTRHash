@@ -15,16 +15,14 @@ fn sort_by_high_half(hashes: &mut [u64]) {
         .group_by_mut(|h1, h2| h1 >> 32 == h2 >> 32)
         .for_each(|range| {
             if range.len() > 1 {
-                range.sort()
+                range.sort();
             }
         });
 }
 
 pub fn generate_keys(n: usize) -> Vec<Key> {
-    let seed = random();
-    if LOG {
-        eprintln!("seed for {n}: {seed}");
-    }
+    // let seed = random();
+    let seed = 31415;
     let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
     let keys = (0..n).map(|_| rng.gen()).collect_vec();
     let mut keys2 = keys.clone();

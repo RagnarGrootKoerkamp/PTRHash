@@ -1,15 +1,16 @@
 #![feature(
-    iter_array_chunks,
-    core_intrinsics,
-    split_array,
     array_chunks,
-    portable_simd,
+    core_intrinsics,
     generic_const_exprs,
+    is_sorted,
     iter_advance_by,
-    slice_partition_dedup,
+    iter_array_chunks,
     iter_collect_into,
+    portable_simd,
+    slice_group_by,
     slice_index_methods,
-    is_sorted
+    slice_partition_dedup,
+    split_array
 )]
 #![allow(incomplete_features)]
 pub mod bucket;
@@ -34,7 +35,8 @@ use std::{
 use bitvec::bitvec;
 use itertools::Itertools;
 use pack::Packed;
-use rand::random;
+use rand::{random, Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
 use reduce::Reduce;
 
 type Key = u64;
@@ -313,6 +315,8 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         let mut tries = 0;
         const MAX_TRIES: usize = 3;
 
+        let mut rng = ChaCha8Rng::seed_from_u64(31415);
+
         // Loop over global seeds `s`.
         's: loop {
             tries += 1;
@@ -326,7 +330,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             }
 
             // Step 1: choose a global seed s.
-            self.s = random();
+            self.s = rng.gen();
 
             // Step 2: Determine the buckets.
             let Some((hashes, starts, bucket_order)) = self.sort_buckets(keys) else {
