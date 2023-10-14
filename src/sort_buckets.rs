@@ -10,8 +10,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
     /// 2. Start indices of each bucket.
     /// 3. Order of the buckets.
     ///
-    /// This guarantees that hashes within each bucket are sorted, and returns
-    /// None if that's not the case.
+    /// This returns None if duplicate hashes are found.
     #[must_use]
     pub fn sort_buckets(
         &self,
@@ -25,8 +24,13 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         let mut hashes = keys.iter().map(|key| self.hash_key(key)).collect_vec();
         radsort::sort_by_key(&mut hashes, |&h| (h >= self.p1, h.get_low()));
 
-        if !hashes.partition_dedup().1.is_empty() {
-            return None;
+        for range in hashes.group_by_mut(|h1, h2| h1.get_low() == h2.get_low()) {
+            if range.len() > 1 {
+                range.sort();
+                if !range.partition_dedup().1.is_empty() {
+                    return None;
+                }
+            }
         }
 
         // We shouldn't have buckets that large.
