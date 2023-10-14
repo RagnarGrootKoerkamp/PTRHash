@@ -18,13 +18,14 @@ mod displacing;
 pub mod hash;
 mod index;
 mod pack;
-mod pilots;
+pub mod pilots;
 pub mod reduce;
 mod sort_buckets;
 pub mod test;
 mod types;
 
 use std::{
+    cell::Cell,
     cmp::max,
     collections::HashSet,
     default::Default,
@@ -35,6 +36,7 @@ use std::{
 use bitvec::bitvec;
 use itertools::Itertools;
 use pack::Packed;
+use pilots::PilotAlg;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use reduce::Reduce;
@@ -76,6 +78,8 @@ pub struct PTParams {
     pub displace: bool,
     /// For displacement, the number of target bits.
     pub bits: usize,
+    /// Algorithm for pilot selection
+    pub pilot_alg: PilotAlg,
 }
 
 impl Default for PTParams {
@@ -84,6 +88,7 @@ impl Default for PTParams {
             print_stats: false,
             displace: false,
             bits: 10,
+            pilot_alg: Default::default(),
         }
     }
 }
@@ -130,6 +135,10 @@ pub struct PTHash<
     remap: F,
     _hx: PhantomData<Hx>,
     _hk: PhantomData<Hk>,
+
+    /// Collect some statistics
+    prefetches: Cell<usize>,
+    lookups: Cell<usize>,
 }
 
 impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
@@ -153,6 +162,9 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             remap: F::new(self.remap.to_vec()),
             _hk: PhantomData,
             _hx: PhantomData,
+
+            prefetches: 0.into(),
+            lookups: 0.into(),
         }
     }
 
@@ -247,6 +259,8 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             remap: F::default(),
             _hk: PhantomData,
             _hx: PhantomData,
+            prefetches: 0.into(),
+            lookups: 0.into(),
         }
     }
 
@@ -370,45 +384,59 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 // Iterate all buckets of size >= 5 as &[Hash].
                 let kmax = 20 * self.n as u64;
                 let mut bs = bucket_order.iter().peekable();
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 5) {
+                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 1) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) = self.find_pilot(kmax, bucket, &mut taken) else {
+                    let Some((ki, _hki)) =
+                        self.find_pilot(kmax, bucket, &mut taken, self.params.pilot_alg)
+                    else {
                         continue 's;
                     };
                     k[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 4) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) =
-                        self.find_pilot_array::<4>(kmax, bucket.split_array_ref().0, &mut taken)
-                    else {
+                    let Some((ki, _hki)) = self.find_pilot_array::<4>(
+                        kmax,
+                        bucket.split_array_ref().0,
+                        &mut taken,
+                        self.params.pilot_alg,
+                    ) else {
                         continue 's;
                     };
                     k[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 3) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) =
-                        self.find_pilot_array::<3>(kmax, bucket.split_array_ref().0, &mut taken)
-                    else {
+                    let Some((ki, _hki)) = self.find_pilot_array::<3>(
+                        kmax,
+                        bucket.split_array_ref().0,
+                        &mut taken,
+                        self.params.pilot_alg,
+                    ) else {
                         continue 's;
                     };
                     k[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) =
-                        self.find_pilot_array::<2>(kmax, bucket.split_array_ref().0, &mut taken)
-                    else {
+                    let Some((ki, _hki)) = self.find_pilot_array::<2>(
+                        kmax,
+                        bucket.split_array_ref().0,
+                        &mut taken,
+                        self.params.pilot_alg,
+                    ) else {
                         continue 's;
                     };
                     k[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 1) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) =
-                        self.find_pilot_array::<1>(kmax, bucket.split_array_ref().0, &mut taken)
-                    else {
+                    let Some((ki, _hki)) = self.find_pilot_array::<1>(
+                        kmax,
+                        bucket.split_array_ref().0,
+                        &mut taken,
+                        self.params.pilot_alg,
+                    ) else {
                         continue 's;
                     };
                     k[b] = ki;
@@ -435,6 +463,9 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
         // Pack the data.
         self.k = Packed::new(k.into_vec());
+
+        eprintln!("Lookups    {:>12}", self.lookups.get());
+        eprintln!("Prefetches {:>12}", self.prefetches.get());
     }
 
     fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {

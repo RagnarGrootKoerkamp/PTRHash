@@ -2,6 +2,7 @@ use std::time::SystemTime;
 
 use clap::{Parser, Subcommand};
 use pthash_rs::{
+    pilots::PilotAlg,
     test::{bench_index, bench_index_all},
     *,
 };
@@ -38,6 +39,8 @@ enum Command {
         bits: usize,
         #[arg(long)]
         stats: bool,
+        #[arg(long, value_enum, default_value_t = PilotAlg::Simple)]
+        alg: PilotAlg,
     },
 
     /// Measure query time on randomly-constructed PTHash.
@@ -80,6 +83,7 @@ fn main() {
             displace,
             bits,
             stats,
+            alg,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
             let start = SystemTime::now();
@@ -91,6 +95,7 @@ fn main() {
                     displace,
                     bits,
                     print_stats: stats,
+                    pilot_alg: alg,
                 },
             );
             let t = start.elapsed().unwrap().as_secs_f32();

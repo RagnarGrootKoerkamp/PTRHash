@@ -99,7 +99,8 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                     |hki: Hash| bucket.iter().map(move |&hx| self.position_hki(hx, hki));
 
                 // Hot-path for when there are no collisions, which is most of the buckets.
-                if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken) {
+                if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken, self.params.pilot_alg)
+                {
                     kis[b] = ki;
                     for p in b_positions(hki) {
                         slots[p] = b;
