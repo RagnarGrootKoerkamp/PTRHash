@@ -62,6 +62,7 @@ enum Command {
 
 type PT =
     PTHash<Vec<u8>, Vec<SlotIdx>, reduce::FR32L, reduce::FR64, hash::FxHash, hash::MulHash, true>;
+// type PT = PTHash<Vec<u8>, sucds::mii_sequences::EliasFano, reduce::FR32L, reduce::FR64, hash::FxHash, hash::MulHash, true,>;
 
 fn main() {
     let Args { command } = Args::parse();
