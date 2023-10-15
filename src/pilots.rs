@@ -108,7 +108,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
 
         let addr = taken.as_raw_slice().as_ptr();
 
-        const L: u64 = 16;
+        const L: u64 = 32;
         let lookahead = L.div_ceil(bucket.len() as u64);
         let mut prefetches = 0;
         let mut lookups = 0;
@@ -119,6 +119,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                 prefetches += 1;
                 let p = self.position_hki(hx, hki);
                 unsafe {
+                    // TODO: Play with this.
                     prefetch_read_data(addr.add(p / usize::BITS as usize), 3);
                 }
             }
@@ -178,6 +179,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             let mut prefetch = |hx: Hash, ki: KI| {
                 prefetches += 1;
                 let p = self.position(hx, ki as u64);
+                // TODO: Play with this.
                 prefetch_read_data(addr.add(p / usize::BITS as usize), 3);
             };
 
@@ -200,6 +202,8 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
                         js[i] = 0;
                         next_ki += 1;
                         if next_ki == kmax {
+                            self.prefetches.set(self.prefetches.get() + prefetches);
+                            self.lookups.set(self.lookups.get() + lookups);
                             return None;
                         }
                     } else {
