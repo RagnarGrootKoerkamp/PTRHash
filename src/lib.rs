@@ -106,21 +106,25 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
 
     /// The number of keys.
     n: usize,
-    /// The number of slots.
+
+    /// The number of parts in the partition.
+    num_parts: usize,
+    /// The number of slots per part.
     s: usize,
-    /// The number of buckets.
+    /// The number of buckets per part.
     b: usize,
+
     /// Additional constants.
     p1: Hash,
     p2: usize,
     bp2: usize,
 
     // Precomputed fast modulo operations.
-    /// Fast %n
+    /// Fast %s.
     rem_s: Rn,
     /// Fast %p2
     rem_p2: Rm,
-    /// Fast %(m-p2)
+    /// Fast %(b-p2)
     rem_bp2: Rm,
 
     // Computed state.
@@ -186,9 +190,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut s = (n as f32 / alpha) as usize;
         // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
         if s.count_ones() == 1 {
-            s = max(n + 1, 3)
+            s = max(s + 1, 3)
         }
-        let s = s;
 
         // The number of buckets.
         // TODO: Why divide by log(n) and not log(n).ceil()?
@@ -199,25 +202,38 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // NOTE: This is basically a constant now.
         let p1 = Hash::new((0.6f64 * u64::MAX as f64) as u64);
 
-        // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
-        // This allows for more efficient computation modulo p2 or m-p2.
-        // See `bucket_thirds()` below.
-        b = b.next_multiple_of(3);
-        // TODO: Figure out if this matters or not.
-        // BUG: When s is divisible by 3, this is an infinite loop!
-        // while gcd(s, m) > 1 {
-        //     m += 3;
-        // }
-        let p2 = b / 3;
-        assert_eq!(b - p2, 2 * p2);
-
         if LOG {
             eprintln!("s {s} b {b} gcd {}", gcd(s, b));
         }
 
+        let num_parts;
+        if !PT {
+            // Only use one part.
+            num_parts = 1;
+        } else {
+            // We start with the given maximum number of slots per part, since
+            // that is what should fit in L1 or L2 cache.
+            // Thus, the number of partitions is:
+            num_parts = n.div_ceil(params.max_slots_per_part);
+            // Slots per part.
+            s /= num_parts;
+            assert!(s <= params.max_slots_per_part);
+            // Buckets per part
+            b /= num_parts;
+        }
+
+        // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
+        // This allows for more efficient computation modulo p2 or m-p2.
+        // See `bucket_thirds()` below.
+        b = b.next_multiple_of(3);
+        // TODO: Figure out if gcd(m,n) large is a problem or not.
+        let p2 = b / 3;
+        assert_eq!(b - p2, 2 * p2);
+
         Self {
             params,
             n,
+            num_parts,
             s,
             b,
             p1,
@@ -245,10 +261,23 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
     /// See bucket.rs for additional implementations.
     fn bucket(&self, hx: Hash) -> usize {
-        if T {
-            self.bucket_thirds_shift(hx)
+        if !PT {
+            if T {
+                self.bucket_thirds_shift(hx)
+            } else {
+                self.bucket_naive(hx)
+            }
         } else {
-            self.bucket_naive(hx)
+            // Extract the high bits for part selection; do normal bucket computation within the part using the remaining bits.
+            let v = self.num_parts as u128 * hx.get() as u128;
+            let part = (v >> 64) as usize;
+            let hx_remainder = Hash::new(v as u64);
+            let bucket_in_part = if T {
+                self.bucket_thirds_shift(hx_remainder)
+            } else {
+                self.bucket_naive(hx_remainder)
+            };
+            part * self.b + bucket_in_part
         }
     }
 
