@@ -41,6 +41,9 @@ enum Command {
         stats: bool,
         #[arg(long, value_enum, default_value_t = PilotAlg::Simple)]
         alg: PilotAlg,
+        /// Max slots per part
+        #[arg(long, default_value_t = usize::MAX)]
+        mspp: usize,
     },
 
     /// Measure query time on randomly-constructed PTHash.
@@ -60,8 +63,8 @@ enum Command {
     },
 }
 
-type PT = PTHash<Vec<SlotIdx>, reduce::FR32L, reduce::FR64, hash::FxHash, true>;
-// type PT = PTHash<sucds::mii_sequences::EliasFano, reduce::FR32L, reduce::FR64, hash::FxHash, true>;
+type PT = PTHash<Vec<SlotIdx>, reduce::FR32L, reduce::FR64, hash::FxHash, true, true>;
+// type PT = PTHash<sucds::mii_sequences::EliasFano, reduce::FR32L, reduce::FR64, hash::FxHash, true, true>;
 
 fn main() {
     let Args { command } = Args::parse();
@@ -84,6 +87,7 @@ fn main() {
             bits,
             stats,
             alg,
+            mspp,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
             let start = SystemTime::now();
@@ -96,6 +100,7 @@ fn main() {
                     bits,
                     print_stats: stats,
                     pilot_alg: alg,
+                    max_slots_per_part: mspp,
                 },
             );
             let t = start.elapsed().unwrap().as_secs_f32();

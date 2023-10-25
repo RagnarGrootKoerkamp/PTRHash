@@ -80,6 +80,8 @@ pub struct PTParams {
     pub bits: usize,
     /// Algorithm for pilot selection
     pub pilot_alg: PilotAlg,
+    /// Max number of buckets per partition.
+    pub max_slots_per_part: usize,
 }
 
 impl Default for PTParams {
@@ -89,6 +91,7 @@ impl Default for PTParams {
             displace: false,
             bits: 10,
             pilot_alg: Default::default(),
+            max_slots_per_part: usize::MAX,
         }
     }
 }
@@ -98,7 +101,7 @@ type Hk = MulHash;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> {
+pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool> {
     params: PTParams,
 
     /// The number of keys.
@@ -134,7 +137,9 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> 
     lookups: Cell<usize>,
 }
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm, Rn, Hx, T> {
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
+    PTHash<F, Rm, Rn, Hx, T, PT>
+{
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }

@@ -1,7 +1,9 @@
 #![allow(unused)]
 use super::*;
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm, Rn, Hx, T> {
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
+    PTHash<F, Rm, Rn, Hx, T, PT>
+{
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
     pub(super) fn bucket_thirds(&self, hx: Hash) -> usize {
