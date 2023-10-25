@@ -101,7 +101,7 @@ fn main() {
             );
             let t = start.elapsed().unwrap().as_secs_f32();
             eprintln!("time: {t:5.2}");
-            eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
+            pt.print_bits_per_element();
         }
         Command::Query {
             n,
@@ -122,7 +122,7 @@ fn main() {
                     ..Default::default()
                 },
             );
-            eprintln!("BITS/ELEMENT: {:4.2}", pt.bits_per_element());
+            pt.print_bits_per_element();
             let loops = total.div_ceil(n);
 
             let query = bench_index(loops, &keys, |key| pt.index(key));

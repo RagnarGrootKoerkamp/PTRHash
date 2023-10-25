@@ -490,10 +490,17 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
         self.remap = Packed::new(v);
     }
 
-    pub fn bits_per_element(&self) -> f32 {
-        let pilots = self.k.size_in_bytes();
-        let remap = self.remap.size_in_bytes();
-        (8 * pilots + 8 * remap) as f32 / self.n0 as f32
+    pub fn bits_per_element(&self) -> (f32, f32) {
+        let pilots = self.k.size_in_bytes() as f32 / self.n0 as f32;
+        let remap = self.remap.size_in_bytes() as f32 / self.n0 as f32;
+        (pilots, remap)
+    }
+    pub fn print_bits_per_element(&self) {
+        let (p, r) = self.bits_per_element();
+        eprintln!(
+            "BITS/ELEMENT: pilots {p:4.2} + remap {r:4.2} = {:4.2}",
+            p + r
+        );
     }
 }
 
