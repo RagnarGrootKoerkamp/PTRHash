@@ -30,7 +30,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut i = 0;
 
         let positions = |b: BucketIdx, ki: Pilot| {
-            let hki = self.hash_ki(ki);
+            let hki = self.hash_pilot(ki);
             unsafe {
                 hashes
                     .get_unchecked(starts[b]..starts[b + 1])
@@ -115,7 +115,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 if best.0 != 0 {
                     'ki: for delta in 0u64..kmax {
                         let ki = (ki + delta) % kmax;
-                        let hki = self.hash_ki(ki);
+                        let hki = self.hash_pilot(ki);
                         let mut collision_score = 0;
                         for p in b_positions(hki) {
                             let s = unsafe { *slots.get_unchecked(p) };
@@ -149,7 +149,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 let (_collision_score, ki) = best;
                 // eprintln!("{i:>8} {num_collisions:>2} collisions at ki {ki:>8}");
                 kis[b] = ki;
-                let hki = self.hash_ki(ki);
+                let hki = self.hash_pilot(ki);
 
                 // Drop the collisions and set the new ki.
                 for p in b_positions(hki) {

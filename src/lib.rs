@@ -255,7 +255,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         Hx::hash(x, self.seed)
     }
 
-    fn hash_ki(&self, ki: u64) -> Hash {
+    fn hash_pilot(&self, ki: u64) -> Hash {
         Hk::hash(&ki, self.seed)
     }
 
@@ -291,7 +291,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
     /// TODO: Do things break if we sum instead of xor here?
     fn position(&self, hx: Hash, ki: u64) -> usize {
-        (hx ^ self.hash_ki(ki)).reduce(self.rem_s)
+        (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
     }
 
     fn position_hki(&self, hx: Hash, hki: Hash) -> usize {

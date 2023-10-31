@@ -77,7 +77,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     ) -> Option<(u64, Hash)> {
         let mut lookups = 0;
         'ki: for ki in 0u64..kmax {
-            let hki = self.hash_ki(ki);
+            let hki = self.hash_pilot(ki);
             for &hx in bucket {
                 lookups += 1;
                 if unsafe { *taken.get_unchecked(self.position_hki(hx, hki)) } {
@@ -114,7 +114,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut lookups = 0;
 
         let mut prefetch = |ki| {
-            let hki = self.hash_ki(ki);
+            let hki = self.hash_pilot(ki);
             for &hx in bucket {
                 prefetches += 1;
                 let p = self.position_hki(hx, hki);
@@ -131,7 +131,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         'ki: for ki in 0u64..kmax {
             prefetch(ki + lookahead);
-            let hki = self.hash_ki(ki);
+            let hki = self.hash_pilot(ki);
             for &hx in bucket {
                 lookups += 1;
                 if unsafe { *taken.get_unchecked(self.position_hki(hx, hki)) } {
@@ -209,10 +209,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     } else {
                         if js[i] as usize == l - 1 {
                             // SUCCESS
-                            if self.try_take_ki(bucket, self.hash_ki(kis[i] as u64), taken) {
+                            if self.try_take_ki(bucket, self.hash_pilot(kis[i] as u64), taken) {
                                 self.prefetches.set(self.prefetches.get() + prefetches);
                                 self.lookups.set(self.lookups.get() + lookups);
-                                return Some((kis[i] as u64, self.hash_ki(kis[i] as u64)));
+                                return Some((kis[i] as u64, self.hash_pilot(kis[i] as u64)));
                             } else {
                                 // Move to next ki.
                                 kis[i] = next_ki as KI;
