@@ -5,9 +5,7 @@ use crate::types::BucketIdx;
 use super::*;
 use bitvec::vec::BitVec;
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<F, Rm, Rn, Hx, Hk, T>
-{
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm, Rn, Hx, T> {
     pub fn displace(
         &self,
         hashes: &[Hash],

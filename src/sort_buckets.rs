@@ -2,9 +2,7 @@ use crate::types::BucketIdx;
 
 use super::*;
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<F, Rm, Rn, Hx, Hk, T>
-{
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm, Rn, Hx, T> {
     /// Returns:
     /// 1. Hashes
     /// 2. Start indices of each bucket.

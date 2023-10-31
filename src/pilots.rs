@@ -13,9 +13,7 @@ pub enum PilotAlg {
     Ring,
 }
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<F, Rm, Rn, Hx, Hk, T>
-{
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm, Rn, Hx, T> {
     pub fn find_pilot(
         &self,
         kmax: u64,

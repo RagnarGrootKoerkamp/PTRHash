@@ -42,7 +42,7 @@ use rand_chacha::ChaCha8Rng;
 use reduce::Reduce;
 
 type Key = u64;
-use hash::Hasher;
+use hash::{Hasher, MulHash};
 
 // TODO: Shrink this to u32 or u8.
 type Pilot = u64;
@@ -94,10 +94,11 @@ impl Default for PTParams {
 }
 
 type P = Vec<u8>;
+type Hk = MulHash;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool> {
+pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> {
     params: PTParams,
 
     /// The number of keys.
@@ -127,16 +128,13 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, con
     /// Remap the out-of-bound slots to free slots.
     remap: F,
     _hx: PhantomData<Hx>,
-    _hk: PhantomData<Hk>,
 
     /// Collect some statistics
     prefetches: Cell<usize>,
     lookups: Cell<usize>,
 }
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<F, Rm, Rn, Hx, Hk, T>
-{
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm, Rn, Hx, T> {
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }
@@ -226,7 +224,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
             s: 0,
             k: Default::default(),
             remap: F::default(),
-            _hk: PhantomData,
             _hx: PhantomData,
             prefetches: 0.into(),
             lookups: 0.into(),

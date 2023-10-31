@@ -38,8 +38,7 @@ fn construct<Rm: Reduce, Rn: Reduce>() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash =
-                PTHash::<Vec<SlotIdx>, Rm, Rn, FxHash, MulHash, false>::new(7.0, 1.0, &keys);
+            let pthash = PTHash::<Vec<SlotIdx>, Rm, Rn, FxHash, false>::new(7.0, 1.0, &keys);
 
             let mut done = vec![false; n];
 
@@ -151,7 +150,7 @@ fn queries_exact<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool, H: Hasher>(bi
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, Rm, Rn, H, MulHash, T>::new_random(7.0, 1.0, n, bits);
+    let mphf = PTHash::<F, Rm, Rn, H, T>::new_random(7.0, 1.0, n, bits);
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -173,12 +172,11 @@ fn test_stream_chunks<
     Rm: Reduce,
     Rn: Reduce,
     Hx: Hasher,
-    Hk: Hasher,
     const T: bool,
 >(
     total: usize,
     n: usize,
-    mphf: &PTHash<F, Rm, Rn, Hx, Hk, T>,
+    mphf: &PTHash<F, Rm, Rn, Hx, T>,
     keys: &[u64],
 ) where
     [(); K * L]: Sized,
@@ -259,7 +257,7 @@ fn queries_random<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize)
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, Rm, Rn, FxHash, MulHash, T>::new_random(7.0, 1.0, n, bits);
+    let mphf = PTHash::<F, Rm, Rn, FxHash, T>::new_random(7.0, 1.0, n, bits);
 
     // let start = SystemTime::now();
     // let loops = total / n;
@@ -275,21 +273,21 @@ fn queries_random<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool>(bits: usize)
 
     let q = bench_index_all(total, &keys, |keys| mphf.index_stream::<64>(keys));
     eprintln!("{q:>4.1}");
-    test_stream_chunks::<4, 2, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 2, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 2, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 2, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 8, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 8, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 8, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 8, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, F, Rm, Rn, FxHash, MulHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 2, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 2, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 2, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 2, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 8, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 8, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 8, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 8, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, F, Rm, Rn, FxHash, T>(total, n, &mphf, &keys);
 
     eprintln!();
 }
