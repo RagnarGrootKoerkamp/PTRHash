@@ -8,7 +8,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     /// Returns:
     /// 1. Hashes
     /// 2. Start indices of each bucket.
-    /// 3. Order of the buckets.
+    /// 3. Order of the buckets, per part.
     ///
     /// This returns None if duplicate hashes are found.
     #[must_use]
@@ -16,12 +16,15 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &self,
         keys: &[u64],
     ) -> Option<(Vec<Hash>, BucketVec<usize>, Vec<BucketIdx>)> {
-        // NOTE: For FastReduce methods, we can just sort by hash directly
+        // For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
         // <self.p1 and those >=self.p1, and then sort each group using the low
         // 32 bits.
-        // TODO: Generalize to other reduction methods.
+        // NOTE: This does not work for other reduction methods.
+
+        // 1. Collect all hashes.
         let mut hashes = keys.iter().map(|key| self.hash_key(key)).collect_vec();
+        // 2. Sort by hash, but take care of small vs large buckets.
         radsort::sort_by_key(&mut hashes, |&h| (h >= self.p1, h.get_low()));
 
         for range in hashes.group_by_mut(|h1, h2| h1.get_low() == h2.get_low()) {
@@ -55,7 +58,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             })
             .collect_into(&mut starts);
 
-        // Bucket-sort the buckets by decreasing size.
+        // Bucket-sort the buckets by decreasing size per part.
         let max_bucket_size = pos_for_size.len() - 1;
         let mut acc = 0;
         for i in (0..=max_bucket_size).rev() {
