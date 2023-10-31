@@ -102,29 +102,29 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> 
     params: PTParams,
 
     /// The number of keys.
-    n0: usize,
-    /// The number of slots.
     n: usize,
+    /// The number of slots.
+    s: usize,
     /// The number of buckets.
-    m: usize,
+    b: usize,
     /// Additional constants.
     p1: Hash,
     p2: usize,
-    mp2: usize,
+    bp2: usize,
 
     // Precomputed fast modulo operations.
     /// Fast %n
-    rem_n: Rn,
+    rem_s: Rn,
     /// Fast %p2
     rem_p2: Rm,
     /// Fast %(m-p2)
-    rem_mp2: Rm,
+    rem_bp2: Rm,
 
     // Computed state.
     /// The global seed.
-    s: u64,
+    seed: u64,
     /// The pivots.
-    k: P,
+    pilots: P,
     /// Remap the out-of-bound slots to free slots.
     remap: F,
     _hx: PhantomData<Hx>,
@@ -159,12 +159,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     }
     pub fn new_random_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
         let mut pthash = Self::init_with_params(c, alpha, n, params);
-        let k = (0..pthash.m)
+        let k = (0..pthash.b)
             .map(|_| random::<u64>() & ((1 << params.bits) - 1))
             .collect();
-        pthash.k = Packed::new(k);
-        let mut remap_vals = (pthash.n0..pthash.n)
-            .map(|_| pthash.rem_n.reduce(Hash::new(random::<u64>())) as _)
+        pthash.pilots = Packed::new(k);
+        let mut remap_vals = (pthash.n..pthash.s)
+            .map(|_| pthash.rem_s.reduce(Hash::new(random::<u64>())) as _)
             .collect_vec();
         remap_vals.sort_unstable();
         pthash.remap = Packed::new(remap_vals);
@@ -176,19 +176,19 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     }
 
     /// Only initialize the parameters; do not compute the pivots yet.
-    pub fn init_with_params(c: f32, alpha: f32, n0: usize, params: PTParams) -> Self {
+    pub fn init_with_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
         // n is the number of slots in the target list.
-        let mut n = (n0 as f32 / alpha) as usize;
+        let mut s = (n as f32 / alpha) as usize;
         // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
-        if n.count_ones() == 1 {
-            n = max(n0 + 1, 3)
+        if s.count_ones() == 1 {
+            s = max(n + 1, 3)
         }
-        let n = n;
+        let s = s;
 
         // The number of buckets.
         // TODO: Why divide by log(n) and not log(n).ceil()?
         // TODO: Why is this the optimal value to divide by?
-        let mut m = (c * (n as f32) / (n as f32).log2()).ceil() as usize;
+        let mut b = (c * (s as f32) / (s as f32).log2()).ceil() as usize;
 
         // TODO: Understand why exactly this choice of parameters.
         // NOTE: This is basically a constant now.
@@ -197,32 +197,32 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
         // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
         // This allows for more efficient computation modulo p2 or m-p2.
         // See `bucket_thirds()` below.
-        m = m.next_multiple_of(3);
+        b = b.next_multiple_of(3);
         // TODO: Figure out if this matters or not.
-        // BUG: When n is divisible by 3, this is an infinite loop!
-        // while gcd(n, m) > 1 {
+        // BUG: When s is divisible by 3, this is an infinite loop!
+        // while gcd(s, m) > 1 {
         //     m += 3;
         // }
-        let p2 = m / 3;
-        assert_eq!(m - p2, 2 * p2);
+        let p2 = b / 3;
+        assert_eq!(b - p2, 2 * p2);
 
         if LOG {
-            eprintln!("n {n} m {m} gcd {}", gcd(n, m));
+            eprintln!("s {s} b {b} gcd {}", gcd(s, b));
         }
 
         Self {
             params,
-            n0,
             n,
-            m,
+            s,
+            b,
             p1,
             p2,
-            mp2: m - p2,
-            rem_n: Rn::new(n),
+            bp2: b - p2,
+            rem_s: Rn::new(s),
             rem_p2: Rm::new(p2),
-            rem_mp2: Rm::new(m - p2),
-            s: 0,
-            k: Default::default(),
+            rem_bp2: Rm::new(b - p2),
+            seed: 0,
+            pilots: Default::default(),
             remap: F::default(),
             _hx: PhantomData,
             prefetches: 0.into(),
@@ -231,11 +231,11 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     }
 
     fn hash_key(&self, x: &Key) -> Hash {
-        Hx::hash(x, self.s)
+        Hx::hash(x, self.seed)
     }
 
     fn hash_ki(&self, ki: u64) -> Hash {
-        Hk::hash(&ki, self.s)
+        Hk::hash(&ki, self.seed)
     }
 
     /// See bucket.rs for additional implementations.
@@ -251,17 +251,17 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
         if hx < self.p1 {
             hx.reduce(self.rem_p2)
         } else {
-            self.p2 + hx.reduce(self.rem_mp2)
+            self.p2 + hx.reduce(self.rem_bp2)
         }
     }
 
     /// TODO: Do things break if we sum instead of xor here?
     fn position(&self, hx: Hash, ki: u64) -> usize {
-        (hx ^ self.hash_ki(ki)).reduce(self.rem_n)
+        (hx ^ self.hash_ki(ki)).reduce(self.rem_s)
     }
 
     fn position_hki(&self, hx: Hash, hki: Hash) -> usize {
-        (hx ^ hki).reduce(self.rem_n)
+        (hx ^ hki).reduce(self.rem_s)
     }
 
     /// See index.rs for additional streaming/SIMD implementations.
@@ -269,7 +269,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
         let i = self.bucket(hx);
-        let ki = self.k.index(i);
+        let ki = self.pilots.index(i);
         self.position(hx, ki)
     }
 
@@ -278,12 +278,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     pub fn index_remap(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
         let i = self.bucket(hx);
-        let ki = self.k.index(i);
+        let ki = self.pilots.index(i);
         let p = self.position(hx, ki);
-        if std::intrinsics::likely(p < self.n0) {
+        if std::intrinsics::likely(p < self.n) {
             p
         } else {
-            self.remap.index(p - self.n0) as usize
+            self.remap.index(p - self.n) as usize
         }
     }
 
@@ -303,14 +303,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
             assert!(
                 tries <= MAX_TRIES,
                 "Failed to find a global seed after {MAX_TRIES} tries for {} keys.",
-                self.n
+                self.s
             );
             if tries > 1 {
                 eprintln!("Try {tries} for global seed.");
             }
 
             // Step 1: choose a global seed s.
-            self.s = rng.gen();
+            self.seed = rng.gen();
 
             // Step 2: Determine the buckets.
             let Some((hashes, starts, bucket_order)) = self.sort_buckets(keys) else {
@@ -319,14 +319,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
             };
 
             // Reset memory.
-            k.reset(self.m, 0);
+            k.reset(self.b, 0);
 
             let num_empty_buckets = bucket_order
                 .iter()
                 .rev()
                 .take_while(|&&b| starts[b + 1] - starts[b] == 0)
                 .count();
-            let bucket_order_nonempty = &bucket_order[..self.m - num_empty_buckets];
+            let bucket_order_nonempty = &bucket_order[..self.b - num_empty_buckets];
             assert_eq!(
                 starts[*bucket_order_nonempty.last().unwrap() + 1]
                     - starts[*bucket_order_nonempty.last().unwrap()],
@@ -334,7 +334,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
             );
 
             taken.clear();
-            taken.resize(self.n, false);
+            taken.resize(self.s, false);
             if self.params.displace {
                 if !self.displace(
                     &hashes,
@@ -348,7 +348,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
                 }
             } else {
                 // Iterate all buckets of size >= 5 as &[Hash].
-                let kmax = 20 * self.n as u64;
+                let kmax = 20 * self.s as u64;
                 let mut bs = bucket_order.iter().peekable();
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 1) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
@@ -428,7 +428,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
         self.remap_free_slots(taken);
 
         // Pack the data.
-        self.k = Packed::new(k.into_vec());
+        self.pilots = Packed::new(k.into_vec());
 
         eprintln!("Lookups    {:>12}", self.lookups.get());
         eprintln!("Prefetches {:>12}", self.prefetches.get());
@@ -437,18 +437,18 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {
         assert_eq!(
             taken.count_zeros(),
-            self.n - self.n0,
+            self.s - self.n,
             "Not the right number of free slots left!"
         );
 
-        if self.n == self.n0 {
+        if self.s == self.n {
             return;
         }
 
         // Compute the free spots.
-        let mut v = Vec::with_capacity(self.n - self.n0);
-        for i in taken[..self.n0].iter_zeros() {
-            while !taken[self.n0 + v.len()] {
+        let mut v = Vec::with_capacity(self.s - self.n);
+        for i in taken[..self.n].iter_zeros() {
+            while !taken[self.n + v.len()] {
                 v.push(i as u64);
             }
             v.push(i as u64);
@@ -457,8 +457,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     }
 
     pub fn bits_per_element(&self) -> (f32, f32) {
-        let pilots = self.k.size_in_bytes() as f32 / self.n0 as f32;
-        let remap = self.remap.size_in_bytes() as f32 / self.n0 as f32;
+        let pilots = self.pilots.size_in_bytes() as f32 / self.n as f32;
+        let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
         (pilots, remap)
     }
     pub fn print_bits_per_element(&self) {

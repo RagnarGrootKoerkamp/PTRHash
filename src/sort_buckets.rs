@@ -34,10 +34,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
         // We shouldn't have buckets that large.
         let mut pos_for_size = vec![0; 2];
 
-        let mut starts = BucketVec::with_capacity(self.m + 1);
+        let mut starts = BucketVec::with_capacity(self.b + 1);
         let mut end = 0;
         starts.push(end);
-        (0..self.m)
+        (0..self.b)
             .map(|b| {
                 let start = end;
                 while end < hashes.len() && self.bucket(hashes[end]) == b {
@@ -62,14 +62,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
             acc += tmp;
         }
 
-        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.m];
-        for b in BucketIdx::range(self.m) {
+        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b];
+        for b in BucketIdx::range(self.b) {
             let l = starts[b + 1] - starts[b];
             order[pos_for_size[l]] = b;
             pos_for_size[l] += 1;
         }
 
-        let expected_bucket_size = self.n as f32 / self.m as f32;
+        let expected_bucket_size = self.s as f32 / self.b as f32;
         assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
 
         Some((hashes, starts, order))

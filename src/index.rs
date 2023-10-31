@@ -18,8 +18,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
             // I.e. populate caches or do a 'Non-temporal access', meaning the
             // cache line can skip caches and be immediately discarded after
             // reading.
-            self.k.prefetch(next_i[idx]);
-            let ki = self.k.index(cur_i);
+            self.pilots.prefetch(next_i[idx]);
+            let ki = self.pilots.index(cur_i);
             self.position(cur_hx, ki)
         })
     }
@@ -41,13 +41,13 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
             // I.e. populate caches or do a 'Non-temporal access', meaning the
             // cache line can skip caches and be immediately discarded after
             // reading.
-            self.k.prefetch(next_i[idx]);
-            let ki = self.k.index(cur_i);
+            self.pilots.prefetch(next_i[idx]);
+            let ki = self.pilots.index(cur_i);
             let p = self.position(cur_hx, ki);
-            if std::intrinsics::likely(p < self.n0) {
+            if std::intrinsics::likely(p < self.n) {
                 p
             } else {
-                self.remap.index(p - self.n0) as usize
+                self.remap.index(p - self.n) as usize
             }
         })
     }
@@ -77,11 +77,11 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
                     next_hx[idx + i] = self.hash_key(&next_x_vec[i]);
                     next_i[idx + i] = self.bucket(next_hx[idx + i]);
                     // TODO: Use 0 or 3 here?
-                    self.k.prefetch(next_i[idx + i]);
+                    self.pilots.prefetch(next_i[idx + i]);
                 }
                 unsafe {
                     (0..L)
-                        .map(|i| self.position(cur_hx_vec[i], self.k.index(cur_i_vec[i])))
+                        .map(|i| self.position(cur_hx_vec[i], self.pilots.index(cur_i_vec[i])))
                         .array_chunks::<L>()
                         .next()
                         .unwrap_unchecked()
@@ -133,9 +133,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
                     .into();
                 // TODO: Use 0 or 3 here?
                 for i in 0..L {
-                    self.k.prefetch(next_i[idx][i]);
+                    self.pilots.prefetch(next_i[idx][i]);
                 }
-                let ki_vec = cur_i_vec.as_array().map(|cur_i| self.k.index(cur_i));
+                let ki_vec = cur_i_vec.as_array().map(|cur_i| self.pilots.index(cur_i));
                 let mut i = 0;
                 let p_vec = [(); L].map(move |_| {
                     let p = self.position(Hash::new(cur_hx_vec.as_array()[i]), ki_vec[i]);

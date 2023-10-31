@@ -18,8 +18,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
         let kmax = 1u64 << bits;
         eprintln!("DISPLACE 2^{bits}={kmax}");
 
-        kis.reset(self.m, u64::MAX);
-        let mut slots = vec![BucketIdx::NONE; self.n];
+        kis.reset(self.b, u64::MAX);
+        let mut slots = vec![BucketIdx::NONE; self.s];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
         let max_bucket_len = bucket_len(bucket_order[0]);
@@ -33,7 +33,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
                 hashes
                     .get_unchecked(starts[b]..starts[b + 1])
                     .iter()
-                    .map(move |&hx| (hx ^ hki).reduce(self.rem_n))
+                    .map(move |&hx| (hx ^ hki).reduce(self.rem_s))
             }
         };
         let mut duplicate_positions = {
@@ -204,7 +204,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
         eprintln!("MAX DELTA: {}", max_len_delta);
         eprintln!(
             "TOTAL DISPLACEMENTS: {total_displacements} per bucket {}",
-            total_displacements as f32 / self.m as f32
+            total_displacements as f32 / self.b as f32
         );
         true
     }

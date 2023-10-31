@@ -5,7 +5,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
     pub(super) fn bucket_thirds(&self, hx: Hash) -> usize {
-        let mod_mp2 = hx.reduce(self.rem_mp2);
+        let mod_mp2 = hx.reduce(self.rem_bp2);
         let mod_p2 = mod_mp2 - self.p2 * (mod_mp2 >= self.p2) as usize;
         let large = hx >= self.p1;
         self.p2 * large as usize + if large { mod_mp2 } else { mod_p2 }
@@ -14,7 +14,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// We can cheat and reduce modulo p2 by dividing the mod 2*p2 result by 2.
     pub(super) fn bucket_thirds_shift(&self, hx: Hash) -> usize {
-        let mod_mp2 = hx.reduce(self.rem_mp2);
+        let mod_mp2 = hx.reduce(self.rem_bp2);
         let large = (hx >= self.p1) as usize;
         self.p2 * large + (mod_mp2 >> (1 - large))
     }
@@ -24,16 +24,16 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     ///
     /// NOTE: This one saves an instruction over `bucket_thirds_shift`, but does not respect the order of h.
     pub(super) fn bucket_thirds_shift_inverted(&self, hx: Hash) -> usize {
-        let mod_mp2 = hx.reduce(self.rem_mp2);
+        let mod_mp2 = hx.reduce(self.rem_bp2);
         let small = (hx < self.p1) as usize;
-        self.mp2 * small + (mod_mp2 >> small)
+        self.bp2 * small + (mod_mp2 >> small)
     }
 
     /// Branchless version of bucket() above that turns out to be slower.
     /// Generates 4 mov and 4 cmov instructions, which take a long time to execute.
     pub(super) fn bucket_branchless(&self, hx: Hash) -> usize {
         let is_large = hx >= self.p1;
-        let rem = if is_large { self.rem_mp2 } else { self.rem_p2 };
+        let rem = if is_large { self.rem_bp2 } else { self.rem_p2 };
         is_large as usize * self.p2 + hx.reduce(rem)
     }
 
@@ -42,7 +42,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool> PTHash<F, Rm,
     pub(super) fn bucket_branchless_2(&self, hx: Hash) -> usize {
         let is_large = hx >= self.p1;
         let rem = if is_large {
-            &self.rem_mp2
+            &self.rem_bp2
         } else {
             &self.rem_p2
         };
