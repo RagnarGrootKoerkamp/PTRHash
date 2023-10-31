@@ -5,6 +5,7 @@ use crate::hash::Hash;
 pub trait Reduce: Copy {
     fn new(d: usize) -> Self;
     fn reduce(self, h: Hash) -> usize;
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64);
 }
 
 impl Reduce for u64 {
@@ -14,6 +15,10 @@ impl Reduce for u64 {
 
     fn reduce(self, h: Hash) -> usize {
         (h.get() % self) as usize
+    }
+
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        ((h.get() % self) as usize, h.get() / self)
     }
 }
 
@@ -26,6 +31,9 @@ impl Reduce for SR64 {
     fn reduce(self, h: Hash) -> usize {
         (h.get() % self.0) as usize
     }
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        ((h.get() % self.0) as usize, h.get() / self.0)
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -37,6 +45,12 @@ impl Reduce for SR32L {
     fn reduce(self, h: Hash) -> usize {
         (h.get_low() % self.0) as usize
     }
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        (
+            (h.get_low() % self.0) as usize,
+            (h.get_low() / self.0) as u64,
+        )
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -47,6 +61,12 @@ impl Reduce for SR32H {
     }
     fn reduce(self, h: Hash) -> usize {
         (h.get_high() % self.0) as usize
+    }
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        (
+            (h.get_high() % self.0) as usize,
+            ((h.get_high() / self.0) as u64) << 32,
+        )
     }
 }
 
@@ -77,6 +97,9 @@ impl Reduce for FM64 {
         let lowbits = self.m.wrapping_mul(h.get() as u128);
         mul128_u64(lowbits, self.d) as usize
     }
+    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
+        todo!()
+    }
 }
 
 /// FastMod32, using the low 32 bits of the hash.
@@ -98,6 +121,9 @@ impl Reduce for FM32L {
         let lowbits = self.m * (h.get_low() as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
+    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
+        todo!()
+    }
 }
 
 /// FastMod32, using the low 32 high of the hash.
@@ -118,6 +144,9 @@ impl Reduce for FM32H {
         let lowbits = self.m * (h.get_high() as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
+    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
+        todo!()
+    }
 }
 
 /// FastReduce64
@@ -133,6 +162,10 @@ impl Reduce for FR64 {
     }
     fn reduce(self, h: Hash) -> usize {
         ((self.d as u128 * h.get() as u128) >> 64) as usize
+    }
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        let r = self.d as u128 * h.get() as u128;
+        ((r >> 64) as usize, r as u64)
     }
 }
 
@@ -150,6 +183,10 @@ impl Reduce for FR32H {
     fn reduce(self, h: Hash) -> usize {
         ((self.d as u64 * h.get_high() as u64) >> 32) as usize
     }
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        let r = self.d as u64 * h.get_high() as u64;
+        ((r >> 32) as usize, (r as u32 as u64) << 32)
+    }
 }
 
 /// FastReduce32, using the low 32 bits of the hash.
@@ -165,5 +202,9 @@ impl Reduce for FR32L {
     }
     fn reduce(self, h: Hash) -> usize {
         ((self.d as u64 * h.get_low() as u64) >> 32) as usize
+    }
+    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
+        let r = self.d as u64 * h.get_low() as u64;
+        ((r >> 32) as usize, r as u32 as u64)
     }
 }
