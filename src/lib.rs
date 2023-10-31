@@ -93,18 +93,11 @@ impl Default for PTParams {
     }
 }
 
-/// P: Packing of `k` array.
+type P = Vec<u8>;
+
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<
-    P: Packed,
-    F: Packed,
-    Rm: Reduce,
-    Rn: Reduce,
-    Hx: Hasher,
-    Hk: Hasher,
-    const T: bool,
-> {
+pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool> {
     params: PTParams,
 
     /// The number of keys.
@@ -141,33 +134,9 @@ pub struct PTHash<
     lookups: Cell<usize>,
 }
 
-impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<P, F, Rm, Rn, Hx, Hk, T>
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+    PTHash<F, Rm, Rn, Hx, Hk, T>
 {
-    /// Convert an existing PTHash to a different packing.
-    pub fn convert<P2: Packed>(&self) -> PTHash<P2, F, Rm, Rn, Hx, Hk, T> {
-        PTHash {
-            params: self.params,
-            n0: self.n0,
-            n: self.n,
-            m: self.m,
-            p1: self.p1,
-            p2: self.p2,
-            mp2: self.mp2,
-            rem_n: self.rem_n,
-            rem_p2: self.rem_p2,
-            rem_mp2: self.rem_mp2,
-            s: self.s,
-            k: P2::new(self.k.to_vec()),
-            remap: F::new(self.remap.to_vec()),
-            _hk: PhantomData,
-            _hx: PhantomData,
-
-            prefetches: 0.into(),
-            lookups: 0.into(),
-        }
-    }
-
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }
@@ -255,7 +224,7 @@ impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const
             rem_p2: Rm::new(p2),
             rem_mp2: Rm::new(m - p2),
             s: 0,
-            k: P::default(),
+            k: Default::default(),
             remap: F::default(),
             _hk: PhantomData,
             _hx: PhantomData,

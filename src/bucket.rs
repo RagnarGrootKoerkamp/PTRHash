@@ -1,8 +1,8 @@
 #![allow(unused)]
 use super::*;
 
-impl<P: Packed, F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
-    PTHash<P, F, Rm, Rn, Hx, Hk, T>
+impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, Hk: Hasher, const T: bool>
+    PTHash<F, Rm, Rn, Hx, Hk, T>
 {
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
