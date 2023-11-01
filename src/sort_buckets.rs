@@ -45,7 +45,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         (0..self.b)
             .map(|b| {
                 let start = end;
-                while end < hashes.len() && self.bucket(hashes[end]) == b {
+                while end < hashes.len() && self.slot_offset_and_bucket(hashes[end]).1 == b {
                     end += 1;
                 }
 

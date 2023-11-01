@@ -1,4 +1,4 @@
-use std::ops::BitXor;
+use std::ops::{BitXor, Sub};
 
 use crate::{reduce::Reduce, Key};
 use murmur2::murmur64a;
@@ -28,6 +28,18 @@ impl Hash {
     }
     pub fn reduce<R: Reduce>(self, d: R) -> usize {
         d.reduce(self)
+    }
+    pub fn reduce_with_remainder<R: Reduce>(self, d: R) -> (usize, Hash) {
+        let (r, h) = d.reduce_with_remainder(self);
+        (r, Hash(h))
+    }
+}
+
+impl Sub for Hash {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self(self.0 - rhs.0)
     }
 }
 

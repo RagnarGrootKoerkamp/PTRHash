@@ -8,14 +8,15 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a {
+        assert!(!PT);
         let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K] = next_hx.map(|hx| self.bucket(hx));
+        let mut next_i: [usize; K] = next_hx.map(|hx| self.slot_offset_and_bucket(hx).1);
         xs[K..].iter().enumerate().map(move |(idx, next_x)| {
             let idx = idx % K;
             let cur_hx = next_hx[idx];
             let cur_i = next_i[idx];
             next_hx[idx] = self.hash_key(next_x);
-            next_i[idx] = self.bucket(next_hx[idx]);
+            next_i[idx] = self.slot_offset_and_bucket(next_hx[idx]).1;
             // TODO: Use 0 or 3 here?
             // I.e. populate caches or do a 'Non-temporal access', meaning the
             // cache line can skip caches and be immediately discarded after
@@ -31,14 +32,15 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a {
+        assert!(!PT);
         let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K] = next_hx.map(|hx| self.bucket(hx));
+        let mut next_i: [usize; K] = next_hx.map(|hx| self.slot_offset_and_bucket(hx).1);
         xs[K..].iter().enumerate().map(move |(idx, next_x)| {
             let idx = idx % K;
             let cur_hx = next_hx[idx];
             let cur_i = next_i[idx];
             next_hx[idx] = self.hash_key(next_x);
-            next_i[idx] = self.bucket(next_hx[idx]);
+            next_i[idx] = self.slot_offset_and_bucket(next_hx[idx]).1;
             // TODO: Use 0 or 3 here?
             // I.e. populate caches or do a 'Non-temporal access', meaning the
             // cache line can skip caches and be immediately discarded after
@@ -62,8 +64,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     where
         [(); K * L]: Sized,
     {
+        assert!(!PT);
         let mut next_hx: [Hash; K * L] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K * L] = next_hx.map(|hx| self.bucket(hx));
+        let mut next_i: [usize; K * L] = next_hx.map(|hx| self.slot_offset_and_bucket(hx).1);
         xs[K * L..]
             .iter()
             .copied()
@@ -77,7 +80,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     unsafe { *next_i[idx..].array_chunks::<L>().next().unwrap_unchecked() };
                 for i in 0..L {
                     next_hx[idx + i] = self.hash_key(&next_x_vec[i]);
-                    next_i[idx + i] = self.bucket(next_hx[idx + i]);
+                    next_i[idx + i] = self.slot_offset_and_bucket(next_hx[idx + i]).1;
                     // TODO: Use 0 or 3 here?
                     self.pilots.prefetch(next_i[idx + i]);
                 }
@@ -100,6 +103,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         [(); K * L]: Sized,
         LaneCount<L>: SupportedLaneCount,
     {
+        assert!(!PT);
         let mut next_hx: [Simd<u64, L>; K] = unsafe {
             xs.split_array_ref::<{ K * L }>()
                 .0
@@ -112,7 +116,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut next_i: [Simd<usize, L>; K] = next_hx.map(|hx_vec| {
             hx_vec
                 .as_array()
-                .map(|hx| self.bucket(Hash::new(hx)))
+                .map(|hx| self.slot_offset_and_bucket(Hash::new(hx)).1)
                 .into()
         });
         xs[K * L..]
@@ -131,7 +135,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     .into();
                 next_i[idx] = next_hx[idx]
                     .as_array()
-                    .map(|hx| self.bucket(Hash::new(hx)))
+                    .map(|hx| self.slot_offset_and_bucket(Hash::new(hx)).1)
                     .into();
                 // TODO: Use 0 or 3 here?
                 for i in 0..L {

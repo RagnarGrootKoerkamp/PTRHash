@@ -109,6 +109,10 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
 
     /// The number of parts in the partition.
     num_parts: usize,
+    /// The total number of slots.
+    s_total: usize,
+    /// The total number of buckets.
+    b_total: usize,
     /// The number of slots per part.
     s: usize,
     /// The number of buckets per part.
@@ -120,12 +124,19 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
     bp2: usize,
 
     // Precomputed fast modulo operations.
-    /// Fast %s.
-    rem_s: Rn,
+    /// Fast %parts.
+    rem_parts: Rm,
     /// Fast %p2
     rem_p2: Rm,
     /// Fast %(b-p2)
     rem_bp2: Rm,
+    /// Fast %(p2/p1 * B)
+    rem_c1: Rm,
+    /// Fast %((1-p1)/(1-p2) * B)
+    rem_c2: Rm,
+
+    /// Fast %s.
+    rem_s: Rn,
 
     // Computed state.
     /// The global seed.
@@ -198,9 +209,13 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // TODO: Why is this the optimal value to divide by?
         let mut b = (c * (s as f32) / (s as f32).log2()).ceil() as usize;
 
+        // Map beta% of hashes to gamma% of buckets.
+        let beta = 0.6f64;
+        let gamma = 1. / 3.0f64;
+
         // TODO: Understand why exactly this choice of parameters.
         // NOTE: This is basically a constant now.
-        let p1 = Hash::new((0.6f64 * u64::MAX as f64) as u64);
+        let p1 = Hash::new((beta * u64::MAX as f64) as u64);
 
         if LOG {
             eprintln!("s {s} b {b} gcd {}", gcd(s, b));
@@ -214,7 +229,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // We start with the given maximum number of slots per part, since
             // that is what should fit in L1 or L2 cache.
             // Thus, the number of partitions is:
-            num_parts = n.div_ceil(params.max_slots_per_part);
+            num_parts = max(n.div_ceil(params.max_slots_per_part), 1);
             // Slots per part.
             s /= num_parts;
             assert!(s <= params.max_slots_per_part);
@@ -229,12 +244,17 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // TODO: Figure out if gcd(m,n) large is a problem or not.
         let p2 = b / 3;
         assert_eq!(b - p2, 2 * p2);
+        eprintln!("Num parts: {}", num_parts);
+        eprintln!("s {s}");
+        eprintln!("b {b}");
 
         Self {
             params,
             n,
             num_parts,
+            s_total: num_parts * s,
             s,
+            b_total: num_parts * b,
             b,
             p1,
             p2,
@@ -242,6 +262,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             rem_s: Rn::new(s),
             rem_p2: Rm::new(p2),
             rem_bp2: Rm::new(b - p2),
+            rem_parts: Rm::new(num_parts),
+            rem_c1: Rm::new((gamma / beta * b as f64) as usize),
+            rem_c2: Rm::new(((1. - gamma) / (1. - beta) * b as f64) as usize),
             seed: 0,
             pilots: Default::default(),
             remap: F::default(),
@@ -260,27 +283,25 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
 
     /// See bucket.rs for additional implementations.
-    fn bucket(&self, hx: Hash) -> usize {
+    /// Returns the offset in the slots array for the current part and the bucket index.
+    #[inline(always)]
+    fn slot_offset_and_bucket(&self, hx: Hash) -> (usize, usize) {
         if !PT {
             if T {
-                self.bucket_thirds_shift(hx)
+                (0, self.bucket_thirds_shift(hx))
             } else {
-                self.bucket_naive(hx)
+                (0, self.bucket_naive(hx))
             }
         } else {
             // Extract the high bits for part selection; do normal bucket computation within the part using the remaining bits.
-            let v = self.num_parts as u128 * hx.get() as u128;
-            let part = (v >> 64) as usize;
-            let hx_remainder = Hash::new(v as u64);
-            let bucket_in_part = if T {
-                self.bucket_thirds_shift(hx_remainder)
-            } else {
-                self.bucket_naive(hx_remainder)
-            };
-            part * self.b + bucket_in_part
+            let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
+            let bucket = self.bucket_naive_parts(hx);
+            (part * self.s, part * self.b + bucket)
         }
     }
 
+    /// Use the high bits of hx to decide small/large, then map using the
+    /// remapper (which uses high end of the 32 low bits).
     fn bucket_naive(&self, hx: Hash) -> usize {
         if hx < self.p1 {
             hx.reduce(self.rem_p2)
@@ -289,7 +310,15 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         }
     }
 
-    /// TODO: Do things break if we sum instead of xor here?
+    /// Use the high bits to
+    fn bucket_naive_parts(&self, hx: Hash) -> usize {
+        if hx < self.p1 {
+            hx.reduce(self.rem_c1)
+        } else {
+            self.p2 + (hx - self.p1).reduce(self.rem_c2)
+        }
+    }
+
     fn position(&self, hx: Hash, ki: u64) -> usize {
         (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
     }
@@ -302,18 +331,18 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
-        let i = self.bucket(hx);
-        let ki = self.pilots.index(i);
-        self.position(hx, ki)
+        let (so, b) = self.slot_offset_and_bucket(hx);
+        let pilot = self.pilots.index(b);
+        so + self.position(hx, pilot)
     }
 
     /// An implementation that also works for alpha<1.
     #[inline(always)]
     pub fn index_remap(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
-        let i = self.bucket(hx);
-        let ki = self.pilots.index(i);
-        let p = self.position(hx, ki);
+        let (so, b) = self.slot_offset_and_bucket(hx);
+        let ki = self.pilots.index(b);
+        let p = so + self.position(hx, ki);
         if std::intrinsics::likely(p < self.n) {
             p
         } else {
@@ -324,7 +353,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
-        let mut k: BucketVec<_> = vec![].into();
+        let mut pilots: BucketVec<_> = vec![].into();
 
         let mut tries = 0;
         const MAX_TRIES: usize = 3;
@@ -353,7 +382,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             };
 
             // Reset memory.
-            k.reset(self.b, 0);
+            pilots.reset(self.b, 0);
 
             let num_empty_buckets = bucket_order
                 .iter()
@@ -375,7 +404,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     &starts,
                     &bucket_order,
                     self.params.bits,
-                    &mut k,
+                    &mut pilots,
                     &mut taken,
                 ) {
                     continue 's;
@@ -391,7 +420,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     else {
                         continue 's;
                     };
-                    k[b] = ki;
+                    pilots[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 4) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
@@ -403,7 +432,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     ) else {
                         continue 's;
                     };
-                    k[b] = ki;
+                    pilots[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 3) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
@@ -415,7 +444,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     ) else {
                         continue 's;
                     };
-                    k[b] = ki;
+                    pilots[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
@@ -427,7 +456,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     ) else {
                         continue 's;
                     };
-                    k[b] = ki;
+                    pilots[b] = ki;
                 }
                 while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 1) {
                     let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
@@ -439,7 +468,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     ) else {
                         continue 's;
                     };
-                    k[b] = ki;
+                    pilots[b] = ki;
                 }
             }
 
@@ -452,7 +481,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 print_bucket_sizes_with_ki(
                     bucket_order
                         .iter()
-                        .map(|&b| (starts[b + 1] - starts[b], k[b])),
+                        .map(|&b| (starts[b + 1] - starts[b], pilots[b])),
                 );
             }
 
@@ -462,7 +491,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         self.remap_free_slots(taken);
 
         // Pack the data.
-        self.pilots = Packed::new(k.into_vec());
+        self.pilots = Packed::new(pilots.into_vec());
 
         eprintln!("Lookups    {:>12}", self.lookups.get());
         eprintln!("Prefetches {:>12}", self.prefetches.get());
@@ -471,16 +500,16 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {
         assert_eq!(
             taken.count_zeros(),
-            self.s - self.n,
+            self.s_total - self.n,
             "Not the right number of free slots left!"
         );
 
-        if self.s == self.n {
+        if self.s_total == self.n {
             return;
         }
 
         // Compute the free spots.
-        let mut v = Vec::with_capacity(self.s - self.n);
+        let mut v = Vec::with_capacity(self.s_total - self.n);
         for i in taken[..self.n].iter_zeros() {
             while !taken[self.n + v.len()] {
                 v.push(i as u64);
@@ -493,7 +522,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn bits_per_element(&self) -> (f32, f32) {
         let pilots = self.pilots.size_in_bytes() as f32 / self.n as f32;
         let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
-        (pilots, remap)
+        (8. * pilots, 8. * remap)
     }
     pub fn print_bits_per_element(&self) {
         let (p, r) = self.bits_per_element();
@@ -507,7 +536,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
     let max_bucket_size = bucket_sizes.clone().max().unwrap();
     let n = bucket_sizes.clone().sum::<usize>();
-    let m = bucket_sizes.clone().count();
+    let b = bucket_sizes.clone().count();
 
     // Print bucket size counts
     let mut counts = vec![0; max_bucket_size + 1];
@@ -515,8 +544,8 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
         counts[bucket_size] += 1;
     }
     eprintln!("n: {n}");
-    eprintln!("m: {m}");
-    eprintln!("avg sz: {:4.2}", n as f32 / m as f32);
+    eprintln!("b: {b}");
+    eprintln!("avg sz: {:4.2}", n as f32 / b as f32);
     eprintln!(
         "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6}",
         "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%"
@@ -533,13 +562,13 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
             "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2}",
             sz,
             count,
-            count as f32 / m as f32 * 100.,
-            bucket_cuml as f32 / m as f32 * 100.,
+            count as f32 / b as f32 * 100.,
+            bucket_cuml as f32 / b as f32 * 100.,
             (sz * count) as f32 / n as f32 * 100.,
             elem_cuml as f32 / n as f32 * 100.,
         );
     }
-    eprintln!("{:>3}: {:>11}", "", m,);
+    eprintln!("{:>3}: {:>11}", "", b,);
 }
 
 /// Input is an iterator over (bucket size, ki), sorted by decreasing size.
