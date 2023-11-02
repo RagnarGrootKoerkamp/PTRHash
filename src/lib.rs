@@ -263,8 +263,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             rem_p2: Rm::new(p2),
             rem_bp2: Rm::new(b - p2),
             rem_parts: Rm::new(num_parts),
-            rem_c1: Rm::new((gamma / beta * b as f64) as usize),
-            rem_c2: Rm::new(((1. - gamma) / (1. - beta) * b as f64) as usize),
+            rem_c1: Rm::new((gamma / beta * b as f64).floor() as usize),
+            // (b-1) to avoid rounding issues.
+            rem_c2: Rm::new(((1. - gamma) / (1. - beta) * (b - 1) as f64) as usize),
             seed: 0,
             pilots: Default::default(),
             remap: F::default(),
@@ -296,6 +297,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // Extract the high bits for part selection; do normal bucket computation within the part using the remaining bits.
             let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
             let bucket = self.bucket_naive_parts(hx);
+            assert!(bucket < self.b);
             (part * self.s, part * self.b + bucket)
         }
     }
@@ -310,7 +312,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         }
     }
 
-    /// Use the high bits to
+    /// NOTE: This requires that Rm uses all 64 bits or the 32 high bits.
+    /// It does not work for Fr32L.
     fn bucket_naive_parts(&self, hx: Hash) -> usize {
         if hx < self.p1 {
             hx.reduce(self.rem_c1)
