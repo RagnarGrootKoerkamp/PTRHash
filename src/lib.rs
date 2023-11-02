@@ -74,8 +74,6 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 pub struct PTParams {
     /// Print bucket size and ki stats after construction.
     pub print_stats: bool,
-    /// When true, do global displacement hashing.
-    pub displace: bool,
     /// For displacement, the number of target bits.
     pub bits: usize,
     /// Algorithm for pilot selection
@@ -88,7 +86,6 @@ impl Default for PTParams {
     fn default() -> Self {
         Self {
             print_stats: false,
-            displace: false,
             bits: 10,
             pilot_alg: Default::default(),
             max_slots_per_part: usize::MAX,
@@ -400,79 +397,17 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             );
 
             taken.clear();
-            taken.resize(self.s, false);
-            if self.params.displace {
-                if !self.displace(
-                    &hashes,
-                    &starts,
-                    &bucket_order,
-                    self.params.bits,
-                    &mut pilots,
-                    &mut taken,
-                ) {
-                    continue 's;
-                }
-            } else {
-                // Iterate all buckets of size >= 5 as &[Hash].
-                let kmax = 20 * self.s as u64;
-                let mut bs = bucket_order.iter().peekable();
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] >= 1) {
-                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) =
-                        self.find_pilot(kmax, bucket, &mut taken, self.params.pilot_alg)
-                    else {
-                        continue 's;
-                    };
-                    pilots[b] = ki;
-                }
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 4) {
-                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) = self.find_pilot_array::<4>(
-                        kmax,
-                        bucket.split_array_ref().0,
-                        &mut taken,
-                        self.params.pilot_alg,
-                    ) else {
-                        continue 's;
-                    };
-                    pilots[b] = ki;
-                }
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 3) {
-                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) = self.find_pilot_array::<3>(
-                        kmax,
-                        bucket.split_array_ref().0,
-                        &mut taken,
-                        self.params.pilot_alg,
-                    ) else {
-                        continue 's;
-                    };
-                    pilots[b] = ki;
-                }
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 2) {
-                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) = self.find_pilot_array::<2>(
-                        kmax,
-                        bucket.split_array_ref().0,
-                        &mut taken,
-                        self.params.pilot_alg,
-                    ) else {
-                        continue 's;
-                    };
-                    pilots[b] = ki;
-                }
-                while let Some(&b) = bs.next_if(|&&b| starts[b + 1] - starts[b] == 1) {
-                    let bucket = unsafe { &mut hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                    let Some((ki, _hki)) = self.find_pilot_array::<1>(
-                        kmax,
-                        bucket.split_array_ref().0,
-                        &mut taken,
-                        self.params.pilot_alg,
-                    ) else {
-                        continue 's;
-                    };
-                    pilots[b] = ki;
-                }
+            taken.resize(self.s_total, false);
+            // TODO: Update for partitions.
+            if !self.displace(
+                &hashes,
+                &starts,
+                &bucket_order,
+                self.params.bits,
+                &mut pilots,
+                &mut taken,
+            ) {
+                continue 's;
             }
 
             // Found a suitable seed.

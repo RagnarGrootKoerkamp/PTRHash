@@ -33,8 +33,6 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 1.0)]
         a: f32,
-        #[arg(long)]
-        displace: bool,
         #[arg(long, default_value_t = 8)]
         bits: usize,
         #[arg(long)]
@@ -83,7 +81,6 @@ fn main() {
             n,
             c,
             a,
-            displace,
             bits,
             stats,
             alg,
@@ -96,7 +93,6 @@ fn main() {
                 a,
                 &keys,
                 PTParams {
-                    displace,
                     bits,
                     print_stats: stats,
                     pilot_alg: alg,
