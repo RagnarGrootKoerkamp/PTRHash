@@ -20,8 +20,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let kmax = 1u64 << bits;
         eprintln!("DISPLACE 2^{bits}={kmax}");
 
-        kis.reset(self.b, u64::MAX);
-        let mut slots = vec![BucketIdx::NONE; self.s];
+        kis.reset(self.b_total, u64::MAX);
+        let mut slots = vec![BucketIdx::NONE; self.s_total];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
         let max_bucket_len = bucket_len(bucket_order[0]);

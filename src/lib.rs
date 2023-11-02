@@ -226,10 +226,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // We start with the given maximum number of slots per part, since
             // that is what should fit in L1 or L2 cache.
             // Thus, the number of partitions is:
-            num_parts = max(n.div_ceil(params.max_slots_per_part), 1);
+            num_parts = max(s.div_ceil(params.max_slots_per_part), 1);
             // Slots per part.
             s /= num_parts;
-            assert!(s <= params.max_slots_per_part);
+            assert!(
+                s <= params.max_slots_per_part,
+                "{s} <= {} does not hold. parts {num_parts}",
+                params.max_slots_per_part
+            );
             // Buckets per part
             b /= num_parts;
         }
@@ -241,9 +245,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // TODO: Figure out if gcd(m,n) large is a problem or not.
         let p2 = b / 3;
         assert_eq!(b - p2, 2 * p2);
-        eprintln!("Num parts: {}", num_parts);
-        eprintln!("s {s}");
-        eprintln!("b {b}");
+        eprintln!("       keys: {n:>10}");
+        eprintln!("      parts: {num_parts:>10}");
+        eprintln!("      slots: {s:>10}");
+        eprintln!("    buckets: {b:>10}");
+        eprintln!("  tot slots: {:>10}", num_parts * s);
+        eprintln!("tot buckets: {:>10}", num_parts * b);
 
         Self {
             params,
@@ -382,7 +389,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             };
 
             // Reset memory.
-            pilots.reset(self.b, 0);
+            pilots.reset(self.b_total, 0);
 
             let num_empty_buckets = bucket_order
                 .iter()
@@ -439,7 +446,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         assert_eq!(
             taken.count_zeros(),
             self.s_total - self.n,
-            "Not the right number of free slots left!"
+            "Not the right number of free slots left!\n total slots {} - n {}",
+            self.s_total,
+            self.n
         );
 
         if self.s_total == self.n {
