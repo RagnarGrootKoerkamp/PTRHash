@@ -25,7 +25,11 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // 1. Collect all hashes.
         let mut hashes = keys.iter().map(|key| self.hash_key(key)).collect_vec();
         // 2. Sort by hash, but take care of small vs large buckets.
-        radsort::sort_by_key(&mut hashes, |&h| (h >= self.p1, h.get_low()));
+        // radsort::sort_by_key(&mut hashes, |&h| (h >= self.p1, h.get_low()));
+        radsort::sort_by_key(&mut hashes, |&h| {
+            let (offset, bucket) = self.slot_offset_and_bucket(h);
+            (bucket, offset, h.get())
+        });
 
         for range in hashes.group_by_mut(|h1, h2| h1.get_low() == h2.get_low()) {
             if range.len() > 1 {

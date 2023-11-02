@@ -63,7 +63,7 @@ enum Command {
     },
 }
 
-type PT = PTHash<Vec<SlotIdx>, reduce::FR32L, reduce::FR64, hash::FxHash, true, true>;
+type PT = PTHash<Vec<SlotIdx>, reduce::FR64, reduce::FR32L, hash::FxHash, true, true>;
 // type PT = PTHash<sucds::mii_sequences::EliasFano, reduce::FR32L, reduce::FR64, hash::FxHash, true, true>;
 
 fn main() {
