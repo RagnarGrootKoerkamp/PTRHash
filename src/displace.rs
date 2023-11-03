@@ -13,13 +13,13 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         hashes: &[Hash],
         starts: &BucketVec<usize>,
         bucket_order: &[BucketIdx],
-        kis: &mut BucketVec<u8>,
+        pilots: &mut BucketVec<u8>,
         taken: &mut BitVec,
     ) -> bool {
         let kmax = 256;
 
-        kis.clear();
-        kis.resize(self.b_total, 0);
+        pilots.clear();
+        pilots.resize(self.b_total, 0);
 
         let mut total_displacements = 0;
 
@@ -29,7 +29,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 hashes,
                 &starts[part * self.b..(part + 1) * self.b],
                 &bucket_order[part * self.b..(part + 1) * self.b],
-                &mut kis[part * self.b..(part + 1) * self.b],
+                &mut pilots[part * self.b..(part + 1) * self.b],
                 &mut taken[part * self.s..(part + 1) * self.s],
             );
             total_displacements += cnt;
@@ -40,13 +40,13 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         // Clear the last \r line.
         eprint!("\x1b[K");
-        let max = kis.iter().copied().max().unwrap();
+        let max = pilots.iter().copied().max().unwrap();
         assert!(
             (max as Pilot) < kmax,
             "Max pilot found is {max} which is not less than {kmax}"
         );
 
-        let sum_pilots = kis.iter().map(|&k| k as Pilot).sum::<Pilot>();
+        let sum_pilots = pilots.iter().map(|&k| k as Pilot).sum::<Pilot>();
 
         eprintln!(
             "  displ./bkt: {:>14.3}",
@@ -65,7 +65,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         hashes: &[Hash],
         starts: &BucketSlice<usize>,
         bucket_order: &[BucketIdx],
-        kis: &mut [u8],
+        pilots: &mut [u8],
         taken: &mut BitSlice,
     ) -> (bool, usize) {
         let kmax = 256;
@@ -77,18 +77,18 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         let mut stack = vec![];
 
-        let positions = |b: BucketIdx, ki: Pilot| unsafe {
-            let hki = self.hash_pilot(ki);
+        let positions = |b: BucketIdx, p: Pilot| unsafe {
+            let hp = self.hash_pilot(p);
             hashes
                 .get_unchecked(starts[b]..starts[b + 1])
                 .iter()
-                .map(move |&hx| self.position_in_part_hki(hx, hki))
+                .map(move |&hx| self.position_in_part_hp(hx, hp))
         };
         let mut duplicate_positions = {
             let mut positions_tmp = vec![0; max_bucket_len];
-            move |b: BucketIdx, ki: Pilot| {
+            move |b: BucketIdx, p: Pilot| {
                 positions_tmp.clear();
-                positions(b, ki).collect_into(&mut positions_tmp);
+                positions(b, p).collect_into(&mut positions_tmp);
                 positions_tmp.sort_unstable();
                 !positions_tmp.partition_dedup().1.is_empty()
             }
@@ -102,7 +102,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // Check for duplicate hashes inside bucket.
             let bucket = &hashes[starts[b]..starts[b + 1]];
             if bucket.is_empty() {
-                kis[b] = 0;
+                pilots[b] = 0;
                 continue;
             }
             let b_len = bucket.len();
@@ -137,16 +137,16 @@ Possible causes:
                 // Check for a solution without collisions.
 
                 let bucket = unsafe { &hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                let b_positions = |hki: Hash| {
+                let b_positions = |hp: Hash| {
                     bucket
                         .iter()
-                        .map(move |&hx| self.position_in_part_hki(hx, hki))
+                        .map(move |&hx| self.position_in_part_hp(hx, hp))
                 };
 
                 // Hot-path for when there are no collisions, which is most of the buckets.
-                if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken) {
-                    kis[b] = ki as u8;
-                    for p in b_positions(hki) {
+                if let Some((p, hp)) = self.find_pilot(kmax, bucket, taken) {
+                    pilots[b] = p as u8;
+                    for p in b_positions(hp) {
                         unsafe {
                             // Taken is already filled by fine_pilot.
                             *slots.get_unchecked_mut(p) = b;
@@ -155,35 +155,35 @@ Possible causes:
                     continue 'b;
                 }
 
-                let ki = kis[b] as Pilot + 1;
-                // (worst colliding bucket size, ki)
+                let p = pilots[b] as Pilot + 1;
+                // (worst colliding bucket size, p)
                 let mut best = (usize::MAX, u64::MAX);
 
                 if best.0 != 0 {
-                    'ki: for delta in 0u64..kmax {
-                        let ki = (ki + delta) % kmax;
-                        let hki = self.hash_pilot(ki);
+                    'p: for delta in 0u64..kmax {
+                        let p = (p + delta) % kmax;
+                        let hp = self.hash_pilot(p);
                         let mut collision_score = 0;
-                        for p in b_positions(hki) {
+                        for p in b_positions(hp) {
                             let s = unsafe { *slots.get_unchecked(p) };
                             // Heavily penalize recently moved buckets.
                             let new_score = if s.is_none() {
                                 continue;
                             } else if recent.contains(&s) {
-                                continue 'ki;
+                                continue 'p;
                             } else {
                                 bucket_len(s).pow(2)
                             };
                             collision_score += new_score;
                             if collision_score >= best.0 {
-                                continue 'ki;
+                                continue 'p;
                             }
                         }
                         // This check takes 2% of times even though it almost
                         // always passes. Can we delay it to filling of the
                         // positions table, and backtrack if needed.
-                        if !duplicate_positions(b, ki) {
-                            best = (collision_score, ki);
+                        if !duplicate_positions(b, p) {
+                            best = (collision_score, p);
                             // Since we already checked for a collision-free solution,
                             // the next best is a single collision of size b_len.
                             if collision_score == b_len * b_len {
@@ -193,13 +193,12 @@ Possible causes:
                     }
                 }
 
-                let (_collision_score, ki) = best;
-                // eprintln!("{i:>8} {num_collisions:>2} collisions at ki {ki:>8}");
-                kis[b] = ki as u8;
-                let hki = self.hash_pilot(ki);
+                let (_collision_score, p) = best;
+                pilots[b] = p as u8;
+                let hp = self.hash_pilot(p);
 
-                // Drop the collisions and set the new ki.
-                for p in b_positions(hki) {
+                // Drop the collisions and set the new pilot.
+                for p in b_positions(hp) {
                     // THIS IS A HOT INSTRUCTION.
                     let b2 = slots[p];
                     if b2.is_some() {
@@ -209,7 +208,7 @@ Possible causes:
                         // eprintln!("{i:>8}/{:>8} Drop bucket {b2:>8}", self.n);
                         stack.push(b2);
                         displacements += 1;
-                        for p2 in positions(b2, kis[b2] as Pilot) {
+                        for p2 in positions(b2, pilots[b2] as Pilot) {
                             unsafe {
                                 *slots.get_unchecked_mut(p2) = BucketIdx::NONE;
                                 taken.set_unchecked(p2, false);

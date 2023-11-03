@@ -21,8 +21,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // cache line can skip caches and be immediately discarded after
             // reading.
             self.pilots.prefetch(next_i[idx]);
-            let ki = self.pilots.index(cur_i);
-            self.position(cur_hx, ki)
+            let p = self.pilots.index(cur_i);
+            self.position(cur_hx, p)
         })
     }
 
@@ -44,12 +44,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // cache line can skip caches and be immediately discarded after
             // reading.
             self.pilots.prefetch(next_i[idx]);
-            let ki = self.pilots.index(cur_i);
-            let p = self.position(cur_hx, ki);
-            if std::intrinsics::likely(p < self.n) {
-                p
+            let pilot = self.pilots.index(cur_i);
+            let pos = self.position(cur_hx, pilot);
+            if std::intrinsics::likely(pos < self.n) {
+                pos
             } else {
-                self.remap.index(p - self.n) as usize
+                self.remap.index(pos - self.n) as usize
             }
         })
     }
@@ -137,14 +137,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 for i in 0..L {
                     self.pilots.prefetch(next_i[idx][i]);
                 }
-                let ki_vec = cur_i_vec.as_array().map(|cur_i| self.pilots.index(cur_i));
+                let pilot_vec = cur_i_vec.as_array().map(|cur_i| self.pilots.index(cur_i));
                 let mut i = 0;
-                let p_vec = [(); L].map(move |_| {
-                    let p = self.position(Hash::new(cur_hx_vec.as_array()[i]), ki_vec[i]);
+                let pos_vec = [(); L].map(move |_| {
+                    let pos = self.position(Hash::new(cur_hx_vec.as_array()[i]), pilot_vec[i]);
                     i += 1;
-                    p
+                    pos
                 });
-                p_vec
+                pos_vec
             })
     }
 }

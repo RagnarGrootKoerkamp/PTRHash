@@ -72,7 +72,7 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Clone, Copy, Debug)]
 pub struct PTParams {
-    /// Print bucket size and ki stats after construction.
+    /// Print bucket size and pilot stats after construction.
     pub print_stats: bool,
     /// Max number of buckets per partition.
     pub max_slots_per_part: usize,
@@ -271,8 +271,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         Hx::hash(x, self.seed)
     }
 
-    fn hash_pilot(&self, ki: u64) -> Hash {
-        Hk::hash(&ki, self.seed)
+    fn hash_pilot(&self, p: u64) -> Hash {
+        Hk::hash(&p, self.seed)
     }
 
     fn part(&self, hx: Hash) -> usize {
@@ -322,16 +322,16 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         }
     }
 
-    fn position(&self, hx: Hash, ki: u64) -> usize {
-        self.part(hx) * self.s + self.position_in_part(hx, ki)
+    fn position(&self, hx: Hash, p: u64) -> usize {
+        self.part(hx) * self.s + self.position_in_part(hx, p)
     }
 
-    fn position_in_part(&self, hx: Hash, ki: u64) -> usize {
-        (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
+    fn position_in_part(&self, hx: Hash, p: u64) -> usize {
+        (hx ^ self.hash_pilot(p)).reduce(self.rem_s)
     }
 
-    fn position_in_part_hki(&self, hx: Hash, hki: Hash) -> usize {
-        (hx ^ hki).reduce(self.rem_s)
+    fn position_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
+        (hx ^ hp).reduce(self.rem_s)
     }
 
     /// See index.rs for additional streaming/SIMD implementations.
@@ -348,12 +348,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn index_remap(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
         let (_part, b) = self.part_and_bucket(hx);
-        let ki = self.pilots.index(b);
-        let p = self.position(hx, ki);
-        if std::intrinsics::likely(p < self.n) {
-            p
+        let p = self.pilots.index(b);
+        let pos = self.position(hx, p);
+        if std::intrinsics::likely(pos < self.n) {
+            pos
         } else {
-            self.remap.index(p - self.n) as usize
+            self.remap.index(pos - self.n) as usize
         }
     }
 
@@ -414,7 +414,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             }
 
             if self.params.print_stats {
-                print_bucket_sizes_with_ki(
+                print_bucket_sizes_with_pilots(
                     bucket_order
                         .iter()
                         .map(|&b| (starts[b + 1] - starts[b], pilots[b] as Pilot)),
@@ -511,42 +511,42 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
     eprintln!("{:>3}: {:>11}", "", b,);
 }
 
-/// Input is an iterator over (bucket size, ki), sorted by decreasing size.
-pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + Clone) {
-    let bucket_sizes = buckets.clone().map(|(sz, _ki)| sz);
+/// Input is an iterator over (bucket size, p), sorted by decreasing size.
+pub fn print_bucket_sizes_with_pilots(buckets: impl Iterator<Item = (usize, u64)> + Clone) {
+    let bucket_sizes = buckets.clone().map(|(sz, _p)| sz);
     let max_bucket_size = bucket_sizes.clone().max().unwrap();
     let n = bucket_sizes.clone().sum::<usize>();
     let m = bucket_sizes.clone().count();
 
-    // Collect bucket sizes and ki statistics.
+    // Collect bucket sizes and p statistics.
     let mut counts = vec![0; max_bucket_size + 1];
-    let mut sum_ki = vec![0; max_bucket_size + 1];
-    let mut max_ki = vec![0; max_bucket_size + 1];
-    let mut new_ki = vec![0; max_bucket_size + 1];
+    let mut sum_p = vec![0; max_bucket_size + 1];
+    let mut max_p = vec![0; max_bucket_size + 1];
+    let mut new_p = vec![0; max_bucket_size + 1];
 
     const BINS: usize = 100;
 
-    // Collect ki statistics per percentile.
+    // Collect p statistics per percentile.
     let mut pct_count = vec![0; BINS];
-    let mut pct_sum_ki = vec![0; BINS];
-    let mut pct_max_ki = vec![0; BINS];
-    let mut pct_new_ki = vec![0; BINS];
+    let mut pct_sum_p = vec![0; BINS];
+    let mut pct_max_p = vec![0; BINS];
+    let mut pct_new_p = vec![0; BINS];
     let mut pct_elems = vec![0; BINS];
 
-    let mut distinct_ki = HashSet::new();
-    for (i, (sz, ki)) in buckets.clone().enumerate() {
-        let new = distinct_ki.insert(ki) as usize;
+    let mut distinct_p = HashSet::new();
+    for (i, (sz, p)) in buckets.clone().enumerate() {
+        let new = distinct_p.insert(p) as usize;
         counts[sz] += 1;
-        sum_ki[sz] += ki;
-        max_ki[sz] = max_ki[sz].max(ki);
-        new_ki[sz] += new;
+        sum_p[sz] += p;
+        max_p[sz] = max_p[sz].max(p);
+        new_p[sz] += new;
 
         let pct = i * BINS / m;
         pct_count[pct] += 1;
-        pct_sum_ki[pct] += ki;
-        pct_max_ki[pct] = pct_max_ki[i * 100 / m].max(ki);
+        pct_sum_p[pct] += p;
+        pct_max_p[pct] = pct_max_p[i * 100 / m].max(p);
         pct_elems[pct] += sz;
-        pct_new_ki[pct] += new;
+        pct_new_p[pct] += new;
     }
 
     eprintln!("n: {n}");
@@ -554,11 +554,11 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
 
     eprintln!(
         "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10} {:>10} {:>10}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki", "new ki", "# ki"
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg p", "max p", "new p", "# p"
     );
     let mut elem_cuml = 0;
     let mut bucket_cuml = 0;
-    let mut num_ki_cuml = 0;
+    let mut num_p_cuml = 0;
     let mut it = bucket_sizes.clone();
     for i in 0..BINS {
         let count = pct_count[i];
@@ -572,7 +572,7 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
         }
         bucket_cuml += count;
         elem_cuml += pct_elems[i];
-        num_ki_cuml += pct_new_ki[i];
+        num_p_cuml += pct_new_p[i];
         eprintln!(
             "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
             sz,
@@ -581,10 +581,10 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
             bucket_cuml as f32 / m as f32 * 100.,
             pct_elems[i] as f32 / n as f32 * 100.,
             elem_cuml as f32 / n as f32 * 100.,
-            pct_sum_ki[i] as f32 / pct_count[i] as f32,
-            pct_max_ki[i],
-            pct_new_ki[i],
-            num_ki_cuml,
+            pct_sum_p[i] as f32 / pct_count[i] as f32,
+            pct_max_p[i],
+            pct_new_p[i],
+            num_p_cuml,
         );
     }
     eprintln!(
@@ -595,28 +595,28 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
         100.,
         100.,
         100.,
-        pct_sum_ki.iter().copied().sum::<u64>() as f32
+        pct_sum_p.iter().copied().sum::<u64>() as f32
             / pct_count.iter().copied().sum::<usize>() as f32,
-        pct_max_ki.iter().max().unwrap(),
-        pct_new_ki.iter().copied().sum::<usize>(),
-        num_ki_cuml,
+        pct_max_p.iter().max().unwrap(),
+        pct_new_p.iter().copied().sum::<usize>(),
+        num_p_cuml,
     );
 
     eprintln!();
     eprintln!(
         "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10} {:>10} {:>10}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg ki", "max ki", "new ki", "# ki"
+        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg p", "max p", "new p", "# p"
     );
     let mut elem_cuml = 0;
     let mut bucket_cuml = 0;
-    let mut num_ki_cuml = 0;
+    let mut num_p_cuml = 0;
     for (sz, &count) in counts.iter().enumerate().rev() {
         if count == 0 {
             continue;
         }
         elem_cuml += sz * count;
         bucket_cuml += count;
-        num_ki_cuml += new_ki[sz];
+        num_p_cuml += new_p[sz];
         eprintln!(
             "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
             sz,
@@ -625,10 +625,10 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
             bucket_cuml as f32 / m as f32 * 100.,
             (sz * count) as f32 / n as f32 * 100.,
             elem_cuml as f32 / n as f32 * 100.,
-            sum_ki[sz] as f32 / count as f32,
-            max_ki[sz],
-            new_ki[sz],
-            num_ki_cuml,
+            sum_p[sz] as f32 / count as f32,
+            max_p[sz],
+            new_p[sz],
+            num_p_cuml,
         );
     }
     eprintln!(
@@ -639,10 +639,10 @@ pub fn print_bucket_sizes_with_ki(buckets: impl Iterator<Item = (usize, u64)> + 
         100.,
         100.,
         100.,
-        pct_sum_ki.iter().copied().sum::<u64>() as f32
+        pct_sum_p.iter().copied().sum::<u64>() as f32
             / pct_count.iter().copied().sum::<usize>() as f32,
-        pct_max_ki.iter().max().unwrap(),
-        pct_new_ki.iter().copied().sum::<usize>(),
-        num_ki_cuml,
+        pct_max_p.iter().max().unwrap(),
+        pct_new_p.iter().copied().sum::<usize>(),
+        num_p_cuml,
     );
 }
