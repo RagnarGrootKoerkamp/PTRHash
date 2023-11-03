@@ -99,7 +99,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             for b in BucketIdx::range(self.b) {
                 let b = b + p * self.b;
                 let l = starts[b + 1] - starts[b];
-                order[pos_for_size[l]] = b;
+                order[pos_for_size[l]] = b - p * self.b;
                 pos_for_size[l] += 1;
             }
         }

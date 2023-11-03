@@ -2,7 +2,7 @@
 use std::intrinsics::{prefetch_read_data, unlikely};
 
 use super::*;
-use bitvec::vec::BitVec;
+use bitvec::{slice::BitSlice, vec::BitVec};
 use clap::ValueEnum;
 
 impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
@@ -12,7 +12,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &self,
         kmax: u64,
         bucket: &[Hash],
-        taken: &mut BitVec,
+        taken: &mut BitSlice,
     ) -> Option<(u64, Hash)> {
         match bucket.len() {
             1 => self.find_pilot_array(kmax, bucket.split_array_ref::<1>().0, taken),
@@ -30,7 +30,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &self,
         kmax: u64,
         bucket: &[Hash; L],
-        taken: &mut BitVec,
+        taken: &mut BitSlice,
     ) -> Option<(u64, Hash)> {
         self.find_pilot_slice(kmax, bucket, taken)
     }
@@ -44,12 +44,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &self,
         kmax: u64,
         bucket: &[Hash],
-        taken: &mut BitVec,
+        taken: &mut BitSlice,
     ) -> Option<(u64, Hash)> {
         'ki: for ki in 0u64..kmax {
             let hki = self.hash_pilot(ki);
             for &hx in bucket {
-                if unsafe { *taken.get_unchecked(self.position_hki(hx, hki)) } {
+                if unsafe { *taken.get_unchecked(self.position_in_part_hki(hx, hki)) } {
                     continue 'ki;
                 }
             }
@@ -64,14 +64,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     /// collision within the bucket is found.
     ///
     /// Returns true on success.
-    fn try_take_ki(&self, bucket: &[Hash], hki: Hash, taken: &mut BitVec) -> bool {
+    fn try_take_ki(&self, bucket: &[Hash], hki: Hash, taken: &mut BitSlice) -> bool {
         // This bucket does not collide with previous buckets, but it may still collide with itself.
         for (i, &hx) in bucket.iter().enumerate() {
-            let p = self.position_hki(hx, hki);
+            let p = self.position_in_part_hki(hx, hki);
             if unsafe { *taken.get_unchecked(p) } {
                 // Collision within the bucket. Clean already set entries.
                 for &hx in unsafe { bucket.get_unchecked(..i) } {
-                    unsafe { taken.set_unchecked(self.position_hki(hx, hki), false) };
+                    unsafe { taken.set_unchecked(self.position_in_part_hki(hx, hki), false) };
                 }
                 return false;
             }

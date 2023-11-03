@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 
-use crate::types::BucketIdx;
+use crate::types::{BucketIdx, BucketSlice};
 
 use super::*;
-use bitvec::vec::BitVec;
+use bitvec::{slice::BitSlice, vec::BitVec};
 
 impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
     PTHash<F, Rm, Rn, Hx, T, PT>
@@ -18,8 +18,59 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     ) -> bool {
         let kmax = 256;
 
-        kis.reset(self.b_total, 0);
-        let mut slots = vec![BucketIdx::NONE; self.s_total];
+        kis.clear();
+        kis.resize(self.b_total, 0);
+
+        let mut total_displacements = 0;
+
+        for part in 0..self.num_parts {
+            let (ok, cnt) = self.displace_part(
+                part,
+                hashes,
+                &starts[part * self.b..(part + 1) * self.b],
+                &bucket_order[part * self.b..(part + 1) * self.b],
+                &mut kis[part * self.b..(part + 1) * self.b],
+                &mut taken[part * self.s..(part + 1) * self.s],
+            );
+            total_displacements += cnt;
+            if !ok {
+                return false;
+            }
+        }
+
+        // Clear the last \r line.
+        eprint!("\x1b[K");
+        let max = kis.iter().copied().max().unwrap();
+        assert!(
+            (max as Pilot) < kmax,
+            "Max pilot found is {max} which is not less than {kmax}"
+        );
+
+        let sum_pilots = kis.iter().map(|&k| k as Pilot).sum::<Pilot>();
+
+        eprintln!(
+            "  displ./bkt: {:>14.3}",
+            total_displacements as f32 / self.b_total as f32
+        );
+        eprintln!(
+            "   avg pilot: {:>14.3}",
+            sum_pilots as f32 / self.b_total as f32
+        );
+        true
+    }
+
+    fn displace_part(
+        &self,
+        part: usize,
+        hashes: &[Hash],
+        starts: &BucketSlice<usize>,
+        bucket_order: &[BucketIdx],
+        kis: &mut [u8],
+        taken: &mut BitSlice,
+    ) -> (bool, usize) {
+        let kmax = 256;
+
+        let mut slots = vec![BucketIdx::NONE; self.s];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
         let max_bucket_len = bucket_len(bucket_order[0]);
@@ -31,7 +82,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             hashes
                 .get_unchecked(starts[b]..starts[b + 1])
                 .iter()
-                .map(move |&hx| self.position_hki(hx, hki))
+                .map(move |&hx| self.position_in_part_hki(hx, hki))
         };
         let mut duplicate_positions = {
             let mut positions_tmp = vec![0; max_bucket_len];
@@ -43,11 +94,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             }
         };
 
-        let mut total_displacements = 0;
-        let mut max_len_delta = 0;
-        let mut max_chain_len = 0;
-
         let mut recent = [BucketIdx::NONE; 4];
+        let mut total_displacements = 0;
 
         // TODO: Permute the buckets by bucket_order up-front to make memory access linear afterwards.
         for (i, &b) in bucket_order.iter().enumerate() {
@@ -69,10 +117,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             'b: while let Some(b) = stack.pop() {
                 if displacements > self.s && displacements.is_power_of_two() {
                     eprintln!(
-                        "bucket {:>5.2}% sz {:>2} avg displacements: {:>8.5} max chain {max_chain_len:>8} cur displacements: {displacements:>9}",
-                        100.*i as f32 / self.b_total as f32,
-                        bucket.len(),
-                        total_displacements as f32 / i as f32
+                        "part {part:>6} bucket {:>5.2}%  chain: {displacements:>9}",
+                        100. * (part * self.b + i) as f32 / self.b_total as f32,
                     );
                     if displacements >= 10 * self.s {
                         panic!(
@@ -91,14 +137,18 @@ Possible causes:
                 // Check for a solution without collisions.
 
                 let bucket = unsafe { &hashes.get_unchecked(starts[b]..starts[b + 1]) };
-                let b_positions =
-                    |hki: Hash| bucket.iter().map(move |&hx| self.position_hki(hx, hki));
+                let b_positions = |hki: Hash| {
+                    bucket
+                        .iter()
+                        .map(move |&hx| self.position_in_part_hki(hx, hki))
+                };
 
                 // Hot-path for when there are no collisions, which is most of the buckets.
                 if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken) {
                     kis[b] = ki as u8;
                     for p in b_positions(hki) {
                         unsafe {
+                            // Taken is already filled by fine_pilot.
                             *slots.get_unchecked_mut(p) = b;
                         }
                     }
@@ -165,10 +215,6 @@ Possible causes:
                                 taken.set_unchecked(p2, false);
                             }
                         }
-                        let b2_len = bucket_len(b2);
-                        if b2_len - b_len > max_len_delta {
-                            max_len_delta = b2_len - b_len;
-                        }
                     }
                     // eprintln!("Set slot {:>8} to {:>8}", p, b);
                     unsafe {
@@ -182,34 +228,13 @@ Possible causes:
                 recent[recent_idx] = b;
             }
             total_displacements += displacements;
-            max_chain_len = max_chain_len.max(displacements);
             if i % (1 << 14) == 0 {
                 eprint!(
-                    "bucket {:>5.2}% sz {:>2} avg displacements: {:>8.5} max chain {max_chain_len:>8}\r",
-                    100.*i as f32 / self.b_total as f32,
-                    bucket.len(),
-                    total_displacements as f32 / i as f32
+                    "part {part:>6} bucket {:>5.2}%\r",
+                    100. * (part * self.b + i) as f32 / self.b_total as f32,
                 );
             }
         }
-        // Clear the last \r line.
-        eprint!("\x1b[K");
-        let max = kis.iter().copied().max().unwrap();
-        assert!(
-            (max as Pilot) < kmax,
-            "Max pilot found is {max} which is not less than {kmax}"
-        );
-
-        let sum_pilots = kis.iter().map(|&k| k as Pilot).sum::<Pilot>();
-
-        eprintln!(
-            "  displ./bkt: {:>14.3}",
-            total_displacements as f32 / self.b_total as f32
-        );
-        eprintln!(
-            "   avg pilot: {:>14.3}",
-            sum_pilots as f32 / self.b_total as f32
-        );
-        true
+        (true, total_displacements)
     }
 }

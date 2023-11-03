@@ -323,11 +323,15 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
 
     fn position(&self, hx: Hash, ki: u64) -> usize {
-        self.part(hx) * self.s + (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
+        self.part(hx) * self.s + self.position_in_part(hx, ki)
     }
 
-    fn position_hki(&self, hx: Hash, hki: Hash) -> usize {
-        self.part(hx) * self.s + (hx ^ hki).reduce(self.rem_s)
+    fn position_in_part(&self, hx: Hash, ki: u64) -> usize {
+        (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
+    }
+
+    fn position_in_part_hki(&self, hx: Hash, hki: Hash) -> usize {
+        (hx ^ hki).reduce(self.rem_s)
     }
 
     /// See index.rs for additional streaming/SIMD implementations.
@@ -386,7 +390,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             };
             eprintln!(
                 "{}",
-                format!("sort buckets: {:>14.2?}", start.elapsed()).bold()
+                format!("sort buckets: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
             );
 
             // Reset memory.
