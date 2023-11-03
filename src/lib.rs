@@ -287,6 +287,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         Hk::hash(&ki, self.seed)
     }
 
+    fn part(&self, hx: Hash) -> usize {
+        hx.reduce(self.rem_parts)
+    }
+
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
     #[inline(always)]

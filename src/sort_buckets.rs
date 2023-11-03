@@ -24,14 +24,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         // 1. Collect all hashes.
         let mut hashes = keys.iter().map(|key| self.hash_key(key)).collect_vec();
-        // 2. Sort by hash, but take care of small vs large buckets.
-        // radsort::sort_by_key(&mut hashes, |&h| (h >= self.p1, h.get_low()));
-        radsort::sort_by_key(&mut hashes, |&h| {
-            let (offset, bucket) = self.slot_offset_and_bucket(h);
-            (bucket, offset, h.get())
-        });
-
-        for range in hashes.group_by_mut(|h1, h2| h1.get_low() == h2.get_low()) {
+        // 2. Bucket sort by top 32 bits, so by part and bucket.
+        radsort::sort_by_key(&mut hashes, |&h| h.get_high());
+        // 3. Sort by full hash.
+        for range in hashes.group_by_mut(|h1, h2| h1.get_high() == h2.get_high()) {
             if range.len() > 1 {
                 range.sort();
                 if !range.partition_dedup().1.is_empty() {
@@ -40,16 +36,23 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             }
         }
 
-        // We shouldn't have buckets that large.
-        let mut pos_for_size = vec![0; 2];
-
+        // For each bucket idx, the location where it starts.
         let mut starts = BucketVec::with_capacity(self.b + 1);
+
+        // For each part, the order of the buckets indices by decreasing bucket size.
+        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b_total];
+
         let mut end = 0;
+        let mut acc = 0;
         starts.push(end);
-        (0..self.b)
-            .map(|b| {
+        for p in 0..self.num_parts {
+            // For each part, the number of buckets of each size.
+            let mut pos_for_size = vec![0; 32];
+
+            // Loop over buckets in part, setting start positions and counting # buckets of each size.
+            for b in 0..self.b {
                 let start = end;
-                while end < hashes.len() && self.slot_offset_and_bucket(hashes[end]).1 == b {
+                while end < hashes.len() && self.part_and_bucket(hashes[end]).1 == p * self.b + b {
                     end += 1;
                 }
 
@@ -58,28 +61,30 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                     pos_for_size.resize(l + 1, 0);
                 }
                 pos_for_size[l] += 1;
-                end
-            })
-            .collect_into(&mut starts);
+                starts.push(end);
+            }
 
-        // Bucket-sort the buckets by decreasing size per part.
-        let max_bucket_size = pos_for_size.len() - 1;
-        let mut acc = 0;
-        for i in (0..=max_bucket_size).rev() {
-            let tmp = pos_for_size[i];
-            pos_for_size[i] = acc;
-            acc += tmp;
+            let max_bucket_size = pos_for_size.len() - 1;
+            {
+                let expected_bucket_size = self.s as f32 / self.b as f32;
+                assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+            }
+
+            // Compute start positions of each range of buckets of equal size.
+            for i in (0..=max_bucket_size).rev() {
+                let tmp = pos_for_size[i];
+                pos_for_size[i] = acc;
+                acc += tmp;
+            }
+
+            // Write buckets to their right location.
+            for b in BucketIdx::range(self.b) {
+                let b = b + p * self.b;
+                let l = starts[b + 1] - starts[b];
+                order[pos_for_size[l]] = b;
+                pos_for_size[l] += 1;
+            }
         }
-
-        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b];
-        for b in BucketIdx::range(self.b) {
-            let l = starts[b + 1] - starts[b];
-            order[pos_for_size[l]] = b;
-            pos_for_size[l] += 1;
-        }
-
-        let expected_bucket_size = self.s as f32 / self.b as f32;
-        assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
 
         Some((hashes, starts, order))
     }
