@@ -45,7 +45,8 @@ use reduce::Reduce;
 type Key = u64;
 use hash::{Hasher, MulHash};
 
-// TODO: Shrink this to u32 or u8.
+// The integer type pilots are converted to.
+// They are stored as u8 always.
 type Pilot = u64;
 pub type SlotIdx = u32;
 
@@ -370,7 +371,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
-        let mut pilots: BucketVec<_> = vec![].into();
+        let mut pilots: BucketVec<u8> = vec![].into();
 
         let mut tries = 0;
         const MAX_TRIES: usize = 3;
@@ -433,7 +434,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 print_bucket_sizes_with_ki(
                     bucket_order
                         .iter()
-                        .map(|&b| (starts[b + 1] - starts[b], pilots[b])),
+                        .map(|&b| (starts[b + 1] - starts[b], pilots[b] as Pilot)),
                 );
             }
 
@@ -448,7 +449,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         );
 
         // Pack the data.
-        self.pilots = Packed::new(pilots.into_vec());
+        self.pilots = pilots.into_vec();
 
         eprintln!(
             "  lookup/key: {:>12.1}",

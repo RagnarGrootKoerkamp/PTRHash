@@ -14,12 +14,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         starts: &BucketVec<usize>,
         bucket_order: &[BucketIdx],
         bits: usize,
-        kis: &mut BucketVec<u64>,
+        kis: &mut BucketVec<u8>,
         taken: &mut BitVec,
     ) -> bool {
         let kmax = 1u64 << bits;
 
-        kis.reset(self.b_total, u64::MAX);
+        kis.reset(self.b_total, 0);
         let mut slots = vec![BucketIdx::NONE; self.s_total];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
@@ -98,7 +98,7 @@ Possible causes:
                 // Hot-path for when there are no collisions, which is most of the buckets.
                 if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken, self.params.pilot_alg)
                 {
-                    kis[b] = ki;
+                    kis[b] = ki as u8;
                     for p in b_positions(hki) {
                         unsafe {
                             *slots.get_unchecked_mut(p) = b;
@@ -107,7 +107,7 @@ Possible causes:
                     continue 'b;
                 }
 
-                let ki = kis[b] + 1;
+                let ki = kis[b] as Pilot + 1;
                 // (worst colliding bucket size, ki)
                 let mut best = (usize::MAX, u64::MAX);
 
@@ -147,7 +147,7 @@ Possible causes:
 
                 let (_collision_score, ki) = best;
                 // eprintln!("{i:>8} {num_collisions:>2} collisions at ki {ki:>8}");
-                kis[b] = ki;
+                kis[b] = ki as u8;
                 let hki = self.hash_pilot(ki);
 
                 // Drop the collisions and set the new ki.
@@ -161,7 +161,7 @@ Possible causes:
                         // eprintln!("{i:>8}/{:>8} Drop bucket {b2:>8}", self.n);
                         stack.push(b2);
                         displacements += 1;
-                        for p2 in positions(b2, kis[b2]) {
+                        for p2 in positions(b2, kis[b2] as Pilot) {
                             unsafe {
                                 *slots.get_unchecked_mut(p2) = BucketIdx::NONE;
                                 taken.set_unchecked(p2, false);
@@ -198,8 +198,8 @@ Possible causes:
         eprint!("\x1b[K");
         let max = kis.iter().copied().max().unwrap();
         assert!(
-            max < kmax,
-            "Max k found is {max} which is not less than {kmax}"
+            (max as Pilot) < kmax,
+            "Max pilot found is {max} which is not less than {kmax}"
         );
 
         let sum_pilots = kis.iter().map(|&k| k as Pilot).sum::<Pilot>();
