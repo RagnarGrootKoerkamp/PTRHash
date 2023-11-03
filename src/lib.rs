@@ -290,7 +290,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
     #[inline(always)]
-    fn slot_offset_and_bucket(&self, hx: Hash) -> (usize, usize) {
+    fn part_and_bucket(&self, hx: Hash) -> (usize, usize) {
         if !PT {
             if T {
                 (0, self.bucket_thirds_shift(hx))
@@ -302,7 +302,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
             let bucket = self.bucket_naive_parts(hx);
             assert!(bucket < self.b);
-            (part * self.s, part * self.b + bucket)
+            (part, part * self.b + bucket)
         }
     }
 
@@ -338,18 +338,18 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
-        let (so, b) = self.slot_offset_and_bucket(hx);
+        let (part, b) = self.part_and_bucket(hx);
         let pilot = self.pilots.index(b);
-        so + self.position(hx, pilot)
+        part * self.s + self.position(hx, pilot)
     }
 
     /// An implementation that also works for alpha<1.
     #[inline(always)]
     pub fn index_remap(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
-        let (so, b) = self.slot_offset_and_bucket(hx);
+        let (part, b) = self.part_and_bucket(hx);
         let ki = self.pilots.index(b);
-        let p = so + self.position(hx, ki);
+        let p = part * self.s + self.position(hx, ki);
         if std::intrinsics::likely(p < self.n) {
             p
         } else {
