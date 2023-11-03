@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::types::BucketIdx;
 
 use super::*;
@@ -23,10 +25,21 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // NOTE: This does not work for other reduction methods.
 
         // 1. Collect all hashes.
-        let mut hashes = keys.iter().map(|key| self.hash_key(key)).collect_vec();
+        let start = Instant::now();
+        let mut hashes: Vec<_> = keys.iter().map(|key| self.hash_key(key)).collect();
+        eprintln!(
+            "{}",
+            format!("   hash keys: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
+        );
         // 2. Bucket sort by top 32 bits, so by part and bucket.
+        let start = Instant::now();
         radsort::sort_by_key(&mut hashes, |&h| h.get_high());
+        eprintln!(
+            "{}",
+            format!("radsort high: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
+        );
         // 3. Sort by full hash.
+        let start = Instant::now();
         for range in hashes.group_by_mut(|h1, h2| h1.get_high() == h2.get_high()) {
             if range.len() > 1 {
                 range.sort();
@@ -35,6 +48,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 }
             }
         }
+        eprintln!(
+            "{}",
+            format!("cmp sort low: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
+        );
 
         // For each bucket idx, the location where it starts.
         let mut starts = BucketVec::with_capacity(self.b + 1);
@@ -45,6 +62,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut end = 0;
         let mut acc = 0;
         starts.push(end);
+        let start = Instant::now();
         for p in 0..self.num_parts {
             // For each part, the number of buckets of each size.
             let mut pos_for_size = vec![0; 32];
@@ -85,6 +103,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 pos_for_size[l] += 1;
             }
         }
+        eprintln!(
+            "{}",
+            format!("bktsort size: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
+        );
 
         Some((hashes, starts, order))
     }
