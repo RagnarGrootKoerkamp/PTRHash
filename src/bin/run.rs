@@ -1,7 +1,6 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use pthash_rs::{
-    pilots::PilotAlg,
     test::{bench_index, bench_index_all},
     *,
 };
@@ -35,8 +34,6 @@ enum Command {
         a: f32,
         #[arg(long)]
         stats: bool,
-        #[arg(long, value_enum, default_value_t = PilotAlg::Simple)]
-        alg: PilotAlg,
         /// Max slots per part
         #[arg(long, default_value_t = 240000)]
         mspp: usize,
@@ -84,7 +81,6 @@ fn main() {
             c,
             a,
             stats,
-            alg,
             mspp,
         } => {
             let start = std::time::Instant::now();
@@ -100,7 +96,6 @@ fn main() {
                 &keys,
                 PTParams {
                     print_stats: stats,
-                    pilot_alg: alg,
                     max_slots_per_part: mspp,
                 },
             );
@@ -126,7 +121,6 @@ fn main() {
                 PTParams {
                     print_stats: stats,
                     max_slots_per_part: mspp,
-                    ..Default::default()
                 },
             );
             pt.print_bits_per_element();

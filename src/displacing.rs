@@ -95,8 +95,7 @@ Possible causes:
                     |hki: Hash| bucket.iter().map(move |&hx| self.position_hki(hx, hki));
 
                 // Hot-path for when there are no collisions, which is most of the buckets.
-                if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken, self.params.pilot_alg)
-                {
+                if let Some((ki, hki)) = self.find_pilot(kmax, bucket, taken) {
                     kis[b] = ki as u8;
                     for p in b_positions(hki) {
                         unsafe {

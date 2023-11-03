@@ -37,7 +37,6 @@ use bitvec::bitvec;
 use colored::Colorize;
 use itertools::Itertools;
 use pack::Packed;
-use pilots::PilotAlg;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use reduce::Reduce;
@@ -76,8 +75,6 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 pub struct PTParams {
     /// Print bucket size and ki stats after construction.
     pub print_stats: bool,
-    /// Algorithm for pilot selection
-    pub pilot_alg: PilotAlg,
     /// Max number of buckets per partition.
     pub max_slots_per_part: usize,
 }
@@ -86,7 +83,6 @@ impl Default for PTParams {
     fn default() -> Self {
         Self {
             print_stats: false,
-            pilot_alg: Default::default(),
             max_slots_per_part: usize::MAX,
         }
     }
@@ -144,7 +140,6 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
     _hx: PhantomData<Hx>,
 
     /// Collect some statistics
-    prefetches: Cell<usize>,
     lookups: Cell<usize>,
 }
 
@@ -273,7 +268,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             pilots: Default::default(),
             remap: F::default(),
             _hx: PhantomData,
-            prefetches: 0.into(),
             lookups: 0.into(),
         }
     }
@@ -443,10 +437,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         eprintln!(
             "  lookup/key: {:>12.1}",
             self.lookups.get() as f32 / self.n as f32
-        );
-        eprintln!(
-            "prefetch/key: {:>12.1}",
-            self.prefetches.get() as f32 / self.n as f32
         );
     }
 
