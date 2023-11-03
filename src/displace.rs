@@ -14,12 +14,18 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         starts: &BucketVec<usize>,
         bucket_order: &[BucketIdx],
         pilots: &mut BucketVec<u8>,
-        taken: &mut BitVec,
+        taken: &mut Vec<BitVec>,
     ) -> bool {
         let kmax = 256;
 
+        // Reset output-memory.
         pilots.clear();
         pilots.resize(self.b_total, 0);
+        for taken in taken.iter_mut() {
+            taken.clear();
+            taken.resize(self.s, false);
+        }
+        taken.resize(self.num_parts, bitvec![0; self.s]);
 
         let mut total_displacements = 0;
 
@@ -30,7 +36,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 &starts[part * self.b..(part + 1) * self.b],
                 &bucket_order[part * self.b..(part + 1) * self.b],
                 &mut pilots[part * self.b..(part + 1) * self.b],
-                &mut taken[part * self.s..(part + 1) * self.s],
+                &mut taken[part],
             );
             total_displacements += cnt;
             if !ok {

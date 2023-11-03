@@ -32,7 +32,7 @@ use std::{
     simd::{LaneCount, Simd, SupportedLaneCount},
 };
 
-use bitvec::bitvec;
+use bitvec::{bitvec, vec::BitVec};
 use colored::Colorize;
 use itertools::Itertools;
 use pack::Packed;
@@ -359,7 +359,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
-        let mut taken = bitvec![0; 0];
+        let mut taken: Vec<BitVec> = vec![];
         let mut pilots: BucketVec<u8> = vec![];
 
         let mut tries = 0;
@@ -393,12 +393,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 format!("sort buckets: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
             );
 
-            // Reset memory.
-            pilots.clear();
-            pilots.resize(self.b_total, 0);
-
-            taken.clear();
-            taken.resize(self.s_total, false);
             let start = std::time::Instant::now();
             if !self.displace(&hashes, &starts, &bucket_order, &mut pilots, &mut taken) {
                 continue 's;
@@ -435,9 +429,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         self.pilots = pilots;
     }
 
-    fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {
+    fn remap_free_slots(&mut self, taken: Vec<BitVec>) {
         assert_eq!(
-            taken.count_zeros(),
+            taken.iter().map(|t| t.count_zeros()).sum::<usize>(),
             self.s_total - self.n,
             "Not the right number of free slots left!\n total slots {} - n {}",
             self.s_total,
@@ -450,8 +444,17 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         // Compute the free spots.
         let mut v = Vec::with_capacity(self.s_total - self.n);
-        for i in taken[..self.n].iter_zeros() {
-            while !taken[self.n + v.len()] {
+        let get = |t: &Vec<BitVec>, idx: usize| t[idx / self.s][idx % self.s];
+        for i in taken
+            .iter()
+            .enumerate()
+            .flat_map(|(p, t)| {
+                let offset = p * self.s;
+                t.iter_zeros().map(move |i| offset + i)
+            })
+            .take_while(|&i| i < self.n)
+        {
+            while !get(&taken, self.n + v.len()) {
                 v.push(i as u64);
             }
             v.push(i as u64);
