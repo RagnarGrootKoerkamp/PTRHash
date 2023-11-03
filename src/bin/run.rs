@@ -23,6 +23,8 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 1.0)]
         a: f32,
+        #[arg(short, long, default_value_t = 0)]
+        threads: usize,
     },
     /// Construct PTHash.
     Build {
@@ -37,6 +39,8 @@ enum Command {
         /// Max slots per part
         #[arg(long, default_value_t = 240000)]
         mspp: usize,
+        #[arg(short, long, default_value_t = 0)]
+        threads: usize,
     },
 
     /// Measure query time on randomly-constructed PTHash.
@@ -54,6 +58,8 @@ enum Command {
         /// Max slots per part
         #[arg(long, default_value_t = 240000)]
         mspp: usize,
+        #[arg(short, long, default_value_t = 0)]
+        threads: usize,
     },
 }
 
@@ -67,7 +73,11 @@ fn main() {
     let Args { command } = Args::parse();
 
     match command {
-        Command::Stats { n, c, a } => {
+        Command::Stats { n, c, a, threads } => {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build_global()
+                .unwrap();
             let keys = pthash_rs::test::generate_keys(n);
             let pthash = PT::init(c, a, n);
             if let Some((_buckets, starts, _order)) = pthash.sort_buckets(&keys) {
@@ -82,7 +92,12 @@ fn main() {
             a,
             stats,
             mspp,
+            threads,
         } => {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build_global()
+                .unwrap();
             let keys = pthash_rs::test::generate_keys(n);
             let start = std::time::Instant::now();
             let pt = PT::new_with_params(
@@ -107,7 +122,12 @@ fn main() {
             total,
             stats,
             mspp,
+            threads,
         } => {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build_global()
+                .unwrap();
             let keys = pthash_rs::test::generate_keys(n);
             let pt = PT::new_random_params(
                 c,
