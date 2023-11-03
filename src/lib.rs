@@ -30,6 +30,7 @@ use std::{
     default::Default,
     marker::PhantomData,
     simd::{LaneCount, Simd, SupportedLaneCount},
+    time::Instant,
 };
 
 use bitvec::{bitvec, vec::BitVec};
@@ -388,19 +389,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 // Found duplicate hashes.
                 continue 's;
             };
-            eprintln!(
-                "{}",
-                format!("sort buckets: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-            );
+            let start = log_duration("sort buckets", start);
 
-            let start = std::time::Instant::now();
             if !self.displace(&hashes, &starts, &bucket_order, &mut pilots, &mut taken) {
                 continue 's;
             }
-            eprintln!(
-                "{}",
-                format!("    displace: {:>14.2?}", start.elapsed()).bold()
-            );
+            log_duration("displace", start);
 
             // Found a suitable seed.
             if tries > 1 {
@@ -420,10 +414,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         let start = std::time::Instant::now();
         self.remap_free_slots(taken);
-        eprintln!(
-            "{}",
-            format!("  remap free: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-        );
+        log_duration("remap free", start);
 
         // Pack the data.
         self.pilots = pilots;
@@ -648,4 +639,12 @@ pub fn print_bucket_sizes_with_pilots(buckets: impl Iterator<Item = (usize, u64)
         pct_new_p.iter().copied().sum::<usize>(),
         num_p_cuml,
     );
+}
+
+fn log_duration(name: &str, start: Instant) -> Instant {
+    eprintln!(
+        "{}",
+        format!("{name:>12}: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
+    );
+    Instant::now()
 }
