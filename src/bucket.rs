@@ -4,6 +4,40 @@ use super::*;
 impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
     PTHash<F, Rm, Rn, Hx, T, PT>
 {
+    /// Use the high bits of hx to decide small/large, then map using the
+    /// remapper (which uses high end of the 32 low bits).
+    pub(super) fn bucket_naive(&self, hx: Hash) -> usize {
+        if hx < self.p1 {
+            hx.reduce(self.rem_p2)
+        } else {
+            self.p2 + hx.reduce(self.rem_bp2)
+        }
+    }
+
+    /// NOTE: This requires that Rm uses all 64 bits or the 32 high bits.
+    /// It does not work for Fr32L.
+    pub(super) fn bucket_parts_naive(&self, hx: Hash) -> usize {
+        if hx < self.p1 {
+            hx.reduce(self.rem_c1)
+        } else {
+            self.c3 + hx.reduce(self.rem_c2)
+        }
+    }
+
+    /// Branchless version of bucket() above that turns out to be slower.
+    /// Generates 4 mov and 4 cmov instructions, which take a long time to execute.
+    pub(super) fn bucket_branchless(&self, hx: Hash) -> usize {
+        let is_large = hx >= self.p1;
+        let rem = if is_large { self.rem_bp2 } else { self.rem_p2 };
+        is_large as usize * self.p2 + hx.reduce(rem)
+    }
+
+    pub(super) fn bucket_parts_branchless(&self, hx: Hash) -> usize {
+        let is_large = hx >= self.p1;
+        let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
+        is_large as usize * self.c3 + hx.reduce(rem)
+    }
+
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.
     /// Thus, we can unconditionally mod by 2*p2, and then get the mod p2 result using a comparison.
     pub(super) fn bucket_thirds(&self, hx: Hash) -> usize {
@@ -29,25 +63,5 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mod_mp2 = hx.reduce(self.rem_bp2);
         let small = (hx < self.p1) as usize;
         self.bp2 * small + (mod_mp2 >> small)
-    }
-
-    /// Branchless version of bucket() above that turns out to be slower.
-    /// Generates 4 mov and 4 cmov instructions, which take a long time to execute.
-    pub(super) fn bucket_branchless(&self, hx: Hash) -> usize {
-        let is_large = hx >= self.p1;
-        let rem = if is_large { self.rem_bp2 } else { self.rem_p2 };
-        is_large as usize * self.p2 + hx.reduce(rem)
-    }
-
-    /// Alternate version of bucket() above that turns out to be (a bit?) slower.
-    /// Branches and does 4 mov instructions in each branch.
-    pub(super) fn bucket_branchless_2(&self, hx: Hash) -> usize {
-        let is_large = hx >= self.p1;
-        let rem = if is_large {
-            &self.rem_bp2
-        } else {
-            &self.rem_p2
-        };
-        is_large as usize * self.p2 + hx.reduce(*rem)
     }
 }

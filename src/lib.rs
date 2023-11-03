@@ -114,6 +114,7 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
     p1: Hash,
     p2: usize,
     bp2: usize,
+    c3: usize,
 
     // Precomputed fast modulo operations.
     /// Fast %parts.
@@ -243,6 +244,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         eprintln!(" buckets tot: {:>10}", num_parts * b);
         eprintln!(" keys/bucket: {:>13.2}", n as f32 / (num_parts * b) as f32);
 
+        let c1 = (gamma / beta * b as f64).floor() as usize;
+        // (b-1) to avoid rounding issues.
+        let c2 = (1. - gamma) / (1. - beta) * (b - 1) as f64;
+        // +1 to avoid bucket<p2
+        let c3 = p2 - (beta * c2) as usize + 1;
+        let c2 = c2 as usize;
         Self {
             params,
             n,
@@ -253,14 +260,14 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             b,
             p1,
             p2,
+            c3,
             bp2: b - p2,
             rem_s: Rn::new(s),
             rem_p2: Rm::new(p2),
             rem_bp2: Rm::new(b - p2),
             rem_parts: Rm::new(num_parts),
-            rem_c1: Rm::new((gamma / beta * b as f64).floor() as usize),
-            // (b-1) to avoid rounding issues.
-            rem_c2: Rm::new(((1. - gamma) / (1. - beta) * (b - 1) as f64) as usize),
+            rem_c1: Rm::new(c1),
+            rem_c2: Rm::new(c2),
             seed: 0,
             pilots: Default::default(),
             remap: F::default(),
@@ -297,28 +304,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         } else {
             // Extract the high bits for part selection; do normal bucket computation within the part using the remaining bits.
             let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
-            let bucket = self.bucket_naive_parts(hx);
+            let bucket = self.bucket_parts_branchless(hx);
             part * self.b + bucket
-        }
-    }
-
-    /// Use the high bits of hx to decide small/large, then map using the
-    /// remapper (which uses high end of the 32 low bits).
-    fn bucket_naive(&self, hx: Hash) -> usize {
-        if hx < self.p1 {
-            hx.reduce(self.rem_p2)
-        } else {
-            self.p2 + hx.reduce(self.rem_bp2)
-        }
-    }
-
-    /// NOTE: This requires that Rm uses all 64 bits or the 32 high bits.
-    /// It does not work for Fr32L.
-    fn bucket_naive_parts(&self, hx: Hash) -> usize {
-        if hx < self.p1 {
-            hx.reduce(self.rem_c1)
-        } else {
-            self.p2 + (hx - self.p1).reduce(self.rem_c2)
         }
     }
 
