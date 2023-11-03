@@ -14,7 +14,7 @@
 )]
 #![allow(incomplete_features)]
 pub mod bucket;
-mod displacing;
+mod displace;
 pub mod hash;
 mod index;
 mod pack;
