@@ -6,6 +6,7 @@ use pthash_rs::{
     test::{bench_index, bench_index_all},
     *,
 };
+use sucds::mii_sequences::EliasFano;
 
 /// Print statistics on PTHash bucket sizes.
 #[derive(clap::Parser)]
@@ -58,11 +59,17 @@ enum Command {
         total: usize,
         #[arg(long)]
         stats: bool,
+        /// Max slots per part
+        #[arg(long, default_value_t = usize::MAX)]
+        mspp: usize,
     },
 }
 
-type PT = PTHash<Vec<SlotIdx>, reduce::FR64, reduce::FR32L, hash::FxHash, true, true>;
-// type PT = PTHash<sucds::mii_sequences::EliasFano, reduce::FR32L, reduce::FR64, hash::FxHash, true, true>;
+// type PT = PTHash<Vec<SlotIdx>, reduce::FR32H, reduce::FR32L, hash::FxHash, true, true>;
+// type PT = PTHash<Vec<SlotIdx>, reduce::FR32H, reduce::FM32L, hash::FxHash, true, true>;
+// type PT = PTHash<EliasFano, reduce::FR32H, reduce::FR32L, hash::FxHash, true, true>;
+// FIXME: FR32L for Rn slot hash causes assertion failures an b2!=b in displace.
+type PT = PTHash<EliasFano, reduce::FR32H, reduce::FM32L, hash::FxHash, true, true>;
 
 fn main() {
     let Args { command } = Args::parse();
@@ -110,6 +117,7 @@ fn main() {
             bits,
             total,
             stats,
+            mspp,
         } => {
             let keys = pthash_rs::test::generate_keys(n);
             let pt = PT::new_random_params(
@@ -118,6 +126,7 @@ fn main() {
                 n,
                 PTParams {
                     print_stats: stats,
+                    max_slots_per_part: mspp,
                     bits,
                     ..Default::default()
                 },
