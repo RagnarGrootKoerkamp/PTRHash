@@ -176,11 +176,11 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
     pub fn new_random_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
         let mut pthash = Self::init_with_params(c, alpha, n, params);
-        let k = (0..pthash.b)
+        let k = (0..pthash.b_total)
             .map(|_| random::<u64>() & ((1 << params.bits) - 1))
             .collect();
         pthash.pilots = Packed::new(k);
-        let mut remap_vals = (pthash.n..pthash.s)
+        let mut remap_vals = (pthash.n..pthash.s_total)
             .map(|_| pthash.rem_s.reduce(Hash::new(random::<u64>())) as _)
             .collect_vec();
         remap_vals.sort_unstable();
@@ -288,7 +288,11 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
 
     fn part(&self, hx: Hash) -> usize {
-        hx.reduce(self.rem_parts)
+        if PT {
+            hx.reduce(self.rem_parts)
+        } else {
+            0
+        }
     }
 
     /// See bucket.rs for additional implementations.
@@ -331,29 +335,29 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
 
     fn position(&self, hx: Hash, ki: u64) -> usize {
-        (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
+        self.part(hx) * self.s + (hx ^ self.hash_pilot(ki)).reduce(self.rem_s)
     }
 
     fn position_hki(&self, hx: Hash, hki: Hash) -> usize {
-        (hx ^ hki).reduce(self.rem_s)
+        self.part(hx) * self.s + (hx ^ hki).reduce(self.rem_s)
     }
 
     /// See index.rs for additional streaming/SIMD implementations.
     #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
-        let (part, b) = self.part_and_bucket(hx);
+        let (_part, b) = self.part_and_bucket(hx);
         let pilot = self.pilots.index(b);
-        part * self.s + self.position(hx, pilot)
+        self.position(hx, pilot)
     }
 
     /// An implementation that also works for alpha<1.
     #[inline(always)]
     pub fn index_remap(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
-        let (part, b) = self.part_and_bucket(hx);
+        let (_part, b) = self.part_and_bucket(hx);
         let ki = self.pilots.index(b);
-        let p = part * self.s + self.position(hx, ki);
+        let p = self.position(hx, ki);
         if std::intrinsics::likely(p < self.n) {
             p
         } else {
@@ -395,21 +399,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // Reset memory.
             pilots.reset(self.b_total, 0);
 
-            let num_empty_buckets = bucket_order
-                .iter()
-                .rev()
-                .take_while(|&&b| starts[b + 1] - starts[b] == 0)
-                .count();
-            let bucket_order_nonempty = &bucket_order[..self.b - num_empty_buckets];
-            assert_eq!(
-                starts[*bucket_order_nonempty.last().unwrap() + 1]
-                    - starts[*bucket_order_nonempty.last().unwrap()],
-                1
-            );
-
             taken.clear();
             taken.resize(self.s_total, false);
-            // TODO: Update for partitions.
             if !self.displace(
                 &hashes,
                 &starts,

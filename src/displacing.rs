@@ -29,14 +29,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut stack = vec![];
         let mut i = 0;
 
-        let positions = |b: BucketIdx, ki: Pilot| {
+        let positions = |b: BucketIdx, ki: Pilot| unsafe {
             let hki = self.hash_pilot(ki);
-            unsafe {
-                hashes
-                    .get_unchecked(starts[b]..starts[b + 1])
-                    .iter()
-                    .map(move |&hx| (hx ^ hki).reduce(self.rem_s))
-            }
+            hashes
+                .get_unchecked(starts[b]..starts[b + 1])
+                .iter()
+                .map(move |&hx| self.position_hki(hx, hki))
         };
         let mut duplicate_positions = {
             let mut positions_tmp = vec![0; max_bucket_len];
@@ -103,7 +101,9 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 {
                     kis[b] = ki;
                     for p in b_positions(hki) {
-                        slots[p] = b;
+                        unsafe {
+                            *slots.get_unchecked_mut(p) = b;
+                        }
                     }
                     continue 'b;
                 }

@@ -8,7 +8,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a {
-        assert!(!PT);
         let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
         let mut next_i: [usize; K] = next_hx.map(|hx| self.part_and_bucket(hx).1);
         xs[K..].iter().enumerate().map(move |(idx, next_x)| {
@@ -32,7 +31,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a {
-        assert!(!PT);
         let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
         let mut next_i: [usize; K] = next_hx.map(|hx| self.part_and_bucket(hx).1);
         xs[K..].iter().enumerate().map(move |(idx, next_x)| {
@@ -64,7 +62,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     where
         [(); K * L]: Sized,
     {
-        assert!(!PT);
         let mut next_hx: [Hash; K * L] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
         let mut next_i: [usize; K * L] = next_hx.map(|hx| self.part_and_bucket(hx).1);
         xs[K * L..]
@@ -103,7 +100,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         [(); K * L]: Sized,
         LaneCount<L>: SupportedLaneCount,
     {
-        assert!(!PT);
         let mut next_hx: [Simd<u64, L>; K] = unsafe {
             xs.split_array_ref::<{ K * L }>()
                 .0
