@@ -76,8 +76,6 @@ fn gcd(mut n: usize, mut m: usize) -> usize {
 pub struct PTParams {
     /// Print bucket size and ki stats after construction.
     pub print_stats: bool,
-    /// For displacement, the number of target bits.
-    pub bits: usize,
     /// Algorithm for pilot selection
     pub pilot_alg: PilotAlg,
     /// Max number of buckets per partition.
@@ -88,7 +86,6 @@ impl Default for PTParams {
     fn default() -> Self {
         Self {
             print_stats: false,
-            bits: 10,
             pilot_alg: Default::default(),
             max_slots_per_part: usize::MAX,
         }
@@ -165,13 +162,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
 
     /// PTHash with random pivots.
-    pub fn new_random(c: f32, alpha: f32, n: usize, bits: usize) -> Self {
+    pub fn new_random(c: f32, alpha: f32, n: usize) -> Self {
         Self::new_random_params(
             c,
             alpha,
             n,
             PTParams {
-                bits,
                 ..Default::default()
             },
         )
@@ -179,7 +175,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn new_random_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
         let mut pthash = Self::init_with_params(c, alpha, n, params);
         let k = (0..pthash.b_total)
-            .map(|_| random::<u64>() & ((1 << params.bits) - 1))
+            .map(|_| random::<u8>() as Pilot)
             .collect();
         pthash.pilots = Packed::new(k);
         let mut remap_vals = (pthash.n..pthash.s_total)
@@ -410,14 +406,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             taken.clear();
             taken.resize(self.s_total, false);
             let start = std::time::Instant::now();
-            if !self.displace(
-                &hashes,
-                &starts,
-                &bucket_order,
-                self.params.bits,
-                &mut pilots,
-                &mut taken,
-            ) {
+            if !self.displace(&hashes, &starts, &bucket_order, &mut pilots, &mut taken) {
                 continue 's;
             }
             eprintln!(

@@ -33,8 +33,6 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 1.0)]
         a: f32,
-        #[arg(long, default_value_t = 8)]
-        bits: usize,
         #[arg(long)]
         stats: bool,
         #[arg(long, value_enum, default_value_t = PilotAlg::Simple)]
@@ -52,8 +50,6 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 1.0)]
         a: f32,
-        #[arg(long, default_value_t = 8)]
-        bits: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
         #[arg(long)]
@@ -87,7 +83,6 @@ fn main() {
             n,
             c,
             a,
-            bits,
             stats,
             alg,
             mspp,
@@ -104,7 +99,6 @@ fn main() {
                 a,
                 &keys,
                 PTParams {
-                    bits,
                     print_stats: stats,
                     pilot_alg: alg,
                     max_slots_per_part: mspp,
@@ -120,7 +114,6 @@ fn main() {
             n,
             c,
             a,
-            bits,
             total,
             stats,
             mspp,
@@ -133,7 +126,6 @@ fn main() {
                 PTParams {
                     print_stats: stats,
                     max_slots_per_part: mspp,
-                    bits,
                     ..Default::default()
                 },
             );

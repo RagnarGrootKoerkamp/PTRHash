@@ -13,11 +13,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         hashes: &[Hash],
         starts: &BucketVec<usize>,
         bucket_order: &[BucketIdx],
-        bits: usize,
         kis: &mut BucketVec<u8>,
         taken: &mut BitVec,
     ) -> bool {
-        let kmax = 1u64 << bits;
+        let kmax = 256;
 
         kis.reset(self.b_total, 0);
         let mut slots = vec![BucketIdx::NONE; self.s_total];

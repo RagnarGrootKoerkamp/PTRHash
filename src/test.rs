@@ -145,14 +145,12 @@ where
 }
 
 #[cfg(test)]
-fn queries_exact<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool, const PT: bool, H: Hasher>(
-    bits: usize,
-) {
+fn queries_exact<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool, const PT: bool, H: Hasher>() {
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, Rm, Rn, H, T, PT>::new_random(7.0, 1.0, n, bits);
+    let mphf = PTHash::<F, Rm, Rn, H, T, PT>::new_random(7.0, 1.0, n);
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -203,18 +201,18 @@ macro_rules! test_query {
         fn $name() {
             eprintln!("no parts");
             eprint!(" murmur");
-            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, false, Murmur>(8);
+            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, false, Murmur>();
             eprint!(" fxhash");
-            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, false, FxHash>(8);
+            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, false, FxHash>();
             eprint!(" nohash");
-            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, false, NoHash>(8);
+            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, false, NoHash>();
             eprintln!("parts");
             eprint!(" murmur");
-            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, true, Murmur>(8);
+            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, true, Murmur>();
             eprint!(" fxhash");
-            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, true, FxHash>(8);
+            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, true, FxHash>();
             eprint!(" nohash");
-            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, true, NoHash>(8);
+            queries_exact::<Vec<SlotIdx>, $rm, $rn, $t, true, NoHash>();
         }
     };
 }
@@ -262,13 +260,13 @@ test_query!(FR32L, FR32H, true, query_r32l_r32h_t);
 
 /// Primarily for `perf stat`.
 #[cfg(test)]
-fn queries_random<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool, const PT: bool>(bits: usize) {
+fn queries_random<F: Packed, Rm: Reduce, Rn: Reduce, const T: bool, const PT: bool>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, Rm, Rn, FxHash, T, PT>::new_random(7.0, 1.0, n, bits);
+    let mphf = PTHash::<F, Rm, Rn, FxHash, T, PT>::new_random(7.0, 1.0, n);
 
     // let start = SystemTime::now();
     // let loops = total / n;
@@ -308,7 +306,7 @@ macro_rules! test_random {
     ($rm:ty, $rn:ty, $t:expr, $name:ident) => {
         #[test]
         fn $name() {
-            queries_random::<Vec<SlotIdx>, $rm, $rn, $t, false>(8);
+            queries_random::<Vec<SlotIdx>, $rm, $rn, $t, false>();
         }
     };
 }
