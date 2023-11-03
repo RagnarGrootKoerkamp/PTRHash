@@ -2,6 +2,7 @@ use std::ops::{BitXor, Sub};
 
 use crate::{reduce::Reduce, Key};
 use murmur2::murmur64a;
+use rdst::RadixKey;
 
 /// Strong type for 64bit hashes.
 ///
@@ -12,6 +13,15 @@ use murmur2::murmur64a;
 /// - ord: h(x) < p1 * n
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
 pub struct Hash(u64);
+
+impl RadixKey for Hash {
+    const LEVELS: usize = 8;
+
+    #[inline]
+    fn get_level(&self, level: usize) -> u8 {
+        (self.0 >> (level * 8)) as u8
+    }
+}
 
 impl Hash {
     pub fn new(v: u64) -> Self {

@@ -87,7 +87,7 @@ fn main() {
             let keys = pthash_rs::test::generate_keys(n);
             eprintln!(
                 "{}",
-                format!("    gen keys: {:>14.2?}", start.elapsed()).bold()
+                format!("    gen keys: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
             );
             let start = std::time::Instant::now();
             let pt = PT::new_with_params(
