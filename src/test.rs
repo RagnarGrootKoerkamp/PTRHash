@@ -1,7 +1,11 @@
 #![allow(dead_code)]
 use std::{hint::black_box, time::SystemTime};
 
-use rand::{Rng, SeedableRng};
+use rand::{thread_rng, Rng};
+use rayon::{
+    prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    slice::ParallelSlice,
+};
 use rdst::RadixSort;
 
 use crate::{hash::*, reduce::*};
@@ -9,16 +13,23 @@ use crate::{hash::*, reduce::*};
 use super::*;
 
 pub fn generate_keys(n: usize) -> Vec<Key> {
-    // let seed = random();
-    let seed = 31415;
-    let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(seed);
-    let keys = (0..n).map(|_| rng.gen()).collect_vec();
-    let mut keys2 = keys.clone();
-    keys2.radix_sort_unstable();
-    assert!(
-        keys2.partition_dedup().1.is_empty(),
-        "duplicate keys generated"
-    );
+    let start = Instant::now();
+    let keys: Vec<_>;
+    {
+        keys = (0..n)
+            .into_par_iter()
+            .map_init(thread_rng, |rng, _| rng.gen())
+            .collect();
+        let start = log_duration("┌   gen keys", start);
+        let mut keys2: Vec<_> = keys.par_iter().copied().collect();
+        let start = log_duration("├      clone", start);
+        keys2.radix_sort_unstable();
+        let start = log_duration("├       sort", start);
+        let distinct = keys2.par_windows(2).all(|w| w[0] < w[1]);
+        log_duration("├ duplicates", start);
+        assert!(distinct, "duplicate keys generated");
+    }
+    log_duration("generatekeys", start);
     keys
 }
 
