@@ -1,5 +1,11 @@
 use std::time::Instant;
 
+use rayon::{
+    prelude::{IntoParallelRefIterator, ParallelIterator},
+    slice::ParallelSlice,
+};
+use rdst::RadixSort;
+
 use crate::types::BucketIdx;
 
 use super::*;
@@ -26,32 +32,21 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         // 1. Collect all hashes.
         let start = Instant::now();
-        let mut hashes: Vec<_> = keys.iter().map(|key| self.hash_key(key)).collect();
-        eprintln!(
-            "{}",
-            format!("   hash keys: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-        );
-        // 2. Bucket sort by top 32 bits, so by part and bucket.
-        let start = Instant::now();
-        radsort::sort_by_key(&mut hashes, |&h| h.get_high());
-        eprintln!(
-            "{}",
-            format!("radsort high: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-        );
-        // 3. Sort by full hash.
-        let start = Instant::now();
-        for range in hashes.group_by_mut(|h1, h2| h1.get_high() == h2.get_high()) {
-            if range.len() > 1 {
-                range.sort();
-                if !range.partition_dedup().1.is_empty() {
-                    return None;
-                }
-            }
+        let mut hashes: Vec<_> = keys.par_iter().map(|key| self.hash_key(key)).collect();
+        let start = log_duration("┌  hash keys", start);
+
+        // 2. Radix sort hashes.
+        // TODO: See if we can make this faster similar to simple-saca's parallel radix sort.
+        // TODO: Maybe 2 rounds of 16bit sorting is faster than 4 rounds of 8bit sorting?
+        hashes.radix_sort_unstable();
+        let start = log_duration("├sort hashes", start);
+
+        // 3. Check duplicates.
+        let distinct = hashes.par_windows(2).all(|w| w[0] < w[1]);
+        let start = log_duration("├ check dups", start);
+        if !distinct {
+            return None;
         }
-        eprintln!(
-            "{}",
-            format!("cmp sort low: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-        );
 
         // For each bucket idx, the location where it starts.
         let mut starts = BucketVec::with_capacity(self.b + 1);
@@ -62,7 +57,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let mut end = 0;
         let mut acc = 0;
         starts.push(end);
-        let start = Instant::now();
+        // TODO: Parallellize this loop.
         for p in 0..self.num_parts {
             // For each part, the number of buckets of each size.
             let mut pos_for_size = vec![0; 32];
@@ -103,10 +98,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 pos_for_size[l] += 1;
             }
         }
-        eprintln!(
-            "{}",
-            format!("bktsort size: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-        );
+        log_duration("├  sort size", start);
 
         Some((hashes, starts, order))
     }
