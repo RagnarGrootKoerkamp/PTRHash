@@ -2,7 +2,7 @@ use strength_reduce::{StrengthReducedU32, StrengthReducedU64};
 
 use crate::hash::Hash;
 
-pub trait Reduce: Copy + std::fmt::Debug {
+pub trait Reduce: Copy + Sync + std::fmt::Debug {
     fn new(d: usize) -> Self;
     fn reduce(self, h: Hash) -> usize;
     fn reduce_with_remainder(self, h: Hash) -> (usize, u64);

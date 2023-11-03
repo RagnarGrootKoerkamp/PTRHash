@@ -7,7 +7,7 @@ use sux::{
     prelude::{BitFieldSlice, BitFieldSliceCore, BitFieldSliceMut},
 };
 
-pub trait Packed {
+pub trait Packed: Sync {
     fn default() -> Self;
     fn new(vals: Vec<u64>) -> Self;
     /// Index the pack.

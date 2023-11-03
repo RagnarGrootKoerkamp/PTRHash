@@ -61,7 +61,7 @@ impl BitXor for Hash {
     }
 }
 
-pub trait Hasher {
+pub trait Hasher: Sync {
     fn hash(x: &Key, seed: u64) -> Hash;
 }
 
