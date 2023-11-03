@@ -360,7 +360,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken = bitvec![0; 0];
-        let mut pilots: BucketVec<u8> = vec![].into();
+        let mut pilots: BucketVec<u8> = vec![];
 
         let mut tries = 0;
         const MAX_TRIES: usize = 3;
@@ -394,7 +394,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             );
 
             // Reset memory.
-            pilots.reset(self.b_total, 0);
+            pilots.clear();
+            pilots.resize(self.b_total, 0);
 
             taken.clear();
             taken.resize(self.s_total, false);
@@ -431,7 +432,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         );
 
         // Pack the data.
-        self.pilots = pilots.into_vec();
+        self.pilots = pilots;
     }
 
     fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {

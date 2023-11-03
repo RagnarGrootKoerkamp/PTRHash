@@ -1,11 +1,24 @@
-use std::{
-    fmt::{Display, Formatter},
-    ops::{Add, Index, IndexMut},
-};
+use std::ops::{Add, Index, IndexMut, Sub};
 
 // Ord so we can sort them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct BucketIdx(u32);
+pub struct BucketIdx(pub u32);
+
+impl Add<usize> for BucketIdx {
+    type Output = Self;
+
+    fn add(self, rhs: usize) -> Self::Output {
+        Self(self.0 + rhs as u32)
+    }
+}
+
+impl Sub<usize> for BucketIdx {
+    type Output = Self;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self(self.0 - rhs as u32)
+    }
+}
 
 impl BucketIdx {
     pub const NONE: BucketIdx = BucketIdx(u32::MAX);
@@ -20,69 +33,33 @@ impl BucketIdx {
     }
 }
 
-/// A vector over buckets.
-/// Can only be indexed by `BucketIdx`.
-pub struct BucketVec<T>(Vec<T>);
+pub type BucketVec<T> = Vec<T>;
+pub type BucketSlice<T> = [T];
 
-impl<T> Extend<T> for BucketVec<T> {
-    fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
-        <Vec<T> as Extend<T>>::extend(&mut self.0, iter)
-    }
-}
-
-impl<T: Clone> BucketVec<T> {
-    pub fn reset(&mut self, len: usize, value: T) {
-        self.0.clear();
-        self.0.resize(len, value);
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self(Vec::with_capacity(capacity))
-    }
-
-    pub fn push(&mut self, value: T) {
-        self.0.push(value)
-    }
-
-    pub fn into_vec(self) -> Vec<T> {
-        self.0
-    }
-
-    pub fn iter(&self) -> core::slice::Iter<'_, T> {
-        self.0.iter()
-    }
-}
-
-impl<T> From<Vec<T>> for BucketVec<T> {
-    fn from(v: Vec<T>) -> Self {
-        Self(v)
-    }
-}
-
-impl Add<usize> for BucketIdx {
-    type Output = BucketIdx;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        Self(self.0 + rhs as u32)
-    }
-}
-
-impl<T> Index<BucketIdx> for BucketVec<T> {
+impl<T> Index<BucketIdx> for [T] {
     type Output = T;
 
     fn index(&self, index: BucketIdx) -> &Self::Output {
-        unsafe { self.0.get_unchecked(index.0 as usize) }
+        unsafe { self.get_unchecked(index.0 as usize) }
     }
 }
 
-impl<T> IndexMut<BucketIdx> for BucketVec<T> {
+impl<T> IndexMut<BucketIdx> for [T] {
     fn index_mut(&mut self, index: BucketIdx) -> &mut Self::Output {
-        unsafe { self.0.get_unchecked_mut(index.0 as usize) }
+        unsafe { self.get_unchecked_mut(index.0 as usize) }
     }
 }
 
-impl Display for BucketIdx {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+impl<T> Index<BucketIdx> for Vec<T> {
+    type Output = T;
+
+    fn index(&self, index: BucketIdx) -> &Self::Output {
+        unsafe { self.get_unchecked(index.0 as usize) }
+    }
+}
+
+impl<T> IndexMut<BucketIdx> for Vec<T> {
+    fn index_mut(&mut self, index: BucketIdx) -> &mut Self::Output {
+        unsafe { self.get_unchecked_mut(index.0 as usize) }
     }
 }

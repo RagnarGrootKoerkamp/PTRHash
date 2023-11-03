@@ -10,7 +10,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     /// Returns:
     /// 1. Hashes
     /// 2. Start indices of each bucket.
-    /// 3. Order of the buckets, per part.
+    /// 3. Order of the buckets within each part.
     ///
     /// This returns None if duplicate hashes are found.
     #[must_use]
