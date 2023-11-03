@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 
-use crate::types::{BucketIdx, BucketSlice};
-
 use super::*;
+use crate::types::{BucketIdx, BucketSlice};
 use bitvec::{slice::BitSlice, vec::BitVec};
+use rayon::{
+    prelude::{IndexedParallelIterator, ParallelIterator},
+    slice::{ParallelSlice, ParallelSliceMut},
+};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
     PTHash<F, Rm, Rn, Hx, T, PT>
@@ -16,44 +20,50 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         pilots: &mut BucketVec<u8>,
         taken: &mut Vec<BitVec>,
     ) -> bool {
-        let kmax = 256;
-
         // Reset output-memory.
         pilots.clear();
         pilots.resize(self.b_total, 0);
+
         for taken in taken.iter_mut() {
             taken.clear();
             taken.resize(self.s, false);
         }
-        taken.resize(self.num_parts, bitvec![0; self.s]);
+        taken.resize_with(self.num_parts, || bitvec![0; self.s]);
 
-        let mut total_displacements = 0;
+        let starts_per_part = starts.par_chunks_exact(self.b);
+        let order_per_part = bucket_order.par_chunks_exact(self.b);
+        let pilots_per_part = pilots.par_chunks_exact_mut(self.b);
 
-        for part in 0..self.num_parts {
-            let (ok, cnt) = self.displace_part(
-                part,
-                hashes,
-                &starts[part * self.b..(part + 1) * self.b],
-                &bucket_order[part * self.b..(part + 1) * self.b],
-                &mut pilots[part * self.b..(part + 1) * self.b],
-                &mut taken[part],
+        let iter = starts_per_part
+            .zip(order_per_part)
+            .zip(pilots_per_part)
+            .zip(taken)
+            .enumerate();
+
+        let total_displacements = AtomicUsize::new(0);
+        let parts_done = AtomicUsize::new(0);
+
+        let ok = iter.try_for_each(|(part, (((starts, order), pilots), taken))| {
+            let (ok, cnt) = self.displace_part(part, hashes, starts, order, pilots, taken);
+            let parts_done = parts_done.fetch_add(1, Ordering::Relaxed);
+            total_displacements.fetch_add(cnt, Ordering::Relaxed);
+            eprint!(
+                "parts done: {parts_done:>6}/{:>6} ({:>4.1}%)\r",
+                self.num_parts,
+                100. * parts_done as f32 / self.num_parts as f32
             );
-            total_displacements += cnt;
-            if !ok {
-                return false;
-            }
+            ok.then_some(())
+        });
+
+        if ok.is_none() {
+            return false;
         }
+
+        let total_displacements: usize = total_displacements.load(Ordering::Relaxed);
+        let sum_pilots = pilots.iter().map(|&k| k as Pilot).sum::<Pilot>();
 
         // Clear the last \r line.
         eprint!("\x1b[K");
-        let max = pilots.iter().copied().max().unwrap();
-        assert!(
-            (max as Pilot) < kmax,
-            "Max pilot found is {max} which is not less than {kmax}"
-        );
-
-        let sum_pilots = pilots.iter().map(|&k| k as Pilot).sum::<Pilot>();
-
         eprintln!(
             "  displ./bkt: {:>14.3}",
             total_displacements as f32 / self.b_total as f32
@@ -211,7 +221,6 @@ Possible causes:
                         // FIXME: This assertion still fails from time to time but it really shouldn't.
                         assert!(b2 != b);
                         // DROP BUCKET b
-                        // eprintln!("{i:>8}/{:>8} Drop bucket {b2:>8}", self.n);
                         stack.push(b2);
                         displacements += 1;
                         for p2 in positions(b2, pilots[b2] as Pilot) {
@@ -221,7 +230,6 @@ Possible causes:
                             }
                         }
                     }
-                    // eprintln!("Set slot {:>8} to {:>8}", p, b);
                     unsafe {
                         *slots.get_unchecked_mut(p) = b;
                         taken.set_unchecked(p, true);
@@ -233,12 +241,6 @@ Possible causes:
                 recent[recent_idx] = b;
             }
             total_displacements += displacements;
-            if i % (1 << 14) == 0 {
-                eprint!(
-                    "part {part:>6} bucket {:>5.2}%\r",
-                    100. * (part * self.b + i) as f32 / self.b_total as f32,
-                );
-            }
         }
         (true, total_displacements)
     }
