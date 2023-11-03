@@ -25,7 +25,6 @@ pub mod test;
 mod types;
 
 use std::{
-    cell::Cell,
     cmp::max,
     collections::HashSet,
     default::Default,
@@ -138,9 +137,6 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
     /// Remap the out-of-bound slots to free slots.
     remap: F,
     _hx: PhantomData<Hx>,
-
-    /// Collect some statistics
-    lookups: Cell<usize>,
 }
 
 impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
@@ -268,7 +264,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             pilots: Default::default(),
             remap: F::default(),
             _hx: PhantomData,
-            lookups: 0.into(),
         }
     }
 
@@ -433,11 +428,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         // Pack the data.
         self.pilots = pilots.into_vec();
-
-        eprintln!(
-            "  lookup/key: {:>12.1}",
-            self.lookups.get() as f32 / self.n as f32
-        );
     }
 
     fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {

@@ -46,21 +46,17 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         bucket: &[Hash],
         taken: &mut BitVec,
     ) -> Option<(u64, Hash)> {
-        let mut lookups = 0;
         'ki: for ki in 0u64..kmax {
             let hki = self.hash_pilot(ki);
             for &hx in bucket {
-                lookups += 1;
                 if unsafe { *taken.get_unchecked(self.position_hki(hx, hki)) } {
                     continue 'ki;
                 }
             }
             if self.try_take_ki(bucket, hki, taken) {
-                self.lookups.set(self.lookups.get() + lookups);
                 return Some((ki, hki));
             }
         }
-        self.lookups.set(self.lookups.get() + lookups);
         None
     }
 
