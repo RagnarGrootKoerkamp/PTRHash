@@ -18,7 +18,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         taken: &mut BitVec,
     ) -> bool {
         let kmax = 1u64 << bits;
-        eprintln!("DISPLACE 2^{bits}={kmax}");
 
         kis.reset(self.b_total, u64::MAX);
         let mut slots = vec![BucketIdx::NONE; self.s_total];
@@ -27,7 +26,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let max_bucket_len = bucket_len(bucket_order[0]);
 
         let mut stack = vec![];
-        let mut i = 0;
 
         let positions = |b: BucketIdx, ki: Pilot| unsafe {
             let hki = self.hash_pilot(ki);
@@ -52,15 +50,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         let mut recent = [BucketIdx::NONE; 4];
 
-        let nonempty = bucket_order.len()
-            - bucket_order
-                .iter()
-                .rev()
-                .take_while(|&&b| starts[b + 1] - starts[b] == 0)
-                .count();
-
         // TODO: Permute the buckets by bucket_order up-front to make memory access linear afterwards.
-        for &b in bucket_order {
+        for (i, &b) in bucket_order.iter().enumerate() {
             // Check for duplicate hashes inside bucket.
             let bucket = &hashes[starts[b]..starts[b + 1]];
             if bucket.is_empty() {
@@ -68,7 +59,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 continue;
             }
             let b_len = bucket.len();
-            i += 1;
 
             let mut displacements = 0usize;
 
@@ -78,16 +68,25 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             recent[0] = b;
 
             'b: while let Some(b) = stack.pop() {
-                if (stack.len() > 10 && stack.len().is_power_of_two())
-                    || (displacements > 100 && displacements.is_power_of_two())
-                {
-                    eprint!(
-                        "bucket {i:>9} / {:>9}  sz {:>2} stack {:>8} displacements {displacements}\r",
-                        nonempty,
+                if displacements > self.s && displacements.is_power_of_two() {
+                    eprintln!(
+                        "bucket {:>5.2}% sz {:>2} avg displacements: {:>8.5} max chain {max_chain_len:>8} cur displacements: {displacements:>9}",
+                        100.*i as f32 / self.b_total as f32,
                         bucket.len(),
-                        stack.len()
+                        total_displacements as f32 / i as f32
                     );
-                    // eprintln!("b {b:>8} ki {:>8} stack: {stack:?}", kis[b]);
+                    if displacements >= 10 * self.s {
+                        panic!(
+                            "\
+Too many displacements. Aborting!
+Possible causes:
+- Too many elements in part.
+- Not enough empty slots => lower alpha.
+- Not enough buckets     => increase c.
+- Not enough entropy     => fix algorithm.
+"
+                        );
+                    }
                 }
 
                 // Check for a solution without collisions.
@@ -170,7 +169,6 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                         }
                         let b2_len = bucket_len(b2);
                         if b2_len - b_len > max_len_delta {
-                            eprint!("NEW MAX DELTA: {b_len} << {b2_len}\r");
                             max_len_delta = b2_len - b_len;
                         }
                     }
@@ -187,26 +185,32 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             }
             total_displacements += displacements;
             max_chain_len = max_chain_len.max(displacements);
-            if i % 1024 == 0 {
+            if i % (1 << 14) == 0 {
                 eprint!(
-                    "bucket {i:>9} / {:>9}  sz {:>2} avg displacements: {:>8.5} max chain {max_chain_len:>8}\r",
-                    nonempty,
+                    "bucket {:>5.2}% sz {:>2} avg displacements: {:>8.5} max chain {max_chain_len:>8}\r",
+                    100.*i as f32 / self.b_total as f32,
                     bucket.len(),
                     total_displacements as f32 / i as f32
                 );
             }
         }
+        // Clear the last \r line.
+        eprint!("\x1b[K");
         let max = kis.iter().copied().max().unwrap();
         assert!(
             max < kmax,
             "Max k found is {max} which is not less than {kmax}"
         );
 
-        eprintln!();
-        eprintln!("MAX DELTA: {}", max_len_delta);
+        let sum_pilots = kis.iter().map(|&k| k as Pilot).sum::<Pilot>();
+
         eprintln!(
-            "TOTAL DISPLACEMENTS: {total_displacements} per bucket {}",
-            total_displacements as f32 / self.b as f32
+            "  displ./bkt: {:>14.3}",
+            total_displacements as f32 / self.b_total as f32
+        );
+        eprintln!(
+            "   avg pilot: {:>14.3}",
+            sum_pilots as f32 / self.b_total as f32
         );
         true
     }

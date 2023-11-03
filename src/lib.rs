@@ -34,6 +34,7 @@ use std::{
 };
 
 use bitvec::bitvec;
+use colored::Colorize;
 use itertools::Itertools;
 use pack::Packed;
 use pilots::PilotAlg;
@@ -245,12 +246,13 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         // TODO: Figure out if gcd(m,n) large is a problem or not.
         let p2 = b / 3;
         assert_eq!(b - p2, 2 * p2);
-        eprintln!("       keys: {n:>10}");
-        eprintln!("      parts: {num_parts:>10}");
-        eprintln!("      slots: {s:>10}");
-        eprintln!("    buckets: {b:>10}");
-        eprintln!("  tot slots: {:>10}", num_parts * s);
-        eprintln!("tot buckets: {:>10}", num_parts * b);
+        eprintln!("        keys: {n:>10}");
+        eprintln!("       parts: {num_parts:>10}");
+        eprintln!("   slots/prt: {s:>10}");
+        eprintln!("   slots tot: {:>10}", num_parts * s);
+        eprintln!(" buckets/prt: {b:>10}");
+        eprintln!(" buckets tot: {:>10}", num_parts * b);
+        eprintln!(" keys/bucket: {:>13.2}", n as f32 / (num_parts * b) as f32);
 
         Self {
             params,
@@ -391,16 +393,22 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             self.seed = rng.gen();
 
             // Step 2: Determine the buckets.
+            let start = std::time::Instant::now();
             let Some((hashes, starts, bucket_order)) = self.sort_buckets(keys) else {
                 // Found duplicate hashes.
                 continue 's;
             };
+            eprintln!(
+                "{}",
+                format!("sort buckets: {:>14.2?}", start.elapsed()).bold()
+            );
 
             // Reset memory.
             pilots.reset(self.b_total, 0);
 
             taken.clear();
             taken.resize(self.s_total, false);
+            let start = std::time::Instant::now();
             if !self.displace(
                 &hashes,
                 &starts,
@@ -411,6 +419,10 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             ) {
                 continue 's;
             }
+            eprintln!(
+                "{}",
+                format!("    displace: {:>14.2?}", start.elapsed()).bold()
+            );
 
             // Found a suitable seed.
             if tries > 1 {
@@ -428,13 +440,24 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             break 's;
         }
 
+        let start = std::time::Instant::now();
         self.remap_free_slots(taken);
+        eprintln!(
+            "{}",
+            format!("  remap free: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
+        );
 
         // Pack the data.
         self.pilots = Packed::new(pilots.into_vec());
 
-        eprintln!("Lookups    {:>12}", self.lookups.get());
-        eprintln!("Prefetches {:>12}", self.prefetches.get());
+        eprintln!(
+            "  lookup/key: {:>12.1}",
+            self.lookups.get() as f32 / self.n as f32
+        );
+        eprintln!(
+            "prefetch/key: {:>12.1}",
+            self.prefetches.get() as f32 / self.n as f32
+        );
     }
 
     fn remap_free_slots(&mut self, taken: bitvec::vec::BitVec) {
@@ -469,7 +492,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     pub fn print_bits_per_element(&self) {
         let (p, r) = self.bits_per_element();
         eprintln!(
-            "BITS/ELEMENT: pilots {p:4.2} + remap {r:4.2} = {:4.2}",
+            "bits/element: {:>13.2}  (pilots {p:4.2}, remap {r:4.2})",
             p + r
         );
     }

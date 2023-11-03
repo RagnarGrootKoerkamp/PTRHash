@@ -1,6 +1,5 @@
-use std::time::SystemTime;
-
 use clap::{Parser, Subcommand};
+use colored::Colorize;
 use pthash_rs::{
     pilots::PilotAlg,
     test::{bench_index, bench_index_all},
@@ -41,7 +40,7 @@ enum Command {
         #[arg(long, value_enum, default_value_t = PilotAlg::Simple)]
         alg: PilotAlg,
         /// Max slots per part
-        #[arg(long, default_value_t = usize::MAX)]
+        #[arg(long, default_value_t = 240000)]
         mspp: usize,
     },
 
@@ -60,7 +59,7 @@ enum Command {
         #[arg(long)]
         stats: bool,
         /// Max slots per part
-        #[arg(long, default_value_t = usize::MAX)]
+        #[arg(long, default_value_t = 240000)]
         mspp: usize,
     },
 }
@@ -93,8 +92,13 @@ fn main() {
             alg,
             mspp,
         } => {
+            let start = std::time::Instant::now();
             let keys = pthash_rs::test::generate_keys(n);
-            let start = SystemTime::now();
+            eprintln!(
+                "{}",
+                format!("    gen keys: {:>14.2?}", start.elapsed()).bold()
+            );
+            let start = std::time::Instant::now();
             let pt = PT::new_with_params(
                 c,
                 a,
@@ -106,9 +110,11 @@ fn main() {
                     max_slots_per_part: mspp,
                 },
             );
-            let t = start.elapsed().unwrap().as_secs_f32();
-            eprintln!("time: {t:5.2}");
             pt.print_bits_per_element();
+            eprintln!(
+                "{}",
+                format!(" total build: {:>14.2?}", start.elapsed()).bold()
+            );
         }
         Command::Query {
             n,
