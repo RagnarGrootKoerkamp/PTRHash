@@ -16,6 +16,7 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
     let start = Instant::now();
     let keys: Vec<_>;
     {
+        // TODO: Change this back to fixed seed.
         keys = (0..n)
             .into_par_iter()
             .map_init(thread_rng, |rng, _| rng.gen())
@@ -27,7 +28,7 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
         let start = log_duration("├       sort", start);
         let distinct = keys2.par_windows(2).all(|w| w[0] < w[1]);
         log_duration("├ duplicates", start);
-        assert!(distinct, "duplicate keys generated");
+        assert!(distinct, "DUPLICATE KEYS GENERATED");
     }
     log_duration("generatekeys", start);
     keys

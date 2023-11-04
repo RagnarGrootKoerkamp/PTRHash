@@ -3,6 +3,7 @@ use super::*;
 impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
     PTHash<F, Rm, Rn, Hx, T, PT>
 {
+    // TODO: Versions that cache the part instead of recomputing it.
     #[inline(always)]
     pub fn index_stream<'a, const K: usize>(
         &'a self,

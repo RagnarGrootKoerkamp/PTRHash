@@ -32,6 +32,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
 
         // 1. Collect all hashes.
         let start = Instant::now();
+        // TODO: We can directly write hashes to a 8bit or 16bit radix-sort bucket.
         let mut hashes: Vec<_> = keys.par_iter().map(|key| self.hash_key(key)).collect();
         let start = log_duration("┌  hash keys", start);
 
@@ -48,7 +49,11 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             return None;
         }
 
+        // TODO: Determine size of each part.
+        // TODO: Print statistics on largest part.
+
         // For each bucket idx, the location where it starts.
+        // TODO: Starts can be relative to the part, instead of absolute.
         let mut starts = BucketVec::with_capacity(self.b + 1);
 
         // For each part, the order of the buckets indices by decreasing bucket size.

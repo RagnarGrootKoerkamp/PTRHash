@@ -86,6 +86,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     ) -> (bool, usize) {
         let kmax = 256;
 
+        // TODO: Replace this by an as-small-as-possible type.
+        // Writing the bucket index mapping to each slot takes more time than finding pilots!
         let mut slots = vec![BucketIdx::NONE; self.s];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
@@ -164,7 +166,8 @@ Possible causes:
                     pilots[b] = p as u8;
                     for p in b_positions(hp) {
                         unsafe {
-                            // Taken is already filled by fine_pilot.
+                            // Taken is already filled by find_pilot.
+                            // NOTE: This is a hot instruction; takes as much time as finding the pilot.
                             *slots.get_unchecked_mut(p) = b;
                         }
                     }

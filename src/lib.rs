@@ -99,6 +99,8 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
     /// The number of keys.
     n: usize,
 
+    // TODO: We can choose num_parts, s, or b to be a power of 2 for
+    // convenience, so we can shift instead of multiply.
     /// The number of parts in the partition.
     num_parts: usize,
     /// The total number of slots.

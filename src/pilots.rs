@@ -49,6 +49,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     ) -> Option<(u64, Hash)> {
         'p: for p in 0u64..kmax {
             let hp = self.hash_pilot(p);
+            // TODO: Remove the early break to have more predictable loops.
+            // TODO: Or try looking up 4 at a time.
             for &hx in bucket {
                 if unsafe { *taken.get_unchecked(self.position_in_part_hp(hx, hp)) } {
                     continue 'p;
