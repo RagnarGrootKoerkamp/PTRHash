@@ -67,6 +67,8 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // For each part, the number of buckets of each size.
             let mut pos_for_size = vec![0; 32];
 
+            let start_of_part = end;
+
             // Loop over buckets in part, setting start positions and counting # buckets of each size.
             for b in 0..self.b {
                 let start = end;
@@ -80,6 +82,17 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
                 }
                 pos_for_size[l] += 1;
                 starts.push(end);
+            }
+
+            {
+                let n_part = end - start_of_part;
+                if n_part > self.s {
+                    eprintln!(
+                        "Part {p}: More elements than slots! elements {n_part} > {} slots",
+                        self.s
+                    );
+                    return None;
+                }
             }
 
             let max_bucket_size = pos_for_size.len() - 1;
