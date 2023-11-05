@@ -28,4 +28,3 @@ rustc-hash = "1.1.0"
 smallvec = "1.11.1"
 strength_reduce = "0.2.4"
 sucds = "0.8.0"
-sux = { git = "https://github.com/vigna/sux-rs", features = ["unaligned"] }

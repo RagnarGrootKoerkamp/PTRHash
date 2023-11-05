@@ -2,10 +2,6 @@ use sucds::{
     int_vectors::CompactVector,
     mii_sequences::{EliasFano, EliasFanoBuilder},
 };
-use sux::{
-    bits::compact_array::CompactArray,
-    prelude::{BitFieldSlice, BitFieldSliceCore, BitFieldSliceMut},
-};
 
 pub trait Packed: Sync {
     fn default() -> Self;
@@ -81,31 +77,6 @@ impl Packed for CompactVector {
     }
     fn size_in_bytes(&self) -> usize {
         self.width() * self.len() / 8
-    }
-}
-
-impl Packed for CompactArray {
-    fn default() -> Self {
-        CompactArray::new(0, 0)
-    }
-    fn new(vals: Vec<u64>) -> Self {
-        assert!(!vals.is_empty());
-        let max = vals.iter().max().unwrap();
-        let bits = max.ilog2() + 1;
-        let mut ca = CompactArray::new(bits as _, vals.len());
-        for (i, v) in vals.iter().enumerate() {
-            unsafe { ca.set_unchecked(i, *v as _) };
-        }
-        ca
-    }
-    fn index(&self, index: usize) -> u64 {
-        unsafe { self.get_unchecked(index) as _ }
-    }
-    fn to_vec(&self) -> Vec<u64> {
-        unimplemented!()
-    }
-    fn size_in_bytes(&self) -> usize {
-        self.bit_width() * self.len() / 8
     }
 }
 
