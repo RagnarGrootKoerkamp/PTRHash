@@ -181,10 +181,13 @@ Possible causes:
                 let mut best = (usize::MAX, u64::MAX);
 
                 'p: for delta in 0u64..kmax {
+                    // TODO: This code is slow and full of branch-misses.
+                    // But also, it's run much less frequently.
                     let p = (p + delta) % kmax;
                     let hp = self.hash_pilot(p);
                     let mut collision_score = 0;
                     for p in b_positions(hp) {
+                        // NOTE: Hot instruction.
                         let s = unsafe { *slots.get_unchecked(p) };
                         // Heavily penalize recently moved buckets.
                         let new_score = if s.is_none() {
@@ -192,6 +195,7 @@ Possible causes:
                         } else if recent.contains(&s) {
                             continue 'p;
                         } else {
+                            // NOTE: Hot instruction.
                             bucket_len(s).pow(2)
                         };
                         collision_score += new_score;

@@ -49,13 +49,28 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     ) -> Option<(u64, Hash)> {
         'p: for p in 0u64..kmax {
             let hp = self.hash_pilot(p);
-            // TODO: Remove the early break to have more predictable loops.
-            // TODO: Or try looking up 4 at a time.
-            for &hx in bucket {
-                if unsafe { *taken.get_unchecked(self.position_in_part_hp(hx, hp)) } {
+            // True when the slot for hx is already taken.
+            let check = |hx| unsafe { *taken.get_unchecked(self.position_in_part_hp(hx, hp)) };
+
+            // Process chunks of 4 bucket elements at a time.
+            // This reduces branch-misses (of all of displace) 3-fold, giving 20% speedup.
+            let chunks = bucket.array_chunks::<4>();
+            for &hxs in chunks.clone() {
+                // Check all 4 elements of the chunk without early break.
+                // (Note that [_; 4]::map is non-lazy.)
+                if hxs.map(check).iter().any(|&bad| bad) {
                     continue 'p;
                 }
             }
+            // Check remaining elements.
+            let mut bad = false;
+            for &hx in chunks.remainder() {
+                bad |= check(hx);
+            }
+            if bad {
+                continue 'p;
+            }
+
             if self.try_take_pilot(bucket, hp, taken) {
                 return Some((p, hp));
             }
