@@ -46,6 +46,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         let distinct = hashes.par_windows(2).all(|w| w[0] < w[1]);
         let start = log_duration("├ check dups", start);
         if !distinct {
+            eprintln!("Hashes are not distinct!");
             return None;
         }
 
