@@ -43,7 +43,7 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
         let start = log_duration("├sort hashes", start);
 
         // 3. Check duplicates.
-        let distinct = hashes.par_windows(2).all(|w| w[0] < w[1]);
+        let distinct = hashes.par_windows(2).all(|w| w[0] != w[1]);
         let start = log_duration("├ check dups", start);
         if !distinct {
             eprintln!("Hashes are not distinct!");
@@ -119,6 +119,15 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
             }
         }
         log_duration("├  sort size", start);
+
+        assert_eq!(
+            end,
+            hashes.len(),
+            "Not all hashes were sorted into buckets; make sure to sort hashes by (part, bucket).
+Last: part {} bucket {}",
+            self.part(hashes[end]),
+            self.bucket(hashes[end])
+        );
 
         Some((hashes, starts, order))
     }
