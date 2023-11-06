@@ -1,6 +1,6 @@
 use strength_reduce::{StrengthReducedU32, StrengthReducedU64};
 
-use crate::hash::Hash;
+use crate::hash::{Hash, MulHash};
 
 pub trait Reduce: Copy + Sync + std::fmt::Debug {
     fn new(d: usize) -> Self;
@@ -217,7 +217,7 @@ pub struct MR64 {
     mask: u64,
 }
 impl MR64 {
-    pub const C: u64 = 0xc6a4a7935bd1e995;
+    pub const C: u64 = MulHash::C;
 }
 impl Reduce for MR64 {
     fn new(d: usize) -> Self {

@@ -93,7 +93,9 @@ pub struct MulHash;
 
 impl MulHash {
     // Reuse the mixing constant from MurmurHash.
-    pub const C: u64 = 0xc6a4a7935bd1e995;
+    // pub const C: u64 = 0xc6a4a7935bd1e995;
+    // Reuse the mixing constant from FxHash.
+    pub const C: u64 = 0x517cc1b727220a95;
 }
 
 impl Hasher for MulHash {
