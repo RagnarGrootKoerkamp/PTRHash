@@ -54,9 +54,6 @@ pub type SlotIdx = u32;
 
 use crate::{hash::Hash, types::BucketVec};
 
-#[allow(unused)]
-const LOG: bool = false;
-
 fn gcd(mut n: usize, mut m: usize) -> usize {
     assert!(n != 0 && m != 0);
     while m != 0 {
@@ -208,10 +205,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         // TODO: Understand why exactly this choice of parameters.
         // NOTE: This is basically a constant now.
         let p1 = Hash::new((beta * u64::MAX as f64) as u64);
-
-        if LOG {
-            eprintln!("s {s} b {b} gcd {}", gcd(s, b));
-        }
 
         // We start with the given maximum number of slots per part, since
         // that is what should fit in L1 or L2 cache.
