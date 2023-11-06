@@ -3,7 +3,6 @@ use super::*;
 impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, const PT: bool>
     PTHash<F, Rp, Rb, Rs, Hx, T, PT>
 {
-    // TODO: Versions that cache the part instead of recomputing it.
     #[inline(always)]
     pub fn index_stream<'a, const K: usize>(
         &'a self,
@@ -17,13 +16,10 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
             let cur_i = next_i[idx];
             next_hx[idx] = self.hash_key(next_x);
             next_i[idx] = self.bucket(next_hx[idx]);
-            // TODO: Use 0 or 3 here?
-            // I.e. populate caches or do a 'Non-temporal access', meaning the
-            // cache line can skip caches and be immediately discarded after
-            // reading.
             self.pilots.prefetch(next_i[idx]);
-            let p = self.pilots.index(cur_i);
-            self.position(cur_hx, p)
+            let pilot = self.pilots.index(cur_i);
+            // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.position`.
+            self.position(cur_hx, pilot)
         })
     }
 
@@ -40,10 +36,6 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
             let cur_i = next_i[idx];
             next_hx[idx] = self.hash_key(next_x);
             next_i[idx] = self.bucket(next_hx[idx]);
-            // TODO: Use 0 or 3 here?
-            // I.e. populate caches or do a 'Non-temporal access', meaning the
-            // cache line can skip caches and be immediately discarded after
-            // reading.
             self.pilots.prefetch(next_i[idx]);
             let pilot = self.pilots.index(cur_i);
             let pos = self.position(cur_hx, pilot);
@@ -79,7 +71,6 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
                 for i in 0..L {
                     next_hx[idx + i] = self.hash_key(&next_x_vec[i]);
                     next_i[idx + i] = self.bucket(next_hx[idx + i]);
-                    // TODO: Use 0 or 3 here?
                     self.pilots.prefetch(next_i[idx + i]);
                 }
                 unsafe {
@@ -134,7 +125,6 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
                     .as_array()
                     .map(|hx| self.bucket(Hash::new(hx)))
                     .into();
-                // TODO: Use 0 or 3 here?
                 for i in 0..L {
                     self.pilots.prefetch(next_i[idx][i]);
                 }

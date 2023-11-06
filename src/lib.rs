@@ -107,8 +107,6 @@ pub struct PTHash<
     /// The number of keys.
     n: usize,
 
-    // TODO: We can choose num_parts, s, or b to be a power of 2 for
-    // convenience, so we can shift instead of multiply.
     /// The number of parts in the partition.
     num_parts: usize,
     /// The total number of slots.
@@ -315,8 +313,9 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
                 self.bucket_naive(hx)
             }
         } else {
-            // Extract the high bits for part selection; do normal bucket computation within the part using the remaining bits.
-            // TODO: This part seems kinda slow.
+            // Extract the high bits for part selection; do normal bucket
+            // computation within the part using the remaining bits.
+            // NOTE: This is somewhat slow, but doing better is hard.
             let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
             let bucket = self.bucket_parts_branchless(hx);
             part * self.b + bucket

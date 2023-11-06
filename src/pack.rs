@@ -26,10 +26,9 @@ macro_rules! vec_impl {
             fn new(vals: Vec<u64>) -> Self {
                 vals.into_iter()
                     .map(|x| {
-                        x as $t
-                        // x.try_into().expect(&format!(
-                        //     "Computed pilot {x} is larger than backing type can hold."
-                        // ))
+                        x.try_into().expect(&format!(
+                            "Computed pilot {x} is larger than backing type can hold."
+                        ))
                     })
                     .collect()
             }

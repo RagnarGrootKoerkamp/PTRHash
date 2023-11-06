@@ -16,7 +16,6 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
     let start = Instant::now();
     let keys: Vec<_>;
     {
-        // TODO: Change this back to fixed seed.
         keys = (0..n)
             .into_par_iter()
             .map_init(thread_rng, |rng, _| rng.gen())

@@ -86,8 +86,6 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
     ) -> (bool, usize) {
         let kmax = 256;
 
-        // TODO: Replace this by an as-small-as-possible type.
-        // Writing the bucket index mapping to each slot takes more time than finding pilots!
         let mut slots = vec![BucketIdx::NONE; self.s];
         let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
 
@@ -115,7 +113,6 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
         let mut recent = [BucketIdx::NONE; 4];
         let mut total_displacements = 0;
 
-        // TODO: Permute the buckets by bucket_order up-front to make memory access linear afterwards.
         for (i, &b) in bucket_order.iter().enumerate() {
             let bucket = &hashes[starts[b]..starts[b + 1]];
             if bucket.is_empty() {
@@ -163,12 +160,12 @@ Possible causes:
 
                 // 1b) Hot-path for when there are no collisions, which is most of the buckets.
                 if let Some((p, hp)) = self.find_pilot(kmax, bucket, taken) {
-                    // NOTE: Many branch misses here.
+                    // HOT: Many branch misses here.
                     pilots[b] = p as u8;
                     for p in b_positions(hp) {
                         unsafe {
                             // Taken is already filled by find_pilot.
-                            // NOTE: This is a hot instruction; takes as much time as finding the pilot.
+                            // HOT: This is a hot instruction; takes as much time as finding the pilot.
                             *slots.get_unchecked_mut(p) = b;
                         }
                     }
@@ -182,21 +179,21 @@ Possible causes:
                 let mut best = (usize::MAX, u64::MAX);
 
                 'p: for delta in 0u64..kmax {
-                    // TODO: This code is slow and full of branch-misses.
-                    // But also, it's run much less frequently.
+                    // HOT: This code is slow and full of branch-misses.
+                    // But also, it's only 20% of displace() time, since the
+                    // hot-path above covers most.
                     let p = (p + delta) % kmax;
                     let hp = self.hash_pilot(p);
                     let mut collision_score = 0;
                     for p in b_positions(hp) {
-                        // NOTE: Hot instruction.
                         let s = unsafe { *slots.get_unchecked(p) };
-                        // Heavily penalize recently moved buckets.
+                        // HOT: many branches
                         let new_score = if s.is_none() {
                             continue;
                         } else if recent.contains(&s) {
                             continue 'p;
                         } else {
-                            // NOTE: Hot instruction because of L1 and LLC cache misses.
+                            // HOT: cache misses.
                             bucket_len(s).pow(2)
                         };
                         collision_score += new_score;
@@ -204,6 +201,7 @@ Possible causes:
                             continue 'p;
                         }
                     }
+
                     // This check takes 2% of times even though it almost
                     // always passes. Can we delay it to filling of the
                     // positions table, and backtrack if needed.
@@ -234,7 +232,6 @@ Possible causes:
                     // THIS IS A HOT INSTRUCTION.
                     let b2 = slots[pos];
                     if b2.is_some() {
-                        // FIXME: This assertion still fails from time to time but it really shouldn't.
                         assert!(b2 != b);
                         // DROP BUCKET b
                         stack.push(b2);

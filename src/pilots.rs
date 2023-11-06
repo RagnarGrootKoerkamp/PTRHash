@@ -36,10 +36,10 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
         self.find_pilot_slice(kmax, bucket, taken)
     }
 
-    /// TODO: Vectorization over pilots?
-    /// TODO: Instead of looping over hx for each pilot, loop over 16 pilots in parallel.
-    //
     // Note: Prefetching on `taken` is not needed because we use parts that fit in L1 cache anyway.
+    //
+    // Note: Tried looping over multiple pilots in parallel, but the additional
+    // lookups this does aren't worth it.
     #[inline(always)]
     fn find_pilot_slice(
         &self,
@@ -58,6 +58,8 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
             for &hxs in chunks.clone() {
                 // Check all 4 elements of the chunk without early break.
                 // (Note that [_; 4]::map is non-lazy.)
+                // NOTE: It's hard to SIMD vectorize the `position` computation
+                // here because it uses 64x64->128bit multiplies.
                 if hxs.map(check).iter().any(|&bad| bad) {
                     continue 'p;
                 }
