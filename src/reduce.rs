@@ -208,3 +208,26 @@ impl Reduce for FR32L {
         ((r >> 32) as usize, (r as u32 as u64) << 32)
     }
 }
+
+/// Multiply-Reduce 64
+/// Multiply by mixing constant C and take the required number of bits.
+/// Only works when the modulus is a power of 2.
+#[derive(Copy, Clone, Debug)]
+pub struct MR64 {
+    mask: u64,
+}
+impl MR64 {
+    pub const C: u64 = 0xc6a4a7935bd1e995;
+}
+impl Reduce for MR64 {
+    fn new(d: usize) -> Self {
+        assert!(d.is_power_of_two());
+        Self { mask: d as u64 - 1 }
+    }
+    fn reduce(self, h: Hash) -> usize {
+        (((Self::C as u128 * h.get() as u128) >> 64) as u64 & self.mask) as usize
+    }
+    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
+        unimplemented!()
+    }
+}

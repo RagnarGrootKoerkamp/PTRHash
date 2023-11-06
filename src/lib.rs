@@ -221,7 +221,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // Thus, the number of partitions is:
             num_parts = max(s.div_ceil(params.max_slots_per_part), 1);
             // Slots per part.
-            s /= num_parts;
+            s = params.max_slots_per_part;
             assert!(
                 s <= params.max_slots_per_part,
                 "{s} <= {} does not hold. parts {num_parts}",

@@ -220,7 +220,7 @@ Possible causes:
                     for hx in bucket {
                         eprintln!("{:0b}", hx.get());
                     }
-                    eprintln!("Indistinguishable hashes in bucket!");
+                    eprintln!("part {part}: Indistinguishable hashes in bucket!");
                     return (false, 0);
                 }
 
