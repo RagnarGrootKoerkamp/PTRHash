@@ -10,8 +10,8 @@ use crate::types::BucketIdx;
 
 use super::*;
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
-    PTHash<F, Rm, Rn, Hx, T, PT>
+impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, const PT: bool>
+    PTHash<F, Rp, Rb, Rs, Hx, T, PT>
 {
     /// Returns:
     /// 1. Hashes

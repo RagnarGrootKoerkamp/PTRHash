@@ -1,8 +1,8 @@
 #![allow(unused)]
 use super::*;
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
-    PTHash<F, Rm, Rn, Hx, T, PT>
+impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, const PT: bool>
+    PTHash<F, Rp, Rb, Rs, Hx, T, PT>
 {
     /// Use the high bits of hx to decide small/large, then map using the
     /// remapper (which uses high end of the 32 low bits).
@@ -14,7 +14,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
         }
     }
 
-    /// NOTE: This requires that Rm uses all 64 bits or the 32 high bits.
+    /// NOTE: This requires that Rb uses all 64 bits or the 32 high bits.
     /// It does not work for Fr32L.
     pub(super) fn bucket_parts_naive(&self, hx: Hash) -> usize {
         if hx < self.p1 {

@@ -93,7 +93,15 @@ type Hk = MulHash;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool> {
+pub struct PTHash<
+    F: Packed,
+    Rp: Reduce,
+    Rb: Reduce,
+    Rs: Reduce,
+    Hx: Hasher,
+    const T: bool,
+    const PT: bool,
+> {
     params: PTParams,
 
     /// The number of keys.
@@ -120,18 +128,18 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
 
     // Precomputed fast modulo operations.
     /// Fast %parts.
-    rem_parts: Rm,
+    rem_parts: Rp,
     /// Fast %p2
-    rem_p2: Rm,
+    rem_p2: Rb,
     /// Fast %(b-p2)
-    rem_bp2: Rm,
+    rem_bp2: Rb,
     /// Fast %(p2/p1 * B)
-    rem_c1: Rm,
+    rem_c1: Rb,
     /// Fast %((1-p1)/(1-p2) * B)
-    rem_c2: Rm,
+    rem_c2: Rb,
 
     /// Fast %s.
-    rem_s: Rn,
+    rem_s: Rs,
 
     // Computed state.
     /// The global seed.
@@ -143,8 +151,8 @@ pub struct PTHash<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, 
     _hx: PhantomData<Hx>,
 }
 
-impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: bool>
-    PTHash<F, Rm, Rn, Hx, T, PT>
+impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, const PT: bool>
+    PTHash<F, Rp, Rb, Rs, Hx, T, PT>
 {
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
@@ -264,12 +272,12 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             p2,
             c3,
             bp2: b - p2,
-            rem_s: Rn::new(s),
-            rem_p2: Rm::new(p2),
-            rem_bp2: Rm::new(b - p2),
-            rem_parts: Rm::new(num_parts),
-            rem_c1: Rm::new(c1),
-            rem_c2: Rm::new(c2),
+            rem_parts: Rp::new(num_parts),
+            rem_p2: Rb::new(p2),
+            rem_bp2: Rb::new(b - p2),
+            rem_c1: Rb::new(c1),
+            rem_c2: Rb::new(c2),
+            rem_s: Rs::new(s),
             seed: 0,
             pilots: Default::default(),
             remap: F::default(),

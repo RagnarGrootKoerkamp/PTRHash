@@ -3,6 +3,7 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use pthash_rs::{
+    reduce::*,
     test::{bench_index, bench_index_all},
     *,
 };
@@ -65,11 +66,14 @@ enum Command {
     },
 }
 
-// type PT = PTHash<Vec<SlotIdx>, reduce::FR32H, reduce::FR32L, hash::FxHash, true, true>;
-// type PT = PTHash<Vec<SlotIdx>, reduce::FR32H, reduce::FM32L, hash::FxHash, true, true>;
-// type PT = PTHash<EliasFano, reduce::FR32H, reduce::FR32L, hash::FxHash, true, true>;
-// FIXME: FR32L for Rn slot hash causes assertion failures an b2!=b in displace.
-type PT = PTHash<EliasFano, reduce::FR32H, reduce::FM32L, hash::FxHash, true, true>;
+// type PT = PTHash<Vec<SlotIdx>, FR32H, FR32L, hash::FxHash, true, true>;
+// type PT = PTHash<Vec<SlotIdx>, FR32H, FM32L, hash::FxHash, true, true>;
+// type PT = PTHash<EliasFano, FR32H, FR32L, hash::FxHash, true, true>;
+// FIXME: FR32L for Rs slot hash causes assertion failures an b2!=b in displace.
+type PT = PTHash<Vec<SlotIdx>, FR64, FR64, MR64, hash::FxHash, true, true>;
+
+// Fastest queries: 4-5ns
+// type PT = PTHash<Vec<SlotIdx>, FR64, FR64, hash::FxHash, true, false>;
 
 fn main() {
     let Args { command } = Args::parse();
