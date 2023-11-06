@@ -66,11 +66,7 @@ enum Command {
     },
 }
 
-// type PT = PTHash<Vec<SlotIdx>, FR32H, FR32L, hash::FxHash, true, true>;
-// type PT = PTHash<Vec<SlotIdx>, FR32H, FM32L, hash::FxHash, true, true>;
-// type PT = PTHash<EliasFano, FR32H, FR32L, hash::FxHash, true, true>;
-// FIXME: FR32L for Rs slot hash causes assertion failures an b2!=b in displace.
-type PT = PTHash<Vec<SlotIdx>, FR64, FR64, MR64, hash::FxHash, true, true>;
+type PT = PTHash<Vec<SlotIdx>, hash::FxHash, true, true>;
 
 // Fastest queries: 4-5ns
 // type PT = PTHash<Vec<SlotIdx>, FR64, FR64, FR32L, hash::FxHash, true, false>;

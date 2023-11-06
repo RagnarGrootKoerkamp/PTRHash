@@ -39,7 +39,7 @@ use itertools::Itertools;
 use pack::Packed;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
-use reduce::Reduce;
+use reduce::{Reduce, FR64, MR64};
 
 type Key = u64;
 use hash::{Hasher, MulHash};
@@ -90,18 +90,13 @@ impl Default for PTParams {
 
 type P = Vec<u8>;
 type Hk = MulHash;
+type Rp = FR64;
+type Rb = FR64;
+type Rs = MR64;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<
-    F: Packed,
-    Rp: Reduce,
-    Rb: Reduce,
-    Rs: Reduce,
-    Hx: Hasher,
-    const T: bool,
-    const PT: bool,
-> {
+pub struct PTHash<F: Packed, Hx: Hasher, const T: bool, const PT: bool> {
     params: PTParams,
 
     /// The number of keys.
@@ -151,9 +146,7 @@ pub struct PTHash<
     _hx: PhantomData<Hx>,
 }
 
-impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, const PT: bool>
-    PTHash<F, Rp, Rb, Rs, Hx, T, PT>
-{
+impl<F: Packed, Hx: Hasher, const T: bool, const PT: bool> PTHash<F, Hx, T, PT> {
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }

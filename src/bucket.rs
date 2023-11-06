@@ -1,9 +1,7 @@
 #![allow(unused)]
 use super::*;
 
-impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, const PT: bool>
-    PTHash<F, Rp, Rb, Rs, Hx, T, PT>
-{
+impl<F: Packed, Hx: Hasher, const T: bool, const PT: bool> PTHash<F, Hx, T, PT> {
     /// Use the high bits of hx to decide small/large, then map using the
     /// remapper (which uses high end of the 32 low bits).
     pub(super) fn bucket_naive(&self, hx: Hash) -> usize {
