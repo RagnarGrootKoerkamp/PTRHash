@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use pthash_rs::{
@@ -19,9 +21,9 @@ enum Command {
     Stats {
         #[arg(short)]
         n: usize,
-        #[arg(short, default_value_t = 7.0)]
+        #[arg(short, default_value_t = 9.0)]
         c: f32,
-        #[arg(short, default_value_t = 1.0)]
+        #[arg(short, default_value_t = 0.99)]
         a: f32,
         #[arg(short, long, default_value_t = 0)]
         threads: usize,
@@ -30,9 +32,9 @@ enum Command {
     Build {
         #[arg(short)]
         n: usize,
-        #[arg(short, default_value_t = 7.0)]
+        #[arg(short, default_value_t = 9.0)]
         c: f32,
-        #[arg(short, default_value_t = 1.0)]
+        #[arg(short, default_value_t = 0.99)]
         a: f32,
         #[arg(long)]
         stats: bool,
@@ -47,9 +49,9 @@ enum Command {
     Query {
         #[arg(short)]
         n: usize,
-        #[arg(short, default_value_t = 7.0)]
+        #[arg(short, default_value_t = 9.0)]
         c: f32,
-        #[arg(short, default_value_t = 1.0)]
+        #[arg(short, default_value_t = 0.99)]
         a: f32,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
