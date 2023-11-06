@@ -120,7 +120,7 @@ fn queries_exact<F: Packed, H: Hasher>() {
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, H>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<F, H>::new_random(n, 7.0, 1.0);
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -174,7 +174,7 @@ fn queries_random<F: Packed>() {
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, FxHash>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<F, FxHash>::new_random(n, 7.0, 1.0);
 
     // let start = SystemTime::now();
     // let loops = total / n;

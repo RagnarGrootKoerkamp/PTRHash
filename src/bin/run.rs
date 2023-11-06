@@ -37,11 +37,11 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 0.99)]
         a: f32,
+        #[arg(short, default_value_t = 240000)]
+        s: usize,
         #[arg(long)]
         stats: bool,
         /// Max slots per part
-        #[arg(long, default_value_t = 240000)]
-        mspp: usize,
         #[arg(short, long, default_value_t = 0)]
         threads: usize,
     },
@@ -54,19 +54,20 @@ enum Command {
         c: f32,
         #[arg(short, default_value_t = 0.99)]
         a: f32,
+        #[arg(short, default_value_t = 240000)]
+        s: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
         #[arg(long)]
         stats: bool,
         /// Max slots per part
-        #[arg(long, default_value_t = 240000)]
-        mspp: usize,
         #[arg(short, long, default_value_t = 0)]
         threads: usize,
     },
 }
 
 type PT = PTHash<Vec<SlotIdx>, hash::FxHash>;
+// type PT = PTHash<EliasFano, hash::FxHash>;
 
 fn main() {
     let Args { command } = Args::parse();
@@ -78,7 +79,7 @@ fn main() {
                 .build_global()
                 .unwrap();
             let keys = pthash_rs::test::generate_keys(n);
-            let pthash = PT::init(c, a, n);
+            let pthash = PT::init(n, c, a);
             if let Some((_buckets, starts, _order)) = pthash.sort_buckets(&keys) {
                 print_bucket_sizes(starts.iter().zip(starts.iter().skip(1)).map(|(a, b)| b - a));
             } else {
@@ -90,7 +91,7 @@ fn main() {
             c,
             a,
             stats,
-            mspp,
+            s,
             threads,
         } => {
             rayon::ThreadPoolBuilder::new()
@@ -105,7 +106,7 @@ fn main() {
                 &keys,
                 PTParams {
                     print_stats: stats,
-                    max_slots_per_part: mspp,
+                    max_slots_per_part: s,
                 },
             );
             pt.print_bits_per_element();
@@ -120,7 +121,7 @@ fn main() {
             a,
             total,
             stats,
-            mspp,
+            s,
             threads,
         } => {
             rayon::ThreadPoolBuilder::new()
@@ -129,12 +130,12 @@ fn main() {
                 .unwrap();
             let keys = pthash_rs::test::generate_keys(n);
             let pt = PT::new_random_params(
+                n,
                 c,
                 a,
-                n,
                 PTParams {
                     print_stats: stats,
-                    max_slots_per_part: mspp,
+                    max_slots_per_part: s,
                 },
             );
             pt.print_bits_per_element();

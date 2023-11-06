@@ -25,7 +25,6 @@ pub mod test;
 mod types;
 
 use std::{
-    cmp::max,
     collections::HashSet,
     default::Default,
     marker::PhantomData,
@@ -53,17 +52,6 @@ pub type SlotIdx = u32;
 // type Remap = Vec<SlotIdx>;
 
 use crate::{hash::Hash, types::BucketVec};
-
-fn gcd(mut n: usize, mut m: usize) -> usize {
-    assert!(n != 0 && m != 0);
-    while m != 0 {
-        if m < n {
-            std::mem::swap(&mut m, &mut n);
-        }
-        m %= n;
-    }
-    n
-}
 
 /// Parameters for PTHash construction.
 ///
@@ -150,24 +138,24 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     pub fn new_with_params(c: f32, alpha: f32, keys: &Vec<Key>, params: PTParams) -> Self {
-        let mut pthash = Self::init_with_params(c, alpha, keys.len(), params);
+        let mut pthash = Self::init_with_params(keys.len(), c, alpha, params);
         pthash.compute_pilots(keys);
         pthash
     }
 
     /// PTHash with random pivots.
-    pub fn new_random(c: f32, alpha: f32, n: usize) -> Self {
+    pub fn new_random(n: usize, c: f32, alpha: f32) -> Self {
         Self::new_random_params(
+            n,
             c,
             alpha,
-            n,
             PTParams {
                 ..Default::default()
             },
         )
     }
-    pub fn new_random_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
-        let mut pthash = Self::init_with_params(c, alpha, n, params);
+    pub fn new_random_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
+        let mut pthash = Self::init_with_params(n, c, alpha, params);
         let k = (0..pthash.b_total)
             .map(|_| random::<u8>() as Pilot)
             .collect();
@@ -180,75 +168,60 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         pthash
     }
 
-    pub fn init(c: f32, alpha: f32, n0: usize) -> Self {
-        Self::init_with_params(c, alpha, n0, Default::default())
+    pub fn init(n: usize, c: f32, alpha: f32) -> Self {
+        Self::init_with_params(n, c, alpha, Default::default())
     }
 
     /// Only initialize the parameters; do not compute the pivots yet.
-    pub fn init_with_params(c: f32, alpha: f32, n: usize, params: PTParams) -> Self {
-        // n is the number of slots in the target list.
-        let mut s = (n as f32 / alpha) as usize;
-        // NOTE: When n is a power of 2, increase it by 1 to ensure all hash bits are used.
-        if s.count_ones() == 1 {
-            s = max(s + 1, 3)
-        }
+    pub fn init_with_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
+        // Target number of slots in total over all parts.
+        let s_total_target = (n as f32 / alpha) as usize;
 
-        // The number of buckets.
-        // TODO: Why divide by log(n) and not log(n).ceil()?
-        // TODO: Why is this the optimal value to divide by?
-        let mut b = (c * (s as f32) / (s as f32).log2()).ceil() as usize;
-
-        // Map beta% of hashes to gamma% of buckets.
-        let beta = 0.6f64;
-        let gamma = 1. / 3.0f64;
-
-        // TODO: Understand why exactly this choice of parameters.
-        // NOTE: This is basically a constant now.
-        let p1 = Hash::new((beta * u64::MAX as f64) as u64);
+        // Target number of buckets in total.
+        let b_total_target = c * (s_total_target as f32) / (s_total_target as f32).log2();
 
         // We start with the given maximum number of slots per part, since
         // that is what should fit in L1 or L2 cache.
         // Thus, the number of partitions is:
-        let num_parts = max(s.div_ceil(params.max_slots_per_part), 1);
-        // Slots per part.
-        s = params.max_slots_per_part;
-        assert!(
-            s <= params.max_slots_per_part,
-            "{s} <= {} does not hold. parts {num_parts}",
-            params.max_slots_per_part
-        );
-        // Buckets per part
-        b /= num_parts;
+        let s = 1 << params.max_slots_per_part.ilog2();
+        let num_parts = s_total_target.div_ceil(s);
+        let s_total = s * num_parts;
+        // b divisible by 3 is exploited by bucket_thirds.
+        let b = ((b_total_target / (num_parts as f32)).ceil() as usize).next_multiple_of(3);
+        let b_total = b * num_parts;
+        // TODO: Figure out if large gcd(b,s) is a problem for the original PTHash.
 
-        // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
-        // This allows for more efficient computation modulo p2 or m-p2.
-        // See `bucket_thirds()` below.
-        b = b.next_multiple_of(3);
-        // TODO: Figure out if gcd(m,n) large is a problem or not.
-        let p2 = b / 3;
-        assert_eq!(b - p2, 2 * p2);
         eprintln!("        keys: {n:>10}");
         eprintln!("       parts: {num_parts:>10}");
         eprintln!("   slots/prt: {s:>10}");
-        eprintln!("   slots tot: {:>10}", num_parts * s);
+        eprintln!("   slots tot: {s_total:>10}");
         eprintln!(" buckets/prt: {b:>10}");
-        eprintln!(" buckets tot: {:>10}", num_parts * b);
-        eprintln!(" keys/bucket: {:>13.2}", n as f32 / (num_parts * b) as f32);
+        eprintln!(" buckets tot: {b_total:>10}");
+        eprintln!(
+            " keys/bucket: {:>13.2}",
+            n as f32 / (num_parts * b_total) as f32
+        );
 
+        // Map beta% of hashes to gamma% of buckets.
+        // TODO: Understand why exactly this choice of parameters.
+        let beta = 0.6;
+        let gamma = 1. / 3.0;
+
+        let p1 = Hash::new((beta * u64::MAX as f64) as u64);
+        let p2 = b / 3;
         let c1 = (gamma / beta * b as f64).floor() as usize;
         // (b-1) to avoid rounding issues.
         let c2 = (1. - gamma) / (1. - beta) * (b - 1) as f64;
-        // +1 to avoid bucket<p2
+        // +1 to avoid bucket<p2 due to rounding.
         let c3 = p2 - (beta * c2) as usize + 1;
-        let c2 = c2 as usize;
         Self {
             params,
             n,
             num_parts,
-            s_total: num_parts * s,
+            s_total,
             s,
             s_bits: s.ilog2(),
-            b_total: num_parts * b,
+            b_total,
             b,
             p1,
             p2,
@@ -258,7 +231,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             rem_p2: Rb::new(p2),
             rem_bp2: Rb::new(b - p2),
             rem_c1: Rb::new(c1),
-            rem_c2: Rb::new(c2),
+            rem_c2: Rb::new(c2 as usize),
             rem_s: Rs::new(s),
             seed: 0,
             pilots: Default::default(),
