@@ -281,7 +281,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
-    #[inline(always)]
     fn bucket(&self, hx: Hash) -> usize {
         // Extract the high bits for part selection; do normal bucket
         // computation within the part using the remaining bits.
@@ -304,7 +303,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     /// See index.rs for additional streaming/SIMD implementations.
-    #[inline(always)]
     pub fn index(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
         let b = self.bucket(hx);
@@ -313,7 +311,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     /// An implementation that also works for alpha<1.
-    #[inline(always)]
     pub fn index_remap(&self, x: &Key) -> usize {
         let hx = self.hash_key(x);
         let b = self.bucket(hx);
@@ -426,6 +423,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
         (8. * pilots, 8. * remap)
     }
+
     pub fn print_bits_per_element(&self) {
         let (p, r) = self.bits_per_element();
         eprintln!(
