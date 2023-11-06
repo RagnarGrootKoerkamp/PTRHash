@@ -117,6 +117,8 @@ pub struct PTHash<
     b_total: usize,
     /// The number of slots per part.
     s: usize,
+    /// When s is a power of 2, it's 2log.
+    s_bits: u32,
     /// The number of buckets per part.
     b: usize,
 
@@ -266,6 +268,7 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
             num_parts,
             s_total: num_parts * s,
             s,
+            s_bits: s.ilog2(),
             b_total: num_parts * b,
             b,
             p1,
@@ -321,7 +324,7 @@ impl<F: Packed, Rp: Reduce, Rb: Reduce, Rs: Reduce, Hx: Hasher, const T: bool, c
     }
 
     fn position(&self, hx: Hash, p: u64) -> usize {
-        self.part(hx) * self.s + self.position_in_part(hx, p)
+        (self.part(hx) << self.s_bits) + self.position_in_part(hx, p)
     }
 
     fn position_in_part(&self, hx: Hash, p: u64) -> usize {
