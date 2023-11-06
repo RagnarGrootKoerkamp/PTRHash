@@ -96,7 +96,7 @@ type Rs = MR64;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<F: Packed, Hx: Hasher, const PT: bool> {
+pub struct PTHash<F: Packed, Hx: Hasher> {
     params: PTParams,
 
     /// The number of keys.
@@ -147,7 +147,7 @@ pub struct PTHash<F: Packed, Hx: Hasher, const PT: bool> {
     _hx: PhantomData<Hx>,
 }
 
-impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
+impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }
@@ -213,25 +213,19 @@ impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
             eprintln!("s {s} b {b} gcd {}", gcd(s, b));
         }
 
-        let num_parts;
-        if !PT {
-            // Only use one part.
-            num_parts = 1;
-        } else {
-            // We start with the given maximum number of slots per part, since
-            // that is what should fit in L1 or L2 cache.
-            // Thus, the number of partitions is:
-            num_parts = max(s.div_ceil(params.max_slots_per_part), 1);
-            // Slots per part.
-            s = params.max_slots_per_part;
-            assert!(
-                s <= params.max_slots_per_part,
-                "{s} <= {} does not hold. parts {num_parts}",
-                params.max_slots_per_part
-            );
-            // Buckets per part
-            b /= num_parts;
-        }
+        // We start with the given maximum number of slots per part, since
+        // that is what should fit in L1 or L2 cache.
+        // Thus, the number of partitions is:
+        let num_parts = max(s.div_ceil(params.max_slots_per_part), 1);
+        // Slots per part.
+        s = params.max_slots_per_part;
+        assert!(
+            s <= params.max_slots_per_part,
+            "{s} <= {} does not hold. parts {num_parts}",
+            params.max_slots_per_part
+        );
+        // Buckets per part
+        b /= num_parts;
 
         // NOTE: Instead of choosing p2 = 0.3m, we exactly choose p2 = m/3, so that p2 and m-p2 differ exactly by a factor 2.
         // This allows for more efficient computation modulo p2 or m-p2.
@@ -289,27 +283,19 @@ impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
     }
 
     fn part(&self, hx: Hash) -> usize {
-        if PT {
-            hx.reduce(self.rem_parts)
-        } else {
-            0
-        }
+        hx.reduce(self.rem_parts)
     }
 
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
     #[inline(always)]
     fn bucket(&self, hx: Hash) -> usize {
-        if !PT {
-            self.bucket_thirds_shift(hx)
-        } else {
-            // Extract the high bits for part selection; do normal bucket
-            // computation within the part using the remaining bits.
-            // NOTE: This is somewhat slow, but doing better is hard.
-            let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
-            let bucket = self.bucket_parts_branchless(hx);
-            part * self.b + bucket
-        }
+        // Extract the high bits for part selection; do normal bucket
+        // computation within the part using the remaining bits.
+        // NOTE: This is somewhat slow, but doing better is hard.
+        let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
+        let bucket = self.bucket_parts_branchless(hx);
+        part * self.b + bucket
     }
 
     fn position(&self, hx: Hash, p: u64) -> usize {

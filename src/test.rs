@@ -39,7 +39,7 @@ fn construct() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash = PTHash::<Vec<SlotIdx>, FxHash, false>::new(7.0, 1.0, &keys);
+            let pthash = PTHash::<Vec<SlotIdx>, FxHash>::new(7.0, 1.0, &keys);
 
             let mut done = vec![false; n];
 
@@ -115,12 +115,12 @@ where
 }
 
 #[cfg(test)]
-fn queries_exact<F: Packed, const PT: bool, H: Hasher>() {
+fn queries_exact<F: Packed, H: Hasher>() {
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, H, PT>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<F, H>::new_random(7.0, 1.0, n);
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -135,10 +135,10 @@ fn queries_exact<F: Packed, const PT: bool, H: Hasher>() {
     eprintln!();
 }
 
-fn test_stream_chunks<const K: usize, const L: usize, F: Packed, Hx: Hasher, const PT: bool>(
+fn test_stream_chunks<const K: usize, const L: usize, F: Packed, Hx: Hasher>(
     total: usize,
     n: usize,
-    mphf: &PTHash<F, Hx, PT>,
+    mphf: &PTHash<F, Hx>,
     keys: &[u64],
 ) where
     [(); K * L]: Sized,
@@ -158,31 +158,23 @@ fn test_stream_chunks<const K: usize, const L: usize, F: Packed, Hx: Hasher, con
 /// Macro to generate tests for the given Reduce types.
 #[test]
 fn query() {
-    eprintln!("no parts");
     eprint!(" murmur");
-    queries_exact::<Vec<SlotIdx>, false, Murmur>();
+    queries_exact::<Vec<SlotIdx>, Murmur>();
     eprint!(" fxhash");
-    queries_exact::<Vec<SlotIdx>, false, FxHash>();
+    queries_exact::<Vec<SlotIdx>, FxHash>();
     eprint!(" nohash");
-    queries_exact::<Vec<SlotIdx>, false, NoHash>();
-    eprintln!("parts");
-    eprint!(" murmur");
-    queries_exact::<Vec<SlotIdx>, true, Murmur>();
-    eprint!(" fxhash");
-    queries_exact::<Vec<SlotIdx>, true, FxHash>();
-    eprint!(" nohash");
-    queries_exact::<Vec<SlotIdx>, true, NoHash>();
+    queries_exact::<Vec<SlotIdx>, NoHash>();
 }
 
 /// Primarily for `perf stat`.
 #[cfg(test)]
-fn queries_random<F: Packed, const PT: bool>() {
+fn queries_random<F: Packed>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, FxHash, PT>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<F, FxHash>::new_random(7.0, 1.0, n);
 
     // let start = SystemTime::now();
     // let loops = total / n;
@@ -198,26 +190,26 @@ fn queries_random<F: Packed, const PT: bool>() {
 
     let q = bench_index_all(total, &keys, |keys| mphf.index_stream::<64>(keys));
     eprintln!("{q:>4.1}");
-    test_stream_chunks::<4, 2, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 2, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 2, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 2, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 4, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 8, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 8, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 8, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 8, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, F, FxHash, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 2, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 2, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 2, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 2, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 4, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 8, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 8, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 8, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 8, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, F, FxHash>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, F, FxHash>(total, n, &mphf, &keys);
 
     eprintln!();
 }
 
 #[test]
 fn test_queries_random() {
-    queries_random::<Vec<SlotIdx>, false>();
+    queries_random::<Vec<SlotIdx>>();
 }

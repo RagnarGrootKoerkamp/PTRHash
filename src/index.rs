@@ -1,6 +1,6 @@
 use super::*;
 
-impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
+impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     #[inline(always)]
     pub fn index_stream<'a, const K: usize>(
         &'a self,

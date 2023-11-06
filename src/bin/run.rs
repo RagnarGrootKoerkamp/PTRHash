@@ -66,10 +66,7 @@ enum Command {
     },
 }
 
-type PT = PTHash<Vec<SlotIdx>, hash::FxHash, true>;
-
-// Fastest queries: 4-5ns
-// type PT = PTHash<Vec<SlotIdx>, FR64, FR64, FR32L, hash::FxHash, true, false>;
+type PT = PTHash<Vec<SlotIdx>, hash::FxHash>;
 
 fn main() {
     let Args { command } = Args::parse();
