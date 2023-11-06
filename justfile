@@ -1,69 +1,60 @@
-alias b := bench
-alias f := flame
-alias s := stat
-alias p := record
-alias r := report
-
-@build:
-    cargo build -r
-@build-tests:
-    cargo build -r --tests
-test target="test_" *args="":
-    cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
+alias c := clean
 
 cpufreq:
-    sudo cpupower frequency-set --governor performance -d 2.6GHz -u 2.6GHz > /dev/null
-cpufreq-fast:
     sudo cpupower frequency-set --governor performance -d 3.6GHz -u 3.6GHz > /dev/null
 
-## Generic test
-# parallel
-tp *args="":
-    cargo test -r -- --Z unstable-options --report-time {{args}}
-# sequential (one at a time), with output
-t1 *args="":
-    cargo test -r -- --Z unstable-options --report-time --nocapture --test-threads 1 {{args}}
+@clean:
+    cargo clean
+@build:
+    cargo build -r
 
-## Queries
-q target="test::query_" *args="":
-    cargo test -r -- {{target}} --Z unstable-options --report-time --nocapture --test-threads 1 {{args}}
+r:
+    perf report
 
+## Build
 
-bench target="test::query" *args="":
-    cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
-flame target="test::query_" *args="": build-tests
-    cargo flamegraph --open --unit-test -- --test-threads 1 --nocapture {{target}} {{args}}
+b *args="":
+    cargo run -r --bin run -- build {{args}}
 
-# record time usage
-record target='compact_fastmod64' *args='': build-tests
-    perf record cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
-    perf report -n
-report:
-    perf report -n
-stat target='compact_fastmod64' *args='': build-tests
-    perf stat -d cargo test -r -- --test-threads 1 --nocapture {{target}} {{args}}
+bf *args="":
+    cargo flamegraph --open --bin run -- build {{args}}
 
-## Construction
+bp *args="": build
+    perf record cargo run -r --bin run -- build {{args}}
 
-cr *args="":
-    cargo run -r --bin run -- {{args}}
+bpp *args="": build
+    perf record -e branches,branch-misses,L1-dcache-load-misses,LLC-load-misses \
+      cargo run -r --bin run -- build {{args}}
 
-cf *args="":
-    cargo flamegraph --open --bin run -- {{args}}
+bs *args="": build
+    perf stat -d cargo run -r --bin run -- build {{args}}
 
-cp *args="": build
-    perf record cargo run -r --bin run -- {{args}}
+bss *args="": build
+    perf stat -d -d cargo run -r --bin run -- build {{args}}
 
-cs *args="": build
-    perf stat -d cargo run -r --bin run -- {{args}}
+bm *args="":
+    heaptrack cargo run -r --bin run -- build {{args}}
 
-# TODO: This isn't really working yet; ideally we run the test binary directly
-# but it doesn't have a deterministic name.
-cm *args="":
-    heaptrack cargo run -r --bin run -- {{args}}
+## Query
 
-#### FURTHER COMMANDS FOR BINARIES/EXAMPLES
+q *args="":
+    cargo run -r --bin run -- query {{args}}
 
-# Bucket sizes
-buckets *args="":
-    cargo flamegraph --open --bin run -- {{args}}
+qf *args="":
+    cargo flamegraph --open --bin run -- query {{args}}
+
+qp *args="": build
+    perf record cargo run -r --bin run -- query {{args}}
+
+qpp *args="": build
+    perf record -e branches,branch-misses,L1-dcache-load-misses,LLC-load-misses \
+      cargo run -r --bin run -- query {{args}}
+
+qs *args="": build
+    perf stat -d cargo run -r --bin run -- query {{args}}
+
+qss *args="": build
+    perf stat -d -d cargo run -r --bin run -- query {{args}}
+
+qm *args="":
+    heaptrack cargo run -r --bin run -- query {{args}}
