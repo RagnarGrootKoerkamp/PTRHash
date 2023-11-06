@@ -305,6 +305,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             }
         } else {
             // Extract the high bits for part selection; do normal bucket computation within the part using the remaining bits.
+            // TODO: This part seems kinda slow.
             let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
             let bucket = self.bucket_parts_branchless(hx);
             part * self.b + bucket

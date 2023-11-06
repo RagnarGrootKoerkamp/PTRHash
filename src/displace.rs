@@ -163,6 +163,7 @@ Possible causes:
 
                 // 1b) Hot-path for when there are no collisions, which is most of the buckets.
                 if let Some((p, hp)) = self.find_pilot(kmax, bucket, taken) {
+                    // NOTE: Many branch misses here.
                     pilots[b] = p as u8;
                     for p in b_positions(hp) {
                         unsafe {
@@ -195,7 +196,7 @@ Possible causes:
                         } else if recent.contains(&s) {
                             continue 'p;
                         } else {
-                            // NOTE: Hot instruction.
+                            // NOTE: Hot instruction because of L1 and LLC cache misses.
                             bucket_len(s).pow(2)
                         };
                         collision_score += new_score;

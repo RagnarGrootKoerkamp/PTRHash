@@ -73,6 +73,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
             // Loop over buckets in part, setting start positions and counting # buckets of each size.
             for b in 0..self.b {
                 let start = end;
+                // NOTE: Many branch misses here.
                 while end < hashes.len() && self.bucket(hashes[end]) == p * self.b + b {
                     end += 1;
                 }

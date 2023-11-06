@@ -33,6 +33,7 @@ impl<F: Packed, Rm: Reduce, Rn: Reduce, Hx: Hasher, const T: bool, const PT: boo
     }
 
     pub(super) fn bucket_parts_branchless(&self, hx: Hash) -> usize {
+        // NOTE: There is a lot of MOV/CMOV going on here.
         let is_large = hx >= self.p1;
         let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
         is_large as usize * self.c3 + hx.reduce(rem)
