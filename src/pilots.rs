@@ -5,7 +5,7 @@ use super::*;
 use bitvec::{slice::BitSlice, vec::BitVec};
 use clap::ValueEnum;
 
-impl<F: Packed, Hx: Hasher, const T: bool, const PT: bool> PTHash<F, Hx, T, PT> {
+impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
     pub fn find_pilot(
         &self,
         kmax: u64,

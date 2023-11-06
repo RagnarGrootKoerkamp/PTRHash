@@ -39,7 +39,7 @@ fn construct() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash = PTHash::<Vec<SlotIdx>, FxHash, false, false>::new(7.0, 1.0, &keys);
+            let pthash = PTHash::<Vec<SlotIdx>, FxHash, false>::new(7.0, 1.0, &keys);
 
             let mut done = vec![false; n];
 
@@ -115,12 +115,12 @@ where
 }
 
 #[cfg(test)]
-fn queries_exact<F: Packed, const T: bool, const PT: bool, H: Hasher>() {
+fn queries_exact<F: Packed, const PT: bool, H: Hasher>() {
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, H, T, PT>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<F, H, PT>::new_random(7.0, 1.0, n);
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -135,17 +135,10 @@ fn queries_exact<F: Packed, const T: bool, const PT: bool, H: Hasher>() {
     eprintln!();
 }
 
-fn test_stream_chunks<
-    const K: usize,
-    const L: usize,
-    F: Packed,
-    Hx: Hasher,
-    const T: bool,
-    const PT: bool,
->(
+fn test_stream_chunks<const K: usize, const L: usize, F: Packed, Hx: Hasher, const PT: bool>(
     total: usize,
     n: usize,
-    mphf: &PTHash<F, Hx, T, PT>,
+    mphf: &PTHash<F, Hx, PT>,
     keys: &[u64],
 ) where
     [(); K * L]: Sized,
@@ -163,41 +156,33 @@ fn test_stream_chunks<
 }
 
 /// Macro to generate tests for the given Reduce types.
-macro_rules! test_query {
-    ($t:expr, $name:ident) => {
-        #[test]
-        fn $name() {
-            eprintln!("no parts");
-            eprint!(" murmur");
-            queries_exact::<Vec<SlotIdx>, $t, false, Murmur>();
-            eprint!(" fxhash");
-            queries_exact::<Vec<SlotIdx>, $t, false, FxHash>();
-            eprint!(" nohash");
-            queries_exact::<Vec<SlotIdx>, $t, false, NoHash>();
-            eprintln!("parts");
-            eprint!(" murmur");
-            queries_exact::<Vec<SlotIdx>, $t, true, Murmur>();
-            eprint!(" fxhash");
-            queries_exact::<Vec<SlotIdx>, $t, true, FxHash>();
-            eprint!(" nohash");
-            queries_exact::<Vec<SlotIdx>, $t, true, NoHash>();
-        }
-    };
+#[test]
+fn query() {
+    eprintln!("no parts");
+    eprint!(" murmur");
+    queries_exact::<Vec<SlotIdx>, false, Murmur>();
+    eprint!(" fxhash");
+    queries_exact::<Vec<SlotIdx>, false, FxHash>();
+    eprint!(" nohash");
+    queries_exact::<Vec<SlotIdx>, false, NoHash>();
+    eprintln!("parts");
+    eprint!(" murmur");
+    queries_exact::<Vec<SlotIdx>, true, Murmur>();
+    eprint!(" fxhash");
+    queries_exact::<Vec<SlotIdx>, true, FxHash>();
+    eprint!(" nohash");
+    queries_exact::<Vec<SlotIdx>, true, NoHash>();
 }
-
-// NOTE: Triangle variants tend to be slower for already fast versions.
-test_query!(false, query);
-test_query!(true, query_t);
 
 /// Primarily for `perf stat`.
 #[cfg(test)]
-fn queries_random<F: Packed, const T: bool, const PT: bool>() {
+fn queries_random<F: Packed, const PT: bool>() {
     eprintln!();
     // To prevent loop unrolling.
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, FxHash, T, PT>::new_random(7.0, 1.0, n);
+    let mphf = PTHash::<F, FxHash, PT>::new_random(7.0, 1.0, n);
 
     // let start = SystemTime::now();
     // let loops = total / n;
@@ -213,34 +198,26 @@ fn queries_random<F: Packed, const T: bool, const PT: bool>() {
 
     let q = bench_index_all(total, &keys, |keys| mphf.index_stream::<64>(keys));
     eprintln!("{q:>4.1}");
-    test_stream_chunks::<4, 2, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 2, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 2, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 2, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<4, 8, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 8, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 8, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 8, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<8, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<16, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
-    test_stream_chunks::<32, 4, F, FxHash, T, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 2, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 2, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 2, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 2, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<4, 8, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 8, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 8, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 8, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<8, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<16, 4, F, FxHash, PT>(total, n, &mphf, &keys);
+    test_stream_chunks::<32, 4, F, FxHash, PT>(total, n, &mphf, &keys);
 
     eprintln!();
 }
 
-/// Macro to generate tests for the given Reduce types.
-macro_rules! test_random {
-    ($t:expr, $name:ident) => {
-        #[test]
-        fn $name() {
-            queries_random::<Vec<SlotIdx>, $t, false>();
-        }
-    };
+#[test]
+fn test_queries_random() {
+    queries_random::<Vec<SlotIdx>, false>();
 }
-
-test_random!(false, query_random);
-test_random!(true, query_random_t);

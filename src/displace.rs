@@ -9,7 +9,7 @@ use rayon::{
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-impl<F: Packed, Hx: Hasher, const T: bool, const PT: bool> PTHash<F, Hx, T, PT> {
+impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
     pub fn displace(
         &self,
         hashes: &[Hash],

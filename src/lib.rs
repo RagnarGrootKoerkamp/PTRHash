@@ -96,7 +96,7 @@ type Rs = MR64;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
-pub struct PTHash<F: Packed, Hx: Hasher, const T: bool, const PT: bool> {
+pub struct PTHash<F: Packed, Hx: Hasher, const PT: bool> {
     params: PTParams,
 
     /// The number of keys.
@@ -108,9 +108,10 @@ pub struct PTHash<F: Packed, Hx: Hasher, const T: bool, const PT: bool> {
     s_total: usize,
     /// The total number of buckets.
     b_total: usize,
-    /// The number of slots per part.
+    /// The number of slots per part, always a power of 2.
     s: usize,
-    /// When s is a power of 2, it's 2log.
+    /// Since s is a power of 2, we can compute multiplications using a shift
+    /// instead.
     s_bits: u32,
     /// The number of buckets per part.
     b: usize,
@@ -146,7 +147,7 @@ pub struct PTHash<F: Packed, Hx: Hasher, const T: bool, const PT: bool> {
     _hx: PhantomData<Hx>,
 }
 
-impl<F: Packed, Hx: Hasher, const T: bool, const PT: bool> PTHash<F, Hx, T, PT> {
+impl<F: Packed, Hx: Hasher, const PT: bool> PTHash<F, Hx, PT> {
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }
@@ -300,11 +301,7 @@ impl<F: Packed, Hx: Hasher, const T: bool, const PT: bool> PTHash<F, Hx, T, PT> 
     #[inline(always)]
     fn bucket(&self, hx: Hash) -> usize {
         if !PT {
-            if T {
-                self.bucket_thirds_shift(hx)
-            } else {
-                self.bucket_naive(hx)
-            }
+            self.bucket_thirds_shift(hx)
         } else {
             // Extract the high bits for part selection; do normal bucket
             // computation within the part using the remaining bits.
