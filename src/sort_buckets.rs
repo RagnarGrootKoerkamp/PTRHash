@@ -53,7 +53,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
         // For each bucket idx, the location where it starts.
         // TODO: Starts can be relative to the part, instead of absolute.
-        let mut starts = BucketVec::with_capacity(self.b + 1);
+        let mut starts = BucketVec::with_capacity(self.b_total + 1);
 
         // For each part, the order of the buckets indices by decreasing bucket size.
         let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b_total];
