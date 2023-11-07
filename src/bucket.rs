@@ -31,10 +31,28 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     pub(super) fn bucket_parts_branchless(&self, hx: Hash) -> usize {
+        // FIXME: Can we just simplify to a single reduce?
+        // return hx.reduce(self.rem_b);
+
         // NOTE: There is a lot of MOV/CMOV going on here.
         let is_large = hx >= self.p1;
         let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
-        is_large as usize * self.c3 + hx.reduce(rem)
+        let b = is_large as usize * self.c3 + hx.reduce(rem);
+
+        // if is_large {
+        //     if self.p2 > b {
+        //         eprintln!("too small large bucket {b} < {}", self.p2);
+        //     }
+        //     if b >= self.b {
+        //         eprintln!("too large large bucket {b} >= {}", self.b);
+        //     }
+        // } else {
+        //     if b >= self.p2 {
+        //         eprintln!("too large small bucket {b} >= {}", self.p2);
+        //     }
+        // }
+
+        b
     }
 
     /// We have p2 = m/3 and m-p2 = 2*m/3 = 2*p2.

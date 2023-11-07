@@ -110,6 +110,8 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
     // Precomputed fast modulo operations.
     /// Fast %parts.
     rem_parts: Rp,
+    /// Fast &b.
+    rem_b: Rb,
     /// Fast %p2
     rem_p2: Rb,
     /// Fast %(b-p2)
@@ -197,21 +199,19 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         eprintln!("   slots tot: {s_total:>10}");
         eprintln!(" buckets/prt: {b:>10}");
         eprintln!(" buckets tot: {b_total:>10}");
-        eprintln!(
-            " keys/bucket: {:>13.2}",
-            n as f32 / (num_parts * b_total) as f32
-        );
+        eprintln!(" keys/bucket: {:>13.2}", n as f32 / b_total as f32);
 
         // Map beta% of hashes to gamma% of buckets.
         // TODO: Understand why exactly this choice of parameters.
+        // FIXME: Can we just drop this???
         let beta = 0.6;
         let gamma = 1. / 3.0;
 
         let p1 = Hash::new((beta * u64::MAX as f64) as u64);
-        let p2 = b / 3;
-        let c1 = (gamma / beta * b as f64).floor() as usize;
-        // (b-1) to avoid rounding issues.
-        let c2 = (1. - gamma) / (1. - beta) * (b - 1) as f64;
+        let p2 = (gamma * b as f64) as usize;
+        let c1 = (gamma / beta * (b - 1) as f64).floor() as usize;
+        // (b-2) to avoid rounding issues.
+        let c2 = (1. - gamma) / (1. - beta) * (b - 2) as f64;
         // +1 to avoid bucket<p2 due to rounding.
         let c3 = p2 - (beta * c2) as usize + 1;
         Self {
@@ -228,6 +228,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             c3,
             bp2: b - p2,
             rem_parts: Rp::new(num_parts),
+            rem_b: Rb::new(b),
             rem_p2: Rb::new(p2),
             rem_bp2: Rb::new(b - p2),
             rem_c1: Rb::new(c1),
