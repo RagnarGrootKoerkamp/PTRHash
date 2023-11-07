@@ -78,6 +78,7 @@ type Hk = MulHash;
 type Rp = FR64;
 type Rb = FR64;
 type Rs = MR64;
+const SPLIT_BUCKETS: bool = true;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
@@ -112,6 +113,8 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
     rem_parts: Rp,
     /// Fast &b.
     rem_b: Rb,
+    /// Fast &b_total.
+    rem_b_total: Rb,
     /// Fast %p2
     rem_p2: Rb,
     /// Fast %(b-p2)
@@ -229,6 +232,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             bp2: b - p2,
             rem_parts: Rp::new(num_parts),
             rem_b: Rb::new(b),
+            rem_b_total: Rb::new(b_total),
             rem_p2: Rb::new(p2),
             rem_bp2: Rb::new(b - p2),
             rem_c1: Rb::new(c1),
@@ -256,6 +260,9 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
     fn bucket(&self, hx: Hash) -> usize {
+        if !SPLIT_BUCKETS {
+            return hx.reduce(self.rem_b_total);
+        }
         // Extract the high bits for part selection; do normal bucket
         // computation within the part using the remaining bits.
         // NOTE: This is somewhat slow, but doing better is hard.
