@@ -18,27 +18,20 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     ///
     /// This returns None if duplicate hashes are found.
     #[must_use]
-    pub fn sort_buckets(
-        &self,
-        keys: &[u64],
-    ) -> Option<(Vec<Hash>, BucketVec<usize>, Vec<BucketIdx>)> {
+    pub fn sort_parts(&self, keys: &[Key]) -> Option<(Vec<Hash>, Vec<u32>)> {
         // For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
         // <self.p1 and those >=self.p1, and then sort each group using the low
         // 32 bits.
         // NOTE: This does not work for other reduction methods.
 
-        // 1. Collect all hashes.
         let start = Instant::now();
-        // TODO: We can directly write hashes to a 8bit or 16bit radix-sort bucket.
-        let mut hashes: Vec<_> = keys.par_iter().map(|key| self.hash_key(key)).collect();
+        // 1. Collect hashes per part.
+        let mut hashes: Vec<Hash> = keys.par_iter().map(|key| self.hash_key(key)).collect();
         let start = log_duration("┌  hash keys", start);
-
         // 2. Radix sort hashes.
-        // TODO: See if we can make this faster similar to simple-saca's parallel radix sort.
-        // TODO: Maybe 2 rounds of 16bit sorting is faster than 4 rounds of 8bit sorting?
         hashes.radix_sort_unstable();
-        let start = log_duration("├sort hashes", start);
+        let start = log_duration("├ radix sort", start);
 
         // 3. Check duplicates.
         let distinct = hashes.par_windows(2).all(|w| w[0] != w[1]);
@@ -48,85 +41,93 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             return None;
         }
 
-        // TODO: Determine size of each part.
-        // TODO: Print statistics on largest part.
-
-        // For each bucket idx, the location where it starts.
-        // TODO: Starts can be relative to the part, instead of absolute.
-        let mut starts = BucketVec::with_capacity(self.b_total + 1);
-
-        // For each part, the order of the buckets indices by decreasing bucket size.
-        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b_total];
-
-        let mut end = 0;
-        let mut acc = 0;
-        starts.push(end);
-        // TODO: Parallellize this loop.
-        for p in 0..self.num_parts {
-            // For each part, the number of buckets of each size.
-            let mut pos_for_size = vec![0; 32];
-
-            let start_of_part = end;
-
-            // Loop over buckets in part, setting start positions and counting # buckets of each size.
-            for b in 0..self.b {
-                let start = end;
-                // NOTE: Many branch misses here.
-                while end < hashes.len() && self.bucket(hashes[end]) == p * self.b + b {
-                    end += 1;
-                }
-
-                let l = end - start;
-                if l >= pos_for_size.len() {
-                    pos_for_size.resize(l + 1, 0);
-                }
-                pos_for_size[l] += 1;
-                starts.push(end);
-            }
-
-            {
-                let n_part = end - start_of_part;
-                if n_part > self.s {
-                    eprintln!(
-                        "Part {p}: More elements than slots! elements {n_part} > {} slots",
-                        self.s
-                    );
-                    return None;
-                }
-            }
-
-            let max_bucket_size = pos_for_size.len() - 1;
-            {
-                let expected_bucket_size = self.s as f32 / self.b as f32;
-                assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
-            }
-
-            // Compute start positions of each range of buckets of equal size.
-            for i in (0..=max_bucket_size).rev() {
-                let tmp = pos_for_size[i];
-                pos_for_size[i] = acc;
-                acc += tmp;
-            }
-
-            // Write buckets to their right location.
-            for b in BucketIdx::range(self.b) {
-                let b = b + p * self.b;
-                let l = starts[b + 1] - starts[b];
-                order[pos_for_size[l]] = b - p * self.b;
-                pos_for_size[l] += 1;
+        // 4. Find the start of each part using binary search.
+        let mut part_starts = vec![0u32; self.num_parts + 1];
+        for i in 1..=self.num_parts {
+            part_starts[i] = hashes
+                .binary_search_by(|h| {
+                    if self.part(*h) < i {
+                        std::cmp::Ordering::Less
+                    } else {
+                        std::cmp::Ordering::Greater
+                    }
+                })
+                .unwrap_err() as u32;
+        }
+        // Check max part len.
+        let mut max_part_len = 0;
+        for (part, (start, end)) in part_starts.iter().tuple_windows().enumerate() {
+            let len = end - start;
+            max_part_len = max_part_len.max(len);
+            if len as usize > self.s {
+                eprintln!(
+                    "Part {part}: More elements than slots! elements {len} > {} slots",
+                    self.s
+                );
+                return None;
             }
         }
-        log_duration("├  sort size", start);
-
-        assert_eq!(
-            end,
-            hashes.len(),
-            "Not all hashes were sorted into buckets; make sure to sort hashes by (part, bucket).
-Last: part {} bucket {}",
-            self.part(hashes[end]),
-            self.bucket(hashes[end])
+        eprintln!(
+            "max key/part: {max_part_len:>10}  alpha={:>6.2}%",
+            100. * max_part_len as f32 / self.s as f32
         );
 
-        Some((hashes, starts, order))
+        log_duration("├part starts", start);
+
+        Some((hashes, part_starts))
+    }
+
+    // Sort the buckets in the given part and corresponding range of hashes.
+    pub fn sort_buckets(&self, part: usize, hashes: &[Hash]) -> (Vec<u32>, Vec<BucketIdx>) {
+        // Where each bucket starts in hashes.
+        let mut bucket_starts = BucketVec::with_capacity(self.b + 1);
+
+        // The order of buckets, from large to small.
+        let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b];
+
+        // The number of buckets of each length.
+        let mut bucket_len_cnt = vec![0; 32];
+
+        let mut end = 0;
+        bucket_starts.push(end as u32);
+
+        // Loop over buckets in part, setting start positions and counting # buckets of each size.
+        for b in 0..self.b {
+            let start = end;
+            // NOTE: Many branch misses here.
+            while end < hashes.len() && self.bucket(hashes[end]) == part * self.b + b {
+                end += 1;
+            }
+
+            let l = end - start;
+            if l >= bucket_len_cnt.len() {
+                bucket_len_cnt.resize(l + 1, 0);
+            }
+            bucket_len_cnt[l] += 1;
+            bucket_starts.push(end as u32);
+        }
+
+        let max_bucket_size = bucket_len_cnt.len() - 1;
+        {
+            let expected_bucket_size = self.s as f32 / self.b as f32;
+            assert!(max_bucket_size <= (20. * expected_bucket_size) as usize, "Part {part}: Bucket size {max_bucket_size} is too much larger than the expected size of {expected_bucket_size}." );
+        }
+
+        // Compute start positions of each range of buckets of equal size.
+        let mut acc = 0;
+        for i in (0..=max_bucket_size).rev() {
+            let tmp = bucket_len_cnt[i];
+            bucket_len_cnt[i] = acc;
+            acc += tmp;
+        }
+
+        // Write buckets to their right location.
+        for b in BucketIdx::range(self.b) {
+            let l = (bucket_starts[b + 1] - bucket_starts[b]) as usize;
+            order[bucket_len_cnt[l]] = b;
+            bucket_len_cnt[l] += 1;
+        }
+
+        (bucket_starts, order)
     }
 }

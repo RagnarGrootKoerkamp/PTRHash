@@ -1,20 +1,16 @@
 #![allow(dead_code)]
 
 use super::*;
-use crate::types::{BucketIdx, BucketSlice};
+use crate::types::BucketIdx;
 use bitvec::{slice::BitSlice, vec::BitVec};
-use rayon::{
-    prelude::{IndexedParallelIterator, ParallelIterator},
-    slice::{ParallelSlice, ParallelSliceMut},
-};
+use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     pub fn displace(
         &self,
         hashes: &[Hash],
-        starts: &BucketVec<usize>,
-        bucket_order: &[BucketIdx],
+        part_starts: &[u32],
         pilots: &mut BucketVec<u8>,
         taken: &mut Vec<BitVec>,
     ) -> bool {
@@ -28,21 +24,16 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         }
         taken.resize_with(self.num_parts, || bitvec![0; self.s]);
 
-        let starts_per_part = starts.par_chunks_exact(self.b);
-        let order_per_part = bucket_order.par_chunks_exact(self.b);
         let pilots_per_part = pilots.par_chunks_exact_mut(self.b);
 
-        let iter = starts_per_part
-            .zip(order_per_part)
-            .zip(pilots_per_part)
-            .zip(taken)
-            .enumerate();
+        let iter = pilots_per_part.zip(taken).enumerate();
 
         let total_displacements = AtomicUsize::new(0);
         let parts_done = AtomicUsize::new(0);
 
-        let ok = iter.try_for_each(|(part, (((starts, order), pilots), taken))| {
-            let (ok, cnt) = self.displace_part(part, hashes, starts, order, pilots, taken);
+        let ok = iter.try_for_each(|(part, (pilots, taken))| {
+            let hashes = &hashes[part_starts[part] as usize..part_starts[part + 1] as usize];
+            let (ok, cnt) = self.displace_part(part, hashes, pilots, taken);
             let parts_done = parts_done.fetch_add(1, Ordering::Relaxed);
             total_displacements.fetch_add(cnt, Ordering::Relaxed);
             eprint!(
@@ -77,15 +68,15 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         &self,
         part: usize,
         hashes: &[Hash],
-        starts: &BucketSlice<usize>,
-        bucket_order: &[BucketIdx],
         pilots: &mut [u8],
         taken: &mut BitSlice,
     ) -> (bool, usize) {
+        let (starts, bucket_order) = self.sort_buckets(part, hashes);
+
         let kmax = 256;
 
         let mut slots = vec![BucketIdx::NONE; self.s];
-        let bucket_len = |b: BucketIdx| starts[b + 1] - starts[b];
+        let bucket_len = |b: BucketIdx| (starts[b + 1] - starts[b]) as usize;
 
         let max_bucket_len = bucket_len(bucket_order[0]);
 
@@ -94,7 +85,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let positions = |b: BucketIdx, p: Pilot| unsafe {
             let hp = self.hash_pilot(p);
             hashes
-                .get_unchecked(starts[b]..starts[b + 1])
+                .get_unchecked(starts[b] as usize..starts[b + 1] as usize)
                 .iter()
                 .map(move |&hx| self.position_in_part_hp(hx, hp))
         };
@@ -112,7 +103,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let mut total_displacements = 0;
 
         for (i, &b) in bucket_order.iter().enumerate() {
-            let bucket = &hashes[starts[b]..starts[b + 1]];
+            let bucket = &hashes[starts[b] as usize..starts[b + 1] as usize];
             if bucket.is_empty() {
                 pilots[b] = 0;
                 continue;
@@ -149,7 +140,8 @@ Possible causes:
 
                 // 1a) Check for a solution without collisions.
 
-                let bucket = unsafe { hashes.get_unchecked(starts[b]..starts[b + 1]) };
+                let bucket =
+                    unsafe { hashes.get_unchecked(starts[b] as usize..starts[b + 1] as usize) };
                 let b_positions = |hp: Hash| {
                     bucket
                         .iter()

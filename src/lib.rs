@@ -332,13 +332,13 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
             // Step 2: Determine the buckets.
             let start = std::time::Instant::now();
-            let Some((hashes, starts, bucket_order)) = self.sort_buckets(keys) else {
+            let Some((hashes, part_starts)) = self.sort_parts(keys) else {
                 // Found duplicate hashes.
                 continue 's;
             };
             let start = log_duration("sort buckets", start);
 
-            if !self.displace(&hashes, &starts, &bucket_order, &mut pilots, &mut taken) {
+            if !self.displace(&hashes, &part_starts, &mut pilots, &mut taken) {
                 continue 's;
             }
             log_duration("displace", start);
