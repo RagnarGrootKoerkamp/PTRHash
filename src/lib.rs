@@ -38,6 +38,7 @@ use itertools::Itertools;
 use pack::Packed;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use rdst::RadixSort;
 use reduce::{Reduce, FR64, MR64};
 
 type Key = u64;
@@ -168,7 +169,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let mut remap_vals = (pthash.n..pthash.s_total)
             .map(|_| pthash.rem_s.reduce(Hash::new(random::<u64>())) as _)
             .collect_vec();
-        remap_vals.sort_unstable();
+        remap_vals.radix_sort_unstable();
         pthash.remap = Packed::new(remap_vals);
         pthash
     }
