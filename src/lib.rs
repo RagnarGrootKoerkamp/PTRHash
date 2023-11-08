@@ -52,7 +52,7 @@ pub type SlotIdx = u32;
 // type Remap = sucds::mii_sequences::EliasFano;
 // type Remap = Vec<SlotIdx>;
 
-use crate::{hash::Hash, types::BucketVec};
+use crate::hash::Hash;
 
 /// Parameters for PTHash construction.
 ///
@@ -308,7 +308,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     pub fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
-        let mut pilots: BucketVec<u8> = vec![];
+        let mut pilots: Vec<u8> = vec![];
 
         let mut tries = 0;
         const MAX_TRIES: usize = 3;

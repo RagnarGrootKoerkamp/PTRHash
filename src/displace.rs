@@ -11,7 +11,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         &self,
         hashes: &[Hash],
         part_starts: &[u32],
-        pilots: &mut BucketVec<u8>,
+        pilots: &mut Vec<u8>,
         taken: &mut Vec<BitVec>,
     ) -> bool {
         // Reset output-memory.

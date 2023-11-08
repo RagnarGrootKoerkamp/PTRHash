@@ -67,8 +67,9 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                 return None;
             }
         }
+        eprintln!("max key/part: {max_part_len:>10}",);
         eprintln!(
-            "max key/part: {max_part_len:>10}  alpha={:>6.2}%",
+            "max    alpha: {:>13.2}%",
             100. * max_part_len as f32 / self.s as f32
         );
 
@@ -80,7 +81,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     // Sort the buckets in the given part and corresponding range of hashes.
     pub fn sort_buckets(&self, part: usize, hashes: &[Hash]) -> (Vec<u32>, Vec<BucketIdx>) {
         // Where each bucket starts in hashes.
-        let mut bucket_starts = BucketVec::with_capacity(self.b + 1);
+        let mut bucket_starts = Vec::with_capacity(self.b + 1);
 
         // The order of buckets, from large to small.
         let mut order: Vec<BucketIdx> = vec![BucketIdx::NONE; self.b];

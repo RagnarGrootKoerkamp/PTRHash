@@ -33,9 +33,6 @@ impl BucketIdx {
     }
 }
 
-pub type BucketVec<T> = Vec<T>;
-pub type BucketSlice<T> = [T];
-
 impl<T> Index<BucketIdx> for [T] {
     type Output = T;
 
