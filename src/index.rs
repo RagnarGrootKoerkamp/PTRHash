@@ -1,3 +1,8 @@
+use std::{
+    cmp::min,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
 use super::*;
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
@@ -19,6 +24,25 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.position`.
             self.position(cur_hx, pilot)
         })
+    }
+
+    #[inline(always)]
+    pub fn index_parallel<'a, const K: usize>(&'a self, xs: &'a [Key], threads: usize) -> usize {
+        let chunk_size = xs.len().div_ceil(threads);
+        let sum = AtomicUsize::new(0);
+        rayon::scope(|scope| {
+            for thread_idx in 0..threads {
+                let sum = &sum;
+                scope.spawn(move |_| {
+                    let start_idx = thread_idx * chunk_size;
+                    let end = min((thread_idx + 1) * chunk_size, xs.len());
+
+                    let thread_sum = self.index_stream::<K>(&xs[start_idx..end]).sum::<usize>();
+                    sum.fetch_add(thread_sum, Ordering::Relaxed);
+                });
+            }
+        });
+        sum.load(Ordering::Relaxed)
     }
 
     #[inline(always)]

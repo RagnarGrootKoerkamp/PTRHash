@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use pthash_rs::{
     reduce::*,
-    test::{bench_index, bench_index_all},
+    test::{bench_index, time},
     *,
 };
 use sucds::mii_sequences::EliasFano;
@@ -142,16 +142,22 @@ fn main() {
             let loops = total.div_ceil(n);
 
             // let query = bench_index(loops, &keys, |key| pt.index(key));
-            // eprint!(" (1): {query:>4.1}");
+            // eprintln!(" (1): {query:>4.1}");
 
             // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<32>(keys));
             // eprint!(" (32): {query:>4.1}");
-            let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<64>(keys));
-            eprint!(" (64): {query:>4.1}");
+            // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<1>(keys));
+            // eprintln!(" (1): {query:>4.1}");
+            // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<64>(keys));
+            // eprint!(" (64): {query:>4.1}");
+            for threads in [1, 2, 3, 4, 5, 6] {
+                let query = time(loops, &keys, || pt.index_parallel::<64>(&keys, threads));
+                eprintln!(" (64t{threads}): {query:>5.2}ns");
+            }
             // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<128>(keys));
             // eprint!(" (128): {query:>4.1}");
 
-            eprint!("    | Remap: ");
+            // eprint!("    | Remap: ");
 
             // let query = bench_index(loops, &keys, |key| pt.index_remap(key));
             // eprint!(" (1): {query:>4.1}");
@@ -162,7 +168,7 @@ fn main() {
             // eprint!(" (64): {query:>4.1}");
             // let query = bench_index_all(loops, &keys, |keys| pt.index_remap_stream::<128>(keys));
             // eprint!(" (128): {query:>4.1}");
-            eprintln!();
+            // eprintln!();
         }
     }
 }

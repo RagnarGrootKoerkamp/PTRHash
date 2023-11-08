@@ -100,17 +100,14 @@ pub fn bench_index(loops: usize, keys: &Vec<u64>, index: impl Fn(&Key) -> usize)
 }
 
 #[must_use]
-pub fn bench_index_all<'a, F, I>(loops: usize, keys: &'a Vec<u64>, index_all: F) -> f32
+pub fn time<F>(loops: usize, keys: &[u64], f: F) -> f32
 where
-    F: Fn(&'a [Key]) -> I,
-    I: Iterator<Item = usize> + 'a,
+    F: Fn() -> usize,
 {
     let start = SystemTime::now();
-    let mut sum = 0;
     for _ in 0..loops {
-        sum += index_all(keys).sum::<usize>();
+        black_box(f());
     }
-    black_box(sum);
     start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
 }
 
@@ -125,12 +122,12 @@ fn queries_exact<F: Packed, H: Hasher>() {
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
     eprint!(" (1): {query:>4.1}");
-    let query = bench_index_all(loops, &keys, |keys| mphf.index_stream::<32>(keys));
+    let query = time(loops, &keys, || mphf.index_stream::<32>(&keys).sum());
     eprint!(" (32): {query:>4.1}");
     let query = bench_index(loops, &keys, |key| mphf.index_remap(key));
     eprint!(" Remap: ");
     eprint!(" (1): {query:>4.1}");
-    let query = bench_index_all(loops, &keys, |keys| mphf.index_remap_stream::<32>(keys));
+    let query = time(loops, &keys, || mphf.index_remap_stream::<32>(&keys).sum());
     eprint!(" (32): {query:>4.1}");
     eprintln!();
 }
@@ -188,7 +185,7 @@ fn queries_random<F: Packed>() {
     // let query = start.elapsed().unwrap().as_nanos() as f32 / (loops * n) as f32;
     // eprint!(" {query:>2.1}");
 
-    let q = bench_index_all(total, &keys, |keys| mphf.index_stream::<64>(keys));
+    let q = time(total, &keys, || mphf.index_stream::<64>(&keys).sum());
     eprintln!("{q:>4.1}");
     test_stream_chunks::<4, 2, F, FxHash>(total, n, &mphf, &keys);
     test_stream_chunks::<8, 2, F, FxHash>(total, n, &mphf, &keys);
