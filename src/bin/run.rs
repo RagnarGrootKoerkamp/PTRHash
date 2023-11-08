@@ -74,17 +74,17 @@ fn main() {
 
     match command {
         Command::Stats { n, c, a, threads } => {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build_global()
-                .unwrap();
-            let keys = pthash_rs::test::generate_keys(n);
-            let pthash = PT::init(n, c, a);
-            if let Some((_buckets, starts, _order)) = pthash.sort_buckets(&keys) {
-                print_bucket_sizes(starts.iter().zip(starts.iter().skip(1)).map(|(a, b)| b - a));
-            } else {
-                eprintln!("Duplicate hashes found.");
-            };
+            // rayon::ThreadPoolBuilder::new()
+            //     .num_threads(threads)
+            //     .build_global()
+            //     .unwrap();
+            // let keys = pthash_rs::test::generate_keys(n);
+            // let pthash = PT::init(n, c, a);
+            // if let Some((_buckets, starts, _order)) = pthash.sort_parts(&keys) {
+            //     print_bucket_sizes(starts.iter().zip(starts.iter().skip(1)).map(|(a, b)| b - a));
+            // } else {
+            //     eprintln!("Duplicate hashes found.");
+            // };
         }
         Command::Build {
             n,

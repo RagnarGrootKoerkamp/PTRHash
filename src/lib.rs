@@ -347,13 +347,13 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                 eprintln!("Found seed after {tries} tries.");
             }
 
-            if self.params.print_stats {
-                print_bucket_sizes_with_pilots(
-                    bucket_order
-                        .iter()
-                        .map(|&b| (starts[b + 1] - starts[b], pilots[b] as Pilot)),
-                );
-            }
+            // if self.params.print_stats {
+            //     print_bucket_sizes_with_pilots(
+            //         bucket_order
+            //             .iter()
+            //             .map(|&b| (starts[b + 1] - starts[b], pilots[b] as Pilot)),
+            //     );
+            // }
 
             break 's;
         }
@@ -414,6 +414,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 }
 
+// FIXME: Fix this to deal with parts.
 pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
     let max_bucket_size = bucket_sizes.clone().max().unwrap();
     let n = bucket_sizes.clone().sum::<usize>();
@@ -452,6 +453,7 @@ pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
     eprintln!("{:>3}: {:>11}", "", b,);
 }
 
+// FIXME: Fix this to deal with parts.
 /// Input is an iterator over (bucket size, p), sorted by decreasing size.
 pub fn print_bucket_sizes_with_pilots(buckets: impl Iterator<Item = (usize, u64)> + Clone) {
     let bucket_sizes = buckets.clone().map(|(sz, _p)| sz);
