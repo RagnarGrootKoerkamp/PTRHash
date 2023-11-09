@@ -40,7 +40,7 @@ use pack::Packed;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rdst::RadixSort;
-use reduce::{Reduce, FR64, MR64};
+use reduce::{FastReduce, MulReduce, Reduce};
 
 type Key = u64;
 use hash::{Hasher, MulHash};
@@ -77,9 +77,9 @@ impl Default for PTParams {
 
 type P = Vec<u8>;
 type Hk = MulHash;
-type Rp = FR64;
-type Rb = FR64;
-type Rs = MR64;
+type Rp = FastReduce;
+type Rb = FastReduce;
+type Rs = MulReduce;
 const SPLIT_BUCKETS: bool = true;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
@@ -167,7 +167,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             .map(|_| random::<u8>() as Pilot)
             .collect();
         pthash.pilots = Packed::new(k);
-        let rem_s_total = FR64::new(pthash.s_total);
+        let rem_s_total = FastReduce::new(pthash.s_total);
         let mut remap_vals = (pthash.n..pthash.s_total)
             .map(|_| Hash::new(random::<u64>()).reduce(rem_s_total) as _)
             .collect_vec();
