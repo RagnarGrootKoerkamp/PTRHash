@@ -1,5 +1,3 @@
-use strength_reduce::{StrengthReducedU32, StrengthReducedU64};
-
 use crate::hash::{Hash, MulHash};
 
 pub trait Reduce: Copy + Sync + std::fmt::Debug {
@@ -21,55 +19,6 @@ impl Reduce for u64 {
         ((h.get() % self) as usize, h.get() / self)
     }
 }
-
-#[derive(Copy, Clone, Debug)]
-pub struct SR64(StrengthReducedU64);
-impl Reduce for SR64 {
-    fn new(d: usize) -> Self {
-        SR64(StrengthReducedU64::new(d as u64))
-    }
-    fn reduce(self, h: Hash) -> usize {
-        (h.get() % self.0) as usize
-    }
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        ((h.get() % self.0) as usize, h.get() / self.0)
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct SR32L(StrengthReducedU32);
-impl Reduce for SR32L {
-    fn new(d: usize) -> Self {
-        SR32L(StrengthReducedU32::new(d as u32))
-    }
-    fn reduce(self, h: Hash) -> usize {
-        (h.get_low() % self.0) as usize
-    }
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        (
-            (h.get_low() % self.0) as usize,
-            (h.get_low() / self.0) as u64,
-        )
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct SR32H(StrengthReducedU32);
-impl Reduce for SR32H {
-    fn new(d: usize) -> Self {
-        SR32H(StrengthReducedU32::new(d as u32))
-    }
-    fn reduce(self, h: Hash) -> usize {
-        (h.get_high() % self.0) as usize
-    }
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        (
-            (h.get_high() % self.0) as usize,
-            ((h.get_high() / self.0) as u64) << 32,
-        )
-    }
-}
-
 // Multiply a u128 by u64 and return the upper 64 bits of the result.
 // ((lowbits * d as u128) >> 128) as u64
 fn mul128_u64(lowbits: u128, d: u64) -> u64 {
