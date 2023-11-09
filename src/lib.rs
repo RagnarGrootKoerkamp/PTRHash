@@ -13,7 +13,6 @@
     split_array
 )]
 #![allow(incomplete_features)]
-pub mod bucket;
 mod displace;
 pub mod hash;
 mod index;
@@ -252,17 +251,40 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         hx.reduce(self.rem_parts)
     }
 
+    /// Map hx to a bucket in the range [0, self.b).
+    /// Hashes <self.p1 are mapped to large buckets [0, self.p2).
+    /// Hashes >=self.p1 are mapped to small [self.p2, self.b).
+    ///
+    /// (Unless SPLIT_BUCKETS is false, in which case all hashes are mapped to [0, self.b).)
+    fn bucket_in_part(&self, hx: Hash) -> usize {
+        if !SPLIT_BUCKETS {
+            return hx.reduce(self.rem_b);
+        }
+
+        // NOTE: There is a lot of MOV/CMOV going on here.
+        let is_large = hx >= self.p1;
+        let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
+        let b = is_large as usize * self.c3 + hx.reduce(rem);
+
+        debug_assert!(!is_large || self.p2 <= b);
+        debug_assert!(!is_large || b < self.b);
+        debug_assert!(is_large || b < self.p2);
+
+        b
+    }
+
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
     fn bucket(&self, hx: Hash) -> usize {
         if !SPLIT_BUCKETS {
             return hx.reduce(self.rem_b_total);
         }
+
         // Extract the high bits for part selection; do normal bucket
         // computation within the part using the remaining bits.
         // NOTE: This is somewhat slow, but doing better is hard.
         let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
-        let bucket = self.bucket_parts_branchless(hx);
+        let bucket = self.bucket_in_part(hx);
         part * self.b + bucket
     }
 
