@@ -22,6 +22,7 @@ pub mod pilots;
 pub mod reduce;
 mod sort_buckets;
 pub mod test;
+pub mod tiny_ef;
 mod types;
 
 use std::{

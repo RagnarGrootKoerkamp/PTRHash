@@ -3,6 +3,8 @@ use sucds::{
     mii_sequences::{EliasFano, EliasFanoBuilder},
 };
 
+use crate::tiny_ef::TinyEF;
+
 pub trait Packed: Sync {
     fn default() -> Self;
     fn new(vals: Vec<u64>) -> Self;
@@ -106,5 +108,26 @@ impl Packed for EliasFano {
 
     fn size_in_bytes(&self) -> usize {
         sucds::Serializable::size_in_bytes(self)
+    }
+}
+
+impl Packed for TinyEF {
+    fn default() -> Self {
+        Default::default()
+    }
+    fn new(vals: Vec<u64>) -> Self {
+        Self::new(vals)
+    }
+    fn index(&self, index: usize) -> u64 {
+        self.index(index)
+    }
+    fn prefetch(&self, index: usize) {
+        self.prefetch(index)
+    }
+    fn to_vec(&self) -> Vec<u64> {
+        self.to_vec()
+    }
+    fn size_in_bytes(&self) -> usize {
+        self.size_in_bytes()
     }
 }

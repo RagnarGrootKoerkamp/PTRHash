@@ -5,6 +5,7 @@ use colored::Colorize;
 use pthash_rs::{
     reduce::*,
     test::{bench_index, time},
+    tiny_ef::TinyEF,
     *,
 };
 use sucds::mii_sequences::EliasFano;
@@ -66,8 +67,9 @@ enum Command {
     },
 }
 
-type PT = PTHash<Vec<SlotIdx>, hash::FxHash>;
+// type PT = PTHash<Vec<SlotIdx>, hash::FxHash>;
 // type PT = PTHash<EliasFano, hash::FxHash>;
+type PT = PTHash<TinyEF, hash::FxHash>;
 
 fn main() {
     let Args { command } = Args::parse();
