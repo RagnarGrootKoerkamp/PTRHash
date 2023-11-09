@@ -107,7 +107,6 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
     /// Additional constants.
     p1: Hash,
     p2: usize,
-    bp2: usize,
     c3: usize,
 
     // Precomputed fast modulo operations.
@@ -117,10 +116,6 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
     rem_b: Rb,
     /// Fast &b_total.
     rem_b_total: Rb,
-    /// Fast %p2
-    rem_p2: Rb,
-    /// Fast %(b-p2)
-    rem_bp2: Rb,
     /// Fast %(p2/p1 * B)
     rem_c1: Rb,
     /// Fast %((1-p1)/(1-p2) * B)
@@ -232,12 +227,9 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             p1,
             p2,
             c3,
-            bp2: b - p2,
             rem_parts: Rp::new(num_parts),
             rem_b: Rb::new(b),
             rem_b_total: Rb::new(b_total),
-            rem_p2: Rb::new(p2),
-            rem_bp2: Rb::new(b - p2),
             rem_c1: Rb::new(c1),
             rem_c2: Rb::new(c2 as usize),
             rem_s: Rs::new(s),
