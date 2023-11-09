@@ -54,11 +54,11 @@ impl Reduce for FM64 {
 /// FastMod32, using the low 32 bits of the hash.
 /// Taken from https://github.com/lemire/fastmod/blob/master/include/fastmod.h
 #[derive(Copy, Clone, Debug)]
-pub struct FM32L {
+pub struct FM32 {
     d: u64,
     m: u64,
 }
-impl Reduce for FM32L {
+impl Reduce for FM32 {
     fn new(d: usize) -> Self {
         assert!(d <= u32::MAX as usize);
         Self {
@@ -68,29 +68,6 @@ impl Reduce for FM32L {
     }
     fn reduce(self, h: Hash) -> usize {
         let lowbits = self.m * (h.get_low() as u64);
-        ((lowbits as u128 * self.d as u128) >> 64) as usize
-    }
-    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
-        todo!()
-    }
-}
-
-/// FastMod32, using the low 32 high of the hash.
-#[derive(Copy, Clone, Debug)]
-pub struct FM32H {
-    d: u64,
-    m: u64,
-}
-impl Reduce for FM32H {
-    fn new(d: usize) -> Self {
-        assert!(d <= u32::MAX as usize);
-        Self {
-            d: d as u64,
-            m: u64::MAX / d as u64 + 1,
-        }
-    }
-    fn reduce(self, h: Hash) -> usize {
-        let lowbits = self.m * (h.get_high() as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
     fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
@@ -115,46 +92,6 @@ impl Reduce for FR64 {
     fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
         let r = self.d as u128 * h.get() as u128;
         ((r >> 64) as usize, r as u64)
-    }
-}
-
-/// FastReduce32, using the high 32 bits of the hash.
-/// NOTE: This first takes the 32 high-order bits of the hash, and then uses the lg(n) high-order bits of that.
-#[derive(Copy, Clone, Debug)]
-pub struct FR32H {
-    d: usize,
-}
-impl Reduce for FR32H {
-    fn new(d: usize) -> Self {
-        assert!(d <= u32::MAX as usize);
-        Self { d }
-    }
-    fn reduce(self, h: Hash) -> usize {
-        ((self.d as u64 * h.get_high() as u64) >> 32) as usize
-    }
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        let r = self.d as u64 * h.get_high() as u64;
-        ((r >> 32) as usize, (r as u32 as u64) << 32)
-    }
-}
-
-/// FastReduce32, using the low 32 bits of the hash.
-/// NOTE: This first takes the 32 low-order bits of the hash, and then uses the lg(n) high-order bits of that.
-#[derive(Copy, Clone, Debug)]
-pub struct FR32L {
-    d: usize,
-}
-impl Reduce for FR32L {
-    fn new(d: usize) -> Self {
-        assert!(d <= u32::MAX as usize);
-        Self { d }
-    }
-    fn reduce(self, h: Hash) -> usize {
-        ((self.d as u64 * h.get_low() as u64) >> 32) as usize
-    }
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        let r = self.d as u64 * h.get_low() as u64;
-        ((r >> 32) as usize, (r as u32 as u64) << 32)
     }
 }
 
