@@ -3,7 +3,9 @@ use crate::hash::{Hash, MulHash};
 pub trait Reduce: Copy + Sync + std::fmt::Debug {
     fn new(d: usize) -> Self;
     fn reduce(self, h: Hash) -> usize;
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64);
+    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
+        unimplemented!();
+    }
 }
 
 impl Reduce for u64 {
@@ -46,9 +48,6 @@ impl Reduce for FM64 {
         let lowbits = self.m.wrapping_mul(h.get() as u128);
         mul128_u64(lowbits, self.d) as usize
     }
-    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
-        todo!()
-    }
 }
 
 /// FastMod32, using the low 32 bits of the hash.
@@ -69,9 +68,6 @@ impl Reduce for FM32 {
     fn reduce(self, h: Hash) -> usize {
         let lowbits = self.m * (h.get_low() as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
-    }
-    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
-        todo!()
     }
 }
 
@@ -112,8 +108,5 @@ impl Reduce for MR64 {
     }
     fn reduce(self, h: Hash) -> usize {
         (((Self::C as u128 * h.get() as u128) >> 64) as u64 & self.mask) as usize
-    }
-    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
-        unimplemented!()
     }
 }
