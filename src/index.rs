@@ -27,7 +27,12 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     #[inline(always)]
-    pub fn index_parallel<'a, const K: usize>(&'a self, xs: &'a [Key], threads: usize) -> usize {
+    pub fn index_parallel<'a, const K: usize>(
+        &'a self,
+        xs: &'a [Key],
+        threads: usize,
+        remap: bool,
+    ) -> usize {
         let chunk_size = xs.len().div_ceil(threads);
         let sum = AtomicUsize::new(0);
         rayon::scope(|scope| {
@@ -37,7 +42,12 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                     let start_idx = thread_idx * chunk_size;
                     let end = min((thread_idx + 1) * chunk_size, xs.len());
 
-                    let thread_sum = self.index_stream::<K>(&xs[start_idx..end]).sum::<usize>();
+                    let thread_sum = if remap {
+                        self.index_remap_stream::<K>(&xs[start_idx..end])
+                            .sum::<usize>()
+                    } else {
+                        self.index_stream::<K>(&xs[start_idx..end]).sum::<usize>()
+                    };
                     sum.fetch_add(thread_sum, Ordering::Relaxed);
                 });
             }

@@ -148,11 +148,17 @@ fn main() {
             // eprint!(" (32): {query:>4.1}");
             // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<1>(keys));
             // eprintln!(" (1): {query:>4.1}");
-            // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<64>(keys));
+            // let query = time(loops, &keys, || pt.index_stream::<64>(&keys).sum());
             // eprint!(" (64): {query:>4.1}");
-            for threads in [1, 2, 3, 4, 5, 6] {
-                let query = time(loops, &keys, || pt.index_parallel::<64>(&keys, threads));
-                eprintln!(" (64t{threads}): {query:>5.2}ns");
+            for threads in 1..=6 {
+                let query = time(loops, &keys, || {
+                    pt.index_parallel::<64>(&keys, threads, false)
+                });
+                eprintln!(" (64t{threads})  : {query:>5.2}ns");
+                let query = time(loops, &keys, || {
+                    pt.index_parallel::<64>(&keys, threads, true)
+                });
+                eprintln!(" (64t{threads})+r: {query:>5.2}ns");
             }
             // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<128>(keys));
             // eprint!(" (128): {query:>4.1}");
