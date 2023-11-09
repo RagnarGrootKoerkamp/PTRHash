@@ -166,8 +166,9 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             .map(|_| random::<u8>() as Pilot)
             .collect();
         pthash.pilots = Packed::new(k);
+        let rem_s_total = FR64::new(pthash.s_total);
         let mut remap_vals = (pthash.n..pthash.s_total)
-            .map(|_| pthash.rem_s.reduce(Hash::new(random::<u64>())) as _)
+            .map(|_| Hash::new(random::<u64>()).reduce(rem_s_total) as _)
             .collect_vec();
         remap_vals.radix_sort_unstable();
         pthash.remap = Packed::new(remap_vals);
