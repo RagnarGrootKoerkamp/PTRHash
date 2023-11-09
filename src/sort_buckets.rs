@@ -30,6 +30,9 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let mut hashes: Vec<Hash> = keys.par_iter().map(|key| self.hash_key(key)).collect();
         let start = log_duration("┌  hash keys", start);
         // 2. Radix sort hashes.
+        // TODO: Write robinhood sort that inserts in the right place directly.
+        // A) Sort L1 sized ranges.
+        // B) Splat the front of each range to the next part of the target interval.
         hashes.radix_sort_unstable();
         let start = log_duration("├ radix sort", start);
 
