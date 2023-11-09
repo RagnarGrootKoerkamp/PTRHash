@@ -75,7 +75,7 @@ fn main() {
     let Args { command } = Args::parse();
 
     match command {
-        Command::Stats { n, c, a, threads } => {
+        Command::Stats { .. } => {
             // rayon::ThreadPoolBuilder::new()
             //     .num_threads(threads)
             //     .build_global()

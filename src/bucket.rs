@@ -41,18 +41,9 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
         let b = is_large as usize * self.c3 + hx.reduce(rem);
 
-        // if is_large {
-        //     if self.p2 > b {
-        //         eprintln!("too small large bucket {b} < {}", self.p2);
-        //     }
-        //     if b >= self.b {
-        //         eprintln!("too large large bucket {b} >= {}", self.b);
-        //     }
-        // } else {
-        //     if b >= self.p2 {
-        //         eprintln!("too large small bucket {b} >= {}", self.p2);
-        //     }
-        // }
+        debug_assert!(!is_large || self.p2 <= b);
+        debug_assert!(!is_large || b < self.b);
+        debug_assert!(is_large || b < self.p2);
 
         b
     }
