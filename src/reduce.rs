@@ -1,9 +1,13 @@
-use crate::hash::{Hash, MulHash};
+use crate::hash::MulHash;
 
 pub trait Reduce: Copy + Sync + std::fmt::Debug {
+    /// Reduce into the range [0, d).
     fn new(d: usize) -> Self;
-    fn reduce(self, h: Hash) -> usize;
-    fn reduce_with_remainder(self, _h: Hash) -> (usize, u64) {
+    /// Reduce a (uniform random 64 bit) number into the range [0, d).
+    fn reduce(self, h: u64) -> usize;
+    /// Reduce a (uniform random 64 bit) number into the range [0, d),
+    /// and also return a remainder that can be used for further reductions.
+    fn reduce_with_remainder(self, _h: u64) -> (usize, u64) {
         unimplemented!();
     }
 }
@@ -13,14 +17,15 @@ impl Reduce for u64 {
         d as u64
     }
 
-    fn reduce(self, h: Hash) -> usize {
-        (h.get() % self) as usize
+    fn reduce(self, h: u64) -> usize {
+        (h % self) as usize
     }
 
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        ((h.get() % self) as usize, h.get() / self)
+    fn reduce_with_remainder(self, h: u64) -> (usize, u64) {
+        ((h % self) as usize, h / self)
     }
 }
+
 // Multiply a u128 by u64 and return the upper 64 bits of the result.
 // ((lowbits * d as u128) >> 128) as u64
 fn mul128_u64(lowbits: u128, d: u64) -> u64 {
@@ -44,8 +49,8 @@ impl Reduce for FM64 {
             m: u128::MAX / d as u128 + 1,
         }
     }
-    fn reduce(self, h: Hash) -> usize {
-        let lowbits = self.m.wrapping_mul(h.get() as u128);
+    fn reduce(self, h: u64) -> usize {
+        let lowbits = self.m.wrapping_mul(h as u128);
         mul128_u64(lowbits, self.d) as usize
     }
 }
@@ -65,8 +70,8 @@ impl Reduce for FM32 {
             m: u64::MAX / d as u64 + 1,
         }
     }
-    fn reduce(self, h: Hash) -> usize {
-        let lowbits = self.m * (h.get_low() as u64);
+    fn reduce(self, h: u64) -> usize {
+        let lowbits = self.m * (h as u64);
         ((lowbits as u128 * self.d as u128) >> 64) as usize
     }
 }
@@ -82,11 +87,11 @@ impl Reduce for FR64 {
     fn new(d: usize) -> Self {
         Self { d }
     }
-    fn reduce(self, h: Hash) -> usize {
-        ((self.d as u128 * h.get() as u128) >> 64) as usize
+    fn reduce(self, h: u64) -> usize {
+        ((self.d as u128 * h as u128) >> 64) as usize
     }
-    fn reduce_with_remainder(self, h: Hash) -> (usize, u64) {
-        let r = self.d as u128 * h.get() as u128;
+    fn reduce_with_remainder(self, h: u64) -> (usize, u64) {
+        let r = self.d as u128 * h as u128;
         ((r >> 64) as usize, r as u64)
     }
 }
@@ -106,7 +111,7 @@ impl Reduce for MR64 {
         assert!(d.is_power_of_two());
         Self { mask: d as u64 - 1 }
     }
-    fn reduce(self, h: Hash) -> usize {
-        (((Self::C as u128 * h.get() as u128) >> 64) as u64 & self.mask) as usize
+    fn reduce(self, h: u64) -> usize {
+        (((Self::C as u128 * h as u128) >> 64) as u64 & self.mask) as usize
     }
 }

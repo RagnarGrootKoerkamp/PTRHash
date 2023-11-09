@@ -37,10 +37,10 @@ impl Hash {
         (self.0 >> 32) as u32
     }
     pub fn reduce<R: Reduce>(self, d: R) -> usize {
-        d.reduce(self)
+        d.reduce(self.0)
     }
     pub fn reduce_with_remainder<R: Reduce>(self, d: R) -> (usize, Hash) {
-        let (r, h) = d.reduce_with_remainder(self);
+        let (r, h) = d.reduce_with_remainder(self.0);
         (r, Hash(h))
     }
 }
