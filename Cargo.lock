@@ -326,7 +326,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ptrhash"
+name = "ptr_hash"
 version = "0.1.0"
 dependencies = [
  "bitvec",

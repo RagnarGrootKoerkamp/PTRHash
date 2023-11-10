@@ -1,6 +1,6 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use ptrhash::{util::time, *};
+use ptr_hash::{util::time, *};
 
 #[derive(clap::Parser)]
 struct Args {
@@ -63,7 +63,7 @@ fn main() {
                 .num_threads(threads)
                 .build_global()
                 .unwrap();
-            let keys = ptrhash::util::generate_keys(n);
+            let keys = ptr_hash::util::generate_keys(n);
             let start = std::time::Instant::now();
             let pt = PT::new(
                 &keys,
@@ -94,7 +94,7 @@ fn main() {
                 .num_threads(threads)
                 .build_global()
                 .unwrap();
-            let keys = ptrhash::util::generate_keys(n);
+            let keys = ptr_hash::util::generate_keys(n);
             let pt = PT::new_random(
                 n,
                 PtrHashParams {
