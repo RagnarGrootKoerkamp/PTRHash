@@ -19,17 +19,6 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Only print bucket statistics, do not build the PTHash.
-    Stats {
-        #[arg(short)]
-        n: usize,
-        #[arg(short, default_value_t = 9.0)]
-        c: f32,
-        #[arg(short, default_value_t = 0.99)]
-        a: f32,
-        #[arg(short, long, default_value_t = 0)]
-        threads: usize,
-    },
     /// Construct PTHash.
     Build {
         #[arg(short)]
@@ -75,19 +64,6 @@ fn main() {
     let Args { command } = Args::parse();
 
     match command {
-        Command::Stats { .. } => {
-            // rayon::ThreadPoolBuilder::new()
-            //     .num_threads(threads)
-            //     .build_global()
-            //     .unwrap();
-            // let keys = pthash_rs::test::generate_keys(n);
-            // let pthash = PT::init(n, c, a);
-            // if let Some((_buckets, starts, _order)) = pthash.sort_parts(&keys) {
-            //     print_bucket_sizes(starts.iter().zip(starts.iter().skip(1)).map(|(a, b)| b - a));
-            // } else {
-            //     eprintln!("Duplicate hashes found.");
-            // };
-        }
         Command::Build {
             n,
             c,

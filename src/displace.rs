@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 
 use super::*;
-use crate::types::BucketIdx;
+use crate::{stats::BucketStats, types::BucketIdx};
 use bitvec::{slice::BitSlice, vec::BitVec};
 use rayon::prelude::*;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Mutex,
+};
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     pub fn displace(
@@ -30,18 +33,20 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
         let total_displacements = AtomicUsize::new(0);
         let parts_done = AtomicUsize::new(0);
+        let stats = Mutex::new(BucketStats::new());
 
         let ok = iter.try_for_each(|(part, (pilots, taken))| {
             let hashes = &hashes[part_starts[part] as usize..part_starts[part + 1] as usize];
-            let (ok, cnt) = self.displace_part(part, hashes, pilots, taken);
+            let cnt = self.displace_part(part, hashes, pilots, taken, &stats)?;
             let parts_done = parts_done.fetch_add(1, Ordering::Relaxed);
             total_displacements.fetch_add(cnt, Ordering::Relaxed);
+
             eprint!(
                 "parts done: {parts_done:>6}/{:>6} ({:>4.1}%)\r",
                 self.num_parts,
                 100. * parts_done as f32 / self.num_parts as f32
             );
-            ok.then_some(())
+            Some(())
         });
 
         if ok.is_none() {
@@ -61,6 +66,11 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             "   avg pilot: {:>14.3}",
             sum_pilots as f32 / self.b_total as f32
         );
+
+        if self.params.print_stats {
+            stats.lock().unwrap().print();
+        }
+
         true
     }
 
@@ -70,7 +80,8 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         hashes: &[Hash],
         pilots: &mut [u8],
         taken: &mut BitSlice,
-    ) -> (bool, usize) {
+        stats: &Mutex<BucketStats>,
+    ) -> Option<usize> {
         let (starts, bucket_order) = self.sort_buckets(part, hashes);
 
         let kmax = 256;
@@ -134,7 +145,7 @@ Possible causes:
 - Not enough entropy     => fix algorithm.
 "
                         );
-                        return (false, 0);
+                        return None;
                     }
                 }
 
@@ -206,7 +217,7 @@ Possible causes:
                         eprintln!("{:0b}", hx.get());
                     }
                     eprintln!("part {part}: Indistinguishable hashes in bucket!");
-                    return (false, 0);
+                    return None;
                 }
 
                 let (_collision_score, p) = best;
@@ -241,6 +252,14 @@ Possible causes:
             }
             total_displacements += displacements;
         }
-        (true, total_displacements)
+
+        if self.params.print_stats {
+            let mut stats = stats.lock().unwrap();
+            for (i, &b) in bucket_order.iter().enumerate() {
+                stats.add(i, bucket_order.len(), bucket_len(b), pilots[b] as Pilot);
+            }
+        }
+
+        Some(total_displacements)
     }
 }

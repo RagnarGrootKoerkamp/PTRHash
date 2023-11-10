@@ -26,12 +26,12 @@ mod index;
 mod pack;
 mod pilots;
 mod sort_buckets;
+mod stats;
 #[cfg(test)]
 mod test;
 mod types;
 
 use std::{
-    collections::HashSet,
     default::Default,
     marker::PhantomData,
     simd::{LaneCount, Simd, SupportedLaneCount},
@@ -368,14 +368,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                 eprintln!("Found seed after {tries} tries.");
             }
 
-            // if self.params.print_stats {
-            //     print_bucket_sizes_with_pilots(
-            //         bucket_order
-            //             .iter()
-            //             .map(|&b| (starts[b + 1] - starts[b], pilots[b] as Pilot)),
-            //     );
-            // }
-
             break 's;
         }
 
@@ -433,180 +425,4 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             p + r
         );
     }
-}
-
-// FIXME: Fix this to deal with parts.
-pub fn print_bucket_sizes(bucket_sizes: impl Iterator<Item = usize> + Clone) {
-    let max_bucket_size = bucket_sizes.clone().max().unwrap();
-    let n = bucket_sizes.clone().sum::<usize>();
-    let b = bucket_sizes.clone().count();
-
-    // Print bucket size counts
-    let mut counts = vec![0; max_bucket_size + 1];
-    for bucket_size in bucket_sizes {
-        counts[bucket_size] += 1;
-    }
-    eprintln!("n: {n}");
-    eprintln!("b: {b}");
-    eprintln!("avg sz: {:4.2}", n as f32 / b as f32);
-    eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%"
-    );
-    let mut elem_cuml = 0;
-    let mut bucket_cuml = 0;
-    for (sz, &count) in counts.iter().enumerate().rev() {
-        if count == 0 {
-            continue;
-        }
-        elem_cuml += sz * count;
-        bucket_cuml += count;
-        eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2}",
-            sz,
-            count,
-            count as f32 / b as f32 * 100.,
-            bucket_cuml as f32 / b as f32 * 100.,
-            (sz * count) as f32 / n as f32 * 100.,
-            elem_cuml as f32 / n as f32 * 100.,
-        );
-    }
-    eprintln!("{:>3}: {:>11}", "", b,);
-}
-
-// FIXME: Fix this to deal with parts.
-/// Input is an iterator over (bucket size, p), sorted by decreasing size.
-pub fn print_bucket_sizes_with_pilots(buckets: impl Iterator<Item = (usize, u64)> + Clone) {
-    let bucket_sizes = buckets.clone().map(|(sz, _p)| sz);
-    let max_bucket_size = bucket_sizes.clone().max().unwrap();
-    let n = bucket_sizes.clone().sum::<usize>();
-    let m = bucket_sizes.clone().count();
-
-    // Collect bucket sizes and p statistics.
-    let mut counts = vec![0; max_bucket_size + 1];
-    let mut sum_p = vec![0; max_bucket_size + 1];
-    let mut max_p = vec![0; max_bucket_size + 1];
-    let mut new_p = vec![0; max_bucket_size + 1];
-
-    const BINS: usize = 100;
-
-    // Collect p statistics per percentile.
-    let mut pct_count = vec![0; BINS];
-    let mut pct_sum_p = vec![0; BINS];
-    let mut pct_max_p = vec![0; BINS];
-    let mut pct_new_p = vec![0; BINS];
-    let mut pct_elems = vec![0; BINS];
-
-    let mut distinct_p = HashSet::new();
-    for (i, (sz, p)) in buckets.clone().enumerate() {
-        let new = distinct_p.insert(p) as usize;
-        counts[sz] += 1;
-        sum_p[sz] += p;
-        max_p[sz] = max_p[sz].max(p);
-        new_p[sz] += new;
-
-        let pct = i * BINS / m;
-        pct_count[pct] += 1;
-        pct_sum_p[pct] += p;
-        pct_max_p[pct] = pct_max_p[i * 100 / m].max(p);
-        pct_elems[pct] += sz;
-        pct_new_p[pct] += new;
-    }
-
-    eprintln!("n: {n}");
-    eprintln!("m: {m}");
-
-    eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10} {:>10} {:>10}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg p", "max p", "new p", "# p"
-    );
-    let mut elem_cuml = 0;
-    let mut bucket_cuml = 0;
-    let mut num_p_cuml = 0;
-    let mut it = bucket_sizes.clone();
-    for i in 0..BINS {
-        let count = pct_count[i];
-        if count == 0 {
-            continue;
-        }
-        let sz = it.next().unwrap();
-        it.advance_by(count - 1).unwrap();
-        if pct_elems[i] == 0 {
-            continue;
-        }
-        bucket_cuml += count;
-        elem_cuml += pct_elems[i];
-        num_p_cuml += pct_new_p[i];
-        eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
-            sz,
-            count,
-            count as f32 / m as f32 * 100.,
-            bucket_cuml as f32 / m as f32 * 100.,
-            pct_elems[i] as f32 / n as f32 * 100.,
-            elem_cuml as f32 / n as f32 * 100.,
-            pct_sum_p[i] as f32 / pct_count[i] as f32,
-            pct_max_p[i],
-            pct_new_p[i],
-            num_p_cuml,
-        );
-    }
-    eprintln!(
-        "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
-        "",
-        m,
-        100.,
-        100.,
-        100.,
-        100.,
-        pct_sum_p.iter().copied().sum::<u64>() as f32
-            / pct_count.iter().copied().sum::<usize>() as f32,
-        pct_max_p.iter().max().unwrap(),
-        pct_new_p.iter().copied().sum::<usize>(),
-        num_p_cuml,
-    );
-
-    eprintln!();
-    eprintln!(
-        "{:>3}  {:>11} {:>7} {:>6} {:>6} {:>6} {:>10} {:>10} {:>10} {:>10}",
-        "sz", "cnt", "bucket%", "cuml%", "elem%", "cuml%", "avg p", "max p", "new p", "# p"
-    );
-    let mut elem_cuml = 0;
-    let mut bucket_cuml = 0;
-    let mut num_p_cuml = 0;
-    for (sz, &count) in counts.iter().enumerate().rev() {
-        if count == 0 {
-            continue;
-        }
-        elem_cuml += sz * count;
-        bucket_cuml += count;
-        num_p_cuml += new_p[sz];
-        eprintln!(
-            "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
-            sz,
-            count,
-            count as f32 / m as f32 * 100.,
-            bucket_cuml as f32 / m as f32 * 100.,
-            (sz * count) as f32 / n as f32 * 100.,
-            elem_cuml as f32 / n as f32 * 100.,
-            sum_p[sz] as f32 / count as f32,
-            max_p[sz],
-            new_p[sz],
-            num_p_cuml,
-        );
-    }
-    eprintln!(
-        "{:>3}: {:>11} {:>7.2} {:>6.2} {:>6.2} {:>6.2} {:>10.1} {:>10} {:>10} {:>10}",
-        "",
-        m,
-        100.,
-        100.,
-        100.,
-        100.,
-        pct_sum_p.iter().copied().sum::<u64>() as f32
-            / pct_count.iter().copied().sum::<usize>() as f32,
-        pct_max_p.iter().max().unwrap(),
-        pct_new_p.iter().copied().sum::<usize>(),
-        num_p_cuml,
-    );
 }
