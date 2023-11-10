@@ -90,8 +90,10 @@ type Rs = MulReduce;
 type Pilot = u64;
 const SPLIT_BUCKETS: bool = true;
 
-/// R: How to compute `a % b` efficiently for constant `b`.
-/// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
+/// PTHash datastructure.
+///
+/// `F`: The packing to use for the remapping array.
+/// `Hx`: The hasher to use for keys.
 pub struct PTHash<F: Packed, Hx: Hasher> {
     params: PTParams,
 
