@@ -115,13 +115,13 @@ let mphf = FastPtrHash::new(&keys, PtrHashParams::default());
 let idx = mphf.index(&key);
 
 // Get the indices for a slice of keys.
-mphf.index_stream(&keys).map(|idx| todo!());
+mphf.index_minimal_stream(&keys).map(|idx| todo!());
 
 // Test that all items map to different indices
 let mut taken = vec![false; n];
 
 for key in keys {
-    let idx = mphf.index_remap(&key);
+    let idx = mphf.index_minimal(&key);
     assert!(!taken[idx]);
     taken[idx] = true;
 }

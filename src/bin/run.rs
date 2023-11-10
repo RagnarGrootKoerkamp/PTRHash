@@ -113,7 +113,7 @@ fn main() {
 
             let query = bench_index(loops, &keys, |key| pt.index(key));
             eprintln!(" (1): {query:>4.1}");
-            let query = bench_index(loops, &keys, |key| pt.index_remap(key));
+            let query = bench_index(loops, &keys, |key| pt.index_minimal(key));
             eprintln!(" (1): {query:>4.1}");
 
             // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<32>(keys));
@@ -137,14 +137,14 @@ fn main() {
 
             // eprint!("    | Remap: ");
 
-            // let query = bench_index(loops, &keys, |key| pt.index_remap(key));
+            // let query = bench_index(loops, &keys, |key| pt.index_minimal(key));
             // eprint!(" (1): {query:>4.1}");
 
-            // let query = bench_index_all(loops, &keys, |keys| pt.index_remap_stream::<32>(keys));
+            // let query = bench_index_all(loops, &keys, |keys| pt.index_minimal_stream::<32>(keys));
             // eprint!(" (32): {query:>4.1}");
-            // let query = bench_index_all(loops, &keys, |keys| pt.index_remap_stream::<64>(keys));
+            // let query = bench_index_all(loops, &keys, |keys| pt.index_minimal_stream::<64>(keys));
             // eprint!(" (64): {query:>4.1}");
-            // let query = bench_index_all(loops, &keys, |keys| pt.index_remap_stream::<128>(keys));
+            // let query = bench_index_all(loops, &keys, |keys| pt.index_minimal_stream::<128>(keys));
             // eprint!(" (128): {query:>4.1}");
             // eprintln!();
         }

@@ -321,7 +321,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     }
 
     /// Get the index for `key` in `[0, n)`.
-    pub fn index_remap(&self, key: &Key) -> usize {
+    pub fn index_minimal(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
         let b = self.bucket(hx);
         let p = self.pilots.index(b);

@@ -31,7 +31,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         &'a self,
         xs: &'a [Key],
         threads: usize,
-        remap: bool,
+        minimal: bool,
     ) -> usize {
         let chunk_size = xs.len().div_ceil(threads);
         let sum = AtomicUsize::new(0);
@@ -42,8 +42,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
                     let start_idx = thread_idx * chunk_size;
                     let end = min((thread_idx + 1) * chunk_size, xs.len());
 
-                    let thread_sum = if remap {
-                        self.index_remap_stream::<K>(&xs[start_idx..end])
+                    let thread_sum = if minimal {
+                        self.index_minimal_stream::<K>(&xs[start_idx..end])
                             .sum::<usize>()
                     } else {
                         self.index_stream::<K>(&xs[start_idx..end]).sum::<usize>()
@@ -56,7 +56,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     }
 
     #[inline(always)]
-    pub fn index_remap_stream<'a, const K: usize>(
+    pub fn index_minimal_stream<'a, const K: usize>(
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a {

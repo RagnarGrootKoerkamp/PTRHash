@@ -48,10 +48,12 @@ fn queries_exact<F: Packed, H: Hasher>() {
     eprint!(" (1): {query:>4.1}");
     let query = time(loops, &keys, || mphf.index_stream::<32>(&keys).sum());
     eprint!(" (32): {query:>4.1}");
-    let query = bench_index(loops, &keys, |key| mphf.index_remap(key));
+    let query = bench_index(loops, &keys, |key| mphf.index_minimal(key));
     eprint!(" Remap: ");
     eprint!(" (1): {query:>4.1}");
-    let query = time(loops, &keys, || mphf.index_remap_stream::<32>(&keys).sum());
+    let query = time(loops, &keys, || {
+        mphf.index_minimal_stream::<32>(&keys).sum()
+    });
     eprint!(" (32): {query:>4.1}");
     eprintln!();
 }
