@@ -1,7 +1,4 @@
-use sucds::{
-    int_vectors::CompactVector,
-    mii_sequences::{EliasFano, EliasFanoBuilder},
-};
+use sucds::mii_sequences::{EliasFano, EliasFanoBuilder};
 
 use crate::tiny_ef::TinyEF;
 
@@ -10,6 +7,7 @@ pub trait Packed: Sync {
     fn new(vals: Vec<u64>) -> Self;
     /// Index the pack.
     /// It is guaranteed that the index is within bounds.
+    /// This uses get_unchecked internally, so you must ensure that index is within bounds.
     fn index(&self, index: usize) -> u64;
     /// Prefetch the element at the given index.
     fn prefetch(&self, _index: usize) {}
@@ -52,21 +50,6 @@ vec_impl!(u8);
 vec_impl!(u16);
 vec_impl!(u32);
 vec_impl!(u64);
-
-impl Packed for CompactVector {
-    fn default() -> Self {
-        Default::default()
-    }
-    fn new(vals: Vec<u64>) -> Self {
-        CompactVector::from_slice(&vals).unwrap()
-    }
-    fn index(&self, index: usize) -> u64 {
-        self.get_int(index).unwrap() as u64
-    }
-    fn size_in_bytes(&self) -> usize {
-        self.width() * self.len() / 8
-    }
-}
 
 impl Packed for EliasFano {
     fn default() -> Self {
