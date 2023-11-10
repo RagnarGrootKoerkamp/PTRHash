@@ -13,12 +13,33 @@ and experiments at <https://curiouscoding.nl/notes/pthash>.
 Feel free to make issues and/or PRs, reach out on twitter [@curious_coding](https://twitter.com/curious_coding), or on
 matrix [@curious_coding:matrix.org](https://matrix.to/#/@curious_coding:matrix.org).
 
+## Performance
+
+PTRHash supports up to $2^{32}$ keys. For default parameters $\alpha = 0.98$,
+$c=9$:
+- Construction takes $19s$ on my `i7-10750H` ($3.6GHz$):
+  - $5s$ to sort hashes,
+  - $12s$ to find pilots.
+- Memory usage is $2.69bits/key$:
+  - $2.46bits/key$ for pilots,
+  - $0.24bits/key$ for remapping.
+- Queries take:
+  - $18ns/key$ when indexing sequentially,
+  - $8.2ns/key$ when streaming with prefetching,
+  - $2.9ns/key$ when streaming with prefetching, using $4$ threads.
+- When giving up on minimality of the hash and allowing values up to $n/\alpha$, times go down slightly:
+  - $14ns/key$ when indexing sequentially,
+  - $7.5ns/key$ when streaming using prefetching,
+  - $2.8ns/key$ when streaming with prefetching, using $4$ threads.
+
+Query throughput per thread fully saturates the prefetching bandwidth of each
+core, and multithreaded querying fully saturates the DDR4 memory bandwidth.
 
 ## Algorithm
 
 **Parameters:**
 
--   Say there are $n\leq 2^{32}\approx 4\cdot 10^9$ keys.
+-   Given are $n< 2^{32}\approx 4\cdot 10^9$ keys.
 -   We partition into $P$ parts each consisting of order $\sim 200000$ keys.
 -   Each part consists of $b$ buckets and $s$ slots, with $s$ a power of $2$.
 -   The total number of buckets $b\cdot P$ is roughly $n/\log n \cdot c$, for a
@@ -67,8 +88,8 @@ PTRHash extends it in a few ways:
     the hashes for each part. The sorting, bucketing, and slot filling is per-part
     and needs comparatively little memory.
 -   **Remap encoding:** We use a partitioned Elias-Fano encoding that encoding
-    chunks of $44$ integers into a single cacheline. This taken $\sim 30\%$ more
-    space, but replaces the $3$ reads needed by (global) Elias-Fano encoding by
+    chunks of $44$ integers into a single cacheline. This takes $\sim 30\%$ more
+    space for remapping, but replaces the $3$ reads needed by (global) Elias-Fano encoding by
     a single read.
 
 ## Todo list
