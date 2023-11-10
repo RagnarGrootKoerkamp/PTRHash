@@ -182,6 +182,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub fn new(keys: &Vec<Key>, params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
         ptr_hash.compute_pilots(keys);
+        ptr_hash.print_bits_per_element();
         ptr_hash
     }
 
@@ -198,6 +199,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             .collect_vec();
         remap_vals.radix_sort_unstable();
         ptr_hash.remap = Packed::new(remap_vals);
+        ptr_hash.print_bits_per_element();
         ptr_hash
     }
 

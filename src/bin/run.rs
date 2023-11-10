@@ -73,7 +73,7 @@ fn main() {
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
             let start = std::time::Instant::now();
-            let pt = PT::new(
+            PT::new(
                 &keys,
                 PtrHashParams {
                     c,
@@ -83,7 +83,6 @@ fn main() {
                     ..Default::default()
                 },
             );
-            pt.print_bits_per_element();
             eprintln!(
                 "{}",
                 format!(" total build: {:>14.2?}", start.elapsed()).bold()
@@ -113,7 +112,6 @@ fn main() {
                     ..Default::default()
                 },
             );
-            pt.print_bits_per_element();
             let loops = total.div_ceil(n);
 
             let query = bench_index(loops, &keys, |key| pt.index(key));
