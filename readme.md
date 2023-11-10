@@ -17,7 +17,7 @@ matrix [@curious_coding:matrix.org](https://matrix.to/#/@curious_coding:matrix.o
 
 PTRHash supports up to $2^{32}$ keys. For default parameters $\alpha = 0.98$,
 $c=9$:
-- Construction takes $19s$ on my `i7-10750H` ($3.6GHz$):
+- Construction takes $19s$ on my `i7-10750H` ($3.6GHz$) using $6$ threads:
   - $5s$ to sort hashes,
   - $12s$ to find pilots.
 - Memory usage is $2.69bits/key$:

@@ -1,3 +1,5 @@
+//! Internal utilities that are only exposed for testing/benchmarking purposes.
+//! Do not use externally.
 use super::*;
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;

@@ -59,5 +59,5 @@ qss *args="": build
 qm *args="":
     heaptrack cargo run -r --bin run -- query {{args}}
 
-modules:
-    cargo modules generate tree --lib --fns --traits --types
+modules *args="":
+    cargo modules generate tree --lib --fns --traits --types {{args}}

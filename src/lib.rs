@@ -182,6 +182,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
 
     /// Only initialize the parameters; do not compute the pivots yet.
     fn init(n: usize, params: PtrHashParams) -> Self {
+        assert!(n > 1, "Things break if n=1.");
         assert!(n <= u32::MAX as _, "Number of keys must be less than 2^32.");
 
         // Target number of slots in total over all parts.
