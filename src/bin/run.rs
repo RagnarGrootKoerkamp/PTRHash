@@ -1,8 +1,7 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use pthash_rs::{util::time, *};
+use ptrhash::{util::time, *};
 
-/// Print statistics on PTHash bucket sizes.
 #[derive(clap::Parser)]
 struct Args {
     #[command(subcommand)]
@@ -11,7 +10,7 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Construct PTHash.
+    /// Construct PtrHash.
     Build {
         #[arg(short)]
         n: usize,
@@ -27,7 +26,7 @@ enum Command {
         threads: usize,
     },
 
-    /// Measure query time on randomly-constructed PTHash.
+    /// Measure query time on randomly-constructed PtrHash.
     Query {
         #[arg(short)]
         n: usize,
@@ -46,7 +45,7 @@ enum Command {
     },
 }
 
-type PT = FastPT;
+type PT = FastPtrHash;
 
 fn main() {
     let Args { command } = Args::parse();
@@ -64,11 +63,11 @@ fn main() {
                 .num_threads(threads)
                 .build_global()
                 .unwrap();
-            let keys = pthash_rs::util::generate_keys(n);
+            let keys = ptrhash::util::generate_keys(n);
             let start = std::time::Instant::now();
             let pt = PT::new(
                 &keys,
-                PTParams {
+                PtrHashParams {
                     c,
                     alpha,
                     print_stats: stats,
@@ -95,10 +94,10 @@ fn main() {
                 .num_threads(threads)
                 .build_global()
                 .unwrap();
-            let keys = pthash_rs::util::generate_keys(n);
+            let keys = ptrhash::util::generate_keys(n);
             let pt = PT::new_random(
                 n,
-                PTParams {
+                PtrHashParams {
                     c,
                     alpha,
                     print_stats: stats,

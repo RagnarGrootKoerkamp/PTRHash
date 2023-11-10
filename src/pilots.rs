@@ -1,7 +1,7 @@
 use super::*;
 use bitvec::slice::BitSlice;
 
-impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
+impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(super) fn find_pilot(
         &self,
         kmax: u64,

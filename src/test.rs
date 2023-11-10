@@ -8,9 +8,9 @@ fn construct() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash = FastPT::new(
+            let ptr_hash = FastPtrHash::new(
                 &keys,
-                PTParams {
+                PtrHashParams {
                     alpha: 1.,
                     c: 7.0,
                     ..Default::default()
@@ -20,7 +20,7 @@ fn construct() {
             let mut done = vec![false; n];
 
             for key in keys {
-                let idx = pthash.index(&key);
+                let idx = ptr_hash.index(&key);
                 assert!(!done[idx]);
                 done[idx] = true;
             }
@@ -34,9 +34,9 @@ fn queries_exact<F: Packed, H: Hasher>() {
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, H>::new(
+    let mphf = PtrHash::<F, H>::new(
         &keys,
-        PTParams {
+        PtrHashParams {
             alpha: 1.,
             c: 7.0,
             ..Default::default()
@@ -59,7 +59,7 @@ fn queries_exact<F: Packed, H: Hasher>() {
 fn test_stream_chunks<const K: usize, const L: usize>(
     total: usize,
     n: usize,
-    mphf: &FastPT,
+    mphf: &FastPtrHash,
     keys: &[u64],
 ) where
     [(); K * L]: Sized,
@@ -95,9 +95,9 @@ fn queries_random() {
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = FastPT::new_random(
+    let mphf = FastPtrHash::new_random(
         n,
-        PTParams {
+        PtrHashParams {
             alpha: 1.,
             c: 7.0,
             ..Default::default()

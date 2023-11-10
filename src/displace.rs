@@ -7,7 +7,7 @@ use std::sync::{
     Mutex,
 };
 
-impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
+impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(super) fn displace(
         &self,
         hashes: &[Hash],

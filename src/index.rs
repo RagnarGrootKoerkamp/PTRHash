@@ -5,7 +5,7 @@ use std::{
 
 use super::*;
 
-impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
+impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     #[inline(always)]
     pub fn index_stream<'a, const K: usize>(
         &'a self,

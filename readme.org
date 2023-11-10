@@ -1,4 +1,4 @@
-* PTHash-rs
+* PTRHash
 
 This is a work-in-progress reimplementation of [[https://github.com/jermp/pthash][PTHash]] in Rust.
 
@@ -31,8 +31,7 @@ Roughly in order of my excitement to implement things:
 #+begin_src rust
 let keys = generate_keys(n);
 
-// PTHash::<Packing>::new(c, a, &Vec<Key>)
-let mphf = PTHash::<Vec<u64>>::new(6.0, 1.0, &keys);
+let mphf = FastPtrHash::new(&keys, PtrHashParams::default());
 
 // Test that all items map to different indices
 let mut done = vec![false; n];

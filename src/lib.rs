@@ -49,11 +49,11 @@ use sucds::mii_sequences::EliasFano;
 
 use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEF, util::log_duration};
 
-/// Parameters for PTHash construction.
+/// Parameters for PtrHash construction.
 ///
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Clone, Copy, Debug)]
-pub struct PTParams {
+pub struct PtrHashParams {
     /// Use `n/alpha` slots approximately.
     pub alpha: f64,
     /// Use `c*n/lg(n)` buckets.
@@ -69,7 +69,7 @@ pub struct PTParams {
     pub print_stats: bool,
 }
 
-impl Default for PTParams {
+impl Default for PtrHashParams {
     fn default() -> Self {
         Self {
             alpha: 0.98,
@@ -85,14 +85,14 @@ impl Default for PTParams {
 
 // Externally visible aliases for convenience.
 
-/// The recommended way to use PTHash is to use TinyEF as backing storage for the remap.
-pub type FastPT = PTHash<TinyEF, hash::FxHash>;
+/// The recommended way to use PtrHash is to use TinyEF as backing storage for the remap.
+pub type FastPtrHash = PtrHash<TinyEF, hash::FxHash>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type MinimalPT = PTHash<EliasFano, hash::FxHash>;
+pub type MinimalPtrHash = PtrHash<EliasFano, hash::FxHash>;
 
 /// A simple `Vec<u32>` uses 3x more memory and is not faster.
-pub type SimplePT = PTHash<Vec<u32>, hash::FxHash>;
+pub type SimplePtrHash = PtrHash<Vec<u32>, hash::FxHash>;
 
 /// They key type to be hashed.
 type Key = u64;
@@ -104,12 +104,12 @@ type Rs = MulReduce;
 type Pilot = u64;
 const SPLIT_BUCKETS: bool = true;
 
-/// PTHash datastructure.
+/// PtrHash datastructure.
 ///
 /// `F`: The packing to use for the remapping array.
 /// `Hx`: The hasher to use for keys.
-pub struct PTHash<F: Packed, Hx: Hasher> {
-    params: PTParams,
+pub struct PtrHash<F: Packed, Hx: Hasher> {
+    params: PtrHashParams,
 
     /// The number of keys.
     n: usize,
@@ -158,33 +158,33 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
     _hx: PhantomData<Hx>,
 }
 
-impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
+impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// Additionally customize the part size `s`, `beta=0.6`, and `gamma=0.3`.
     /// Also allows to print statistics on bucket sizes and pilot values.
-    pub fn new(keys: &Vec<Key>, params: PTParams) -> Self {
-        let mut pthash = Self::init(keys.len(), params);
-        pthash.compute_pilots(keys);
-        pthash
+    pub fn new(keys: &Vec<Key>, params: PtrHashParams) -> Self {
+        let mut ptr_hash = Self::init(keys.len(), params);
+        ptr_hash.compute_pilots(keys);
+        ptr_hash
     }
 
-    /// PTHash with random pivots, for benchmarking query speed.
-    pub fn new_random(n: usize, params: PTParams) -> Self {
-        let mut pthash = Self::init(n, params);
-        let k = (0..pthash.b_total)
+    /// PtrHash with random pivots, for benchmarking query speed.
+    pub fn new_random(n: usize, params: PtrHashParams) -> Self {
+        let mut ptr_hash = Self::init(n, params);
+        let k = (0..ptr_hash.b_total)
             .map(|_| random::<u8>() as Pilot)
             .collect();
-        pthash.pilots = Packed::new(k);
-        let rem_s_total = FastReduce::new(pthash.s_total);
-        let mut remap_vals = (pthash.n..pthash.s_total)
+        ptr_hash.pilots = Packed::new(k);
+        let rem_s_total = FastReduce::new(ptr_hash.s_total);
+        let mut remap_vals = (ptr_hash.n..ptr_hash.s_total)
             .map(|_| Hash::new(random::<u64>()).reduce(rem_s_total) as _)
             .collect_vec();
         remap_vals.radix_sort_unstable();
-        pthash.remap = Packed::new(remap_vals);
-        pthash
+        ptr_hash.remap = Packed::new(remap_vals);
+        ptr_hash
     }
 
     /// Only initialize the parameters; do not compute the pivots yet.
-    fn init(n: usize, params: PTParams) -> Self {
+    fn init(n: usize, params: PtrHashParams) -> Self {
         assert!(n <= u32::MAX as _, "Number of keys must be less than 2^32.");
 
         // Target number of slots in total over all parts.
@@ -202,7 +202,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         // b divisible by 3 is exploited by bucket_thirds.
         let b = ((b_total_target / (num_parts as f64)).ceil() as usize).next_multiple_of(3);
         let b_total = b * num_parts;
-        // TODO: Figure out if large gcd(b,s) is a problem for the original PTHash.
+        // TODO: Figure out if large gcd(b,s) is a problem for the original PtrHash.
 
         eprintln!("        keys: {n:>10}");
         eprintln!("       parts: {num_parts:>10}");
