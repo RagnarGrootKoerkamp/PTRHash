@@ -1,6 +1,9 @@
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use ptr_hash::{util::time, *};
+use ptr_hash::{
+    util::{bench_index, time},
+    *,
+};
 
 #[derive(clap::Parser)]
 struct Args {
@@ -108,8 +111,10 @@ fn main() {
             pt.print_bits_per_element();
             let loops = total.div_ceil(n);
 
-            // let query = bench_index(loops, &keys, |key| pt.index(key));
-            // eprintln!(" (1): {query:>4.1}");
+            let query = bench_index(loops, &keys, |key| pt.index(key));
+            eprintln!(" (1): {query:>4.1}");
+            let query = bench_index(loops, &keys, |key| pt.index_remap(key));
+            eprintln!(" (1): {query:>4.1}");
 
             // let query = bench_index_all(loops, &keys, |keys| pt.index_stream::<32>(keys));
             // eprint!(" (32): {query:>4.1}");
