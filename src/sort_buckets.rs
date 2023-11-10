@@ -18,7 +18,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     ///
     /// This returns None if duplicate hashes are found.
     #[must_use]
-    pub fn sort_parts(&self, keys: &[Key]) -> Option<(Vec<Hash>, Vec<u32>)> {
+    pub(super) fn sort_parts(&self, keys: &[Key]) -> Option<(Vec<Hash>, Vec<u32>)> {
         // For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
         // <self.p1 and those >=self.p1, and then sort each group using the low
@@ -83,7 +83,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     // Sort the buckets in the given part and corresponding range of hashes.
-    pub fn sort_buckets(&self, part: usize, hashes: &[Hash]) -> (Vec<u32>, Vec<BucketIdx>) {
+    pub(super) fn sort_buckets(&self, part: usize, hashes: &[Hash]) -> (Vec<u32>, Vec<BucketIdx>) {
         // Where each bucket starts in hashes.
         let mut bucket_starts = Vec::with_capacity(self.b + 1);
 

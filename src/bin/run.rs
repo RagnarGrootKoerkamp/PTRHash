@@ -74,7 +74,7 @@ fn main() {
                 &keys,
                 PTParams {
                     print_stats: stats,
-                    max_slots_per_part: s,
+                    slots_per_part: s,
                 },
             );
             pt.print_bits_per_element();
@@ -103,7 +103,7 @@ fn main() {
                 a,
                 PTParams {
                     print_stats: stats,
-                    max_slots_per_part: s,
+                    slots_per_part: s,
                 },
             );
             pt.print_bits_per_element();

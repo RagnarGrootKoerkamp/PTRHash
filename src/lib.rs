@@ -15,52 +15,39 @@
 #![allow(incomplete_features)]
 #![allow(clippy::needless_range_loop)]
 
+/// Customizable Hasher trait.
 pub mod hash;
-pub mod reduce;
+/// Reusable Tiny Elias-Fano implementation.
 pub mod tiny_ef;
-
+/// Some logging and testing utilities.
 pub mod util;
 
 mod displace;
 mod index;
 mod pack;
 mod pilots;
+mod reduce;
 mod sort_buckets;
 mod stats;
 #[cfg(test)]
 mod test;
 mod types;
 
+use bitvec::{bitvec, vec::BitVec};
+use colored::Colorize;
+use itertools::Itertools;
+use rand::{random, Rng, SeedableRng};
+use rand_chacha::ChaCha8Rng;
+use rdst::RadixSort;
 use std::{
     default::Default,
     marker::PhantomData,
     simd::{LaneCount, Simd, SupportedLaneCount},
     time::Instant,
 };
-
-use bitvec::{bitvec, vec::BitVec};
-use colored::Colorize;
-use itertools::Itertools;
-use pack::Packed;
-use rand::{random, Rng, SeedableRng};
-use rand_chacha::ChaCha8Rng;
-use rdst::RadixSort;
-use reduce::{FastReduce, MulReduce, Reduce};
-
-type Key = u64;
-use hash::{Hasher, MulHash};
 use sucds::mii_sequences::EliasFano;
-use tiny_ef::TinyEF;
 
-// The integer type pilots are converted to.
-// They are stored as u8 always.
-type Pilot = u64;
-pub type SlotIdx = u32;
-
-// type Remap = sucds::mii_sequences::EliasFano;
-// type Remap = Vec<SlotIdx>;
-
-use crate::{hash::Hash, util::log_duration};
+use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEF, util::log_duration};
 
 /// Parameters for PTHash construction.
 ///
@@ -70,28 +57,38 @@ pub struct PTParams {
     /// Print bucket size and pilot stats after construction.
     pub print_stats: bool,
     /// Max number of buckets per partition.
-    pub max_slots_per_part: usize,
+    pub slots_per_part: usize,
 }
 
 impl Default for PTParams {
     fn default() -> Self {
         Self {
             print_stats: false,
-            max_slots_per_part: usize::MAX,
+            slots_per_part: 1 << 18,
         }
     }
 }
 
-type P = Vec<u8>;
-type Hk = MulHash;
+// Externally visible aliases for convenience.
+
+/// The recommended way to use PTHash is to use TinyEF as backing storage for the remap.
+pub type FastPT = PTHash<TinyEF, hash::FxHash>;
+
+/// Using EliasFano for the remap is slower but uses slightly less memory.
+pub type MinimalPT = PTHash<EliasFano, hash::FxHash>;
+
+/// A simple `Vec<u32>` uses 3x more memory and is not faster.
+pub type SimplePT = PTHash<Vec<u32>, hash::FxHash>;
+
+/// They key type to be hashed.
+type Key = u64;
+
+// Some fixed algorithmic decisions.
 type Rp = FastReduce;
 type Rb = FastReduce;
 type Rs = MulReduce;
+type Pilot = u64;
 const SPLIT_BUCKETS: bool = true;
-
-pub type SimplePT = PTHash<Vec<SlotIdx>, hash::FxHash>;
-pub type MinimalPT = PTHash<EliasFano, hash::FxHash>;
-pub type FastPT = PTHash<TinyEF, hash::FxHash>;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
@@ -139,7 +136,7 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
     /// The global seed.
     seed: u64,
     /// The pivots.
-    pilots: P,
+    pilots: Vec<u8>,
     /// Remap the out-of-bound slots to free slots.
     remap: F,
     _hx: PhantomData<Hx>,
@@ -195,7 +192,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         // We start with the given maximum number of slots per part, since
         // that is what should fit in L1 or L2 cache.
         // Thus, the number of partitions is:
-        let s = 1 << params.max_slots_per_part.ilog2();
+        let s = 1 << params.slots_per_part.ilog2();
         let num_parts = s_total_target.div_ceil(s);
         let s_total = s * num_parts;
         // b divisible by 3 is exploited by bucket_thirds.
@@ -253,7 +250,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     fn hash_pilot(&self, p: u64) -> Hash {
-        Hk::hash(&p, self.seed)
+        MulHash::hash(&p, self.seed)
     }
 
     fn part(&self, hx: Hash) -> usize {

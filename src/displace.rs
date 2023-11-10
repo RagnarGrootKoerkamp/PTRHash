@@ -8,7 +8,7 @@ use std::sync::{
 };
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
-    pub fn displace(
+    pub(super) fn displace(
         &self,
         hashes: &[Hash],
         part_starts: &[u32],
