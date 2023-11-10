@@ -91,9 +91,6 @@ pub type FastPtrHash = PtrHash<TinyEF, hash::FxHash>;
 /// Using EliasFano for the remap is slower but uses slightly less memory.
 pub type MinimalPtrHash = PtrHash<EliasFano, hash::FxHash>;
 
-/// A simple `Vec<u32>` uses 3x more memory and is not faster.
-pub type SimplePtrHash = PtrHash<Vec<u32>, hash::FxHash>;
-
 /// They key type to be hashed.
 type Key = u64;
 
