@@ -145,27 +145,25 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
 }
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
+    /// Create PTHash datastructure for given `c` and `alpha` and `keys`.
     pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
         Self::new_with_params(c, alpha, keys, Default::default())
     }
 
+    /// Additionally customize the part size `s`, `beta=0.6`, and `gamma=0.3`.
+    /// Also allows to print statistics on bucket sizes and pilot values.
     pub fn new_with_params(c: f32, alpha: f32, keys: &Vec<Key>, params: PTParams) -> Self {
         let mut pthash = Self::init_with_params(keys.len(), c, alpha, params);
         pthash.compute_pilots(keys);
         pthash
     }
 
-    /// PTHash with random pivots.
+    /// PTHash with random pivots, for benchmarking query speed.
     pub fn new_random(n: usize, c: f32, alpha: f32) -> Self {
-        Self::new_random_params(
-            n,
-            c,
-            alpha,
-            PTParams {
-                ..Default::default()
-            },
-        )
+        Self::new_random_params(n, c, alpha, Default::default())
     }
+
+    /// PTHash with random pivots, for benchmarking query speed.
     pub fn new_random_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
         let mut pthash = Self::init_with_params(n, c, alpha, params);
         let k = (0..pthash.b_total)
@@ -308,17 +306,20 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         (hx ^ hp).reduce(self.rem_s)
     }
 
-    /// See index.rs for additional streaming/SIMD implementations.
-    pub fn index(&self, x: &Key) -> usize {
-        let hx = self.hash_key(x);
+    /// Get the index of the given key.
+    /// This does not remap values >n and does not give a MPHF. Use `index_minimal` for that.
+    ///
+    /// `index.rs` has additional streaming/SIMD implementations.
+    pub fn index(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
         let b = self.bucket(hx);
         let pilot = self.pilots.index(b);
         self.slot(hx, pilot)
     }
 
-    /// An implementation that also works for alpha<1.
-    pub fn index_remap(&self, x: &Key) -> usize {
-        let hx = self.hash_key(x);
+    /// Get the index for `key` in `[0, n)`.
+    pub fn index_remap(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
         let b = self.bucket(hx);
         let p = self.pilots.index(b);
         let slot = self.slot(hx, p);
@@ -416,12 +417,15 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         self.remap = Packed::new(v);
     }
 
+    /// Return the number of bits per element used for the pilots (`.0`) and the
+    /// remapping (`.1)`.
     pub fn bits_per_element(&self) -> (f32, f32) {
         let pilots = self.pilots.size_in_bytes() as f32 / self.n as f32;
         let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
         (8. * pilots, 8. * remap)
     }
 
+    /// Print the number of bits per element.
     pub fn print_bits_per_element(&self) {
         let (p, r) = self.bits_per_element();
         eprintln!(

@@ -3,6 +3,51 @@ use itertools::Itertools;
 /// Number of stored values per unit.
 const L: usize = 44;
 
+/// TinyEF is an integer encoding that packs chunks of 44 values into a single
+/// cacheline, using 64/44*8 = 11.6 bits per value.
+/// Each chunk can hold increasing values in a range of length 256*84=21504.
+///
+/// This is efficient when consecutive values differ by roughly 100, where using
+/// Elias-Fano directly on the full list would use around 9 bits/value.
+///
+/// The main benefit is that this only requires reading a single cacheline per
+/// query, where Elias-Fano encoding usually needs 3 reads.
+#[derive(Default)]
+pub struct TinyEF {
+    ef: Vec<TinyEFUnit>,
+}
+
+impl TinyEF {
+    pub fn new(vals: Vec<u64>) -> Self {
+        let mut p = Vec::with_capacity(vals.len().div_ceil(L));
+        let it = vals.array_chunks();
+        for vs in it.clone() {
+            p.push(TinyEFUnit::new(&vs.map(|x| x as u32)));
+        }
+        let r = it.remainder();
+        if !r.is_empty() {
+            p.push(TinyEFUnit::new_slice(
+                &r.iter().map(|&x| x as u32).collect_vec(),
+            ));
+        }
+
+        Self { ef: p }
+    }
+    pub fn index(&self, index: usize) -> u64 {
+        // Note: This division is inlined by the compiler.
+        unsafe { (*self.ef.get_unchecked(index / L)).get(index % L) as u64 }
+    }
+    pub fn prefetch(&self, index: usize) {
+        unsafe {
+            let address = self.ef.as_ptr().add(index / L) as *const u64;
+            std::intrinsics::prefetch_read_data(address, 3);
+        }
+    }
+    pub fn size_in_bytes(&self) -> usize {
+        self.ef.len() * std::mem::size_of::<TinyEFUnit>()
+    }
+}
+
 /// Single-cacheline Elias-Fano encoding that holds 44 values in a range of size 256*84=21504.
 #[repr(align(64))]
 struct TinyEFUnit {
@@ -81,42 +126,6 @@ impl TinyEFUnit {
         };
 
         self.offset + self.low_bits[idx] as u32 + 256 * (one_pos - idx as u32)
-    }
-}
-
-#[derive(Default)]
-pub struct TinyEF {
-    ef: Vec<TinyEFUnit>,
-}
-
-impl TinyEF {
-    pub fn new(vals: Vec<u64>) -> Self {
-        let mut p = Vec::with_capacity(vals.len().div_ceil(L));
-        let it = vals.array_chunks();
-        for vs in it.clone() {
-            p.push(TinyEFUnit::new(&vs.map(|x| x as u32)));
-        }
-        let r = it.remainder();
-        if !r.is_empty() {
-            p.push(TinyEFUnit::new_slice(
-                &r.iter().map(|&x| x as u32).collect_vec(),
-            ));
-        }
-
-        Self { ef: p }
-    }
-    pub fn index(&self, index: usize) -> u64 {
-        // Note: This division is inlined by the compiler.
-        unsafe { (*self.ef.get_unchecked(index / L)).get(index % L) as u64 }
-    }
-    pub fn prefetch(&self, index: usize) {
-        unsafe {
-            let address = self.ef.as_ptr().add(index / L) as *const u64;
-            std::intrinsics::prefetch_read_data(address, 3);
-        }
-    }
-    pub fn size_in_bytes(&self) -> usize {
-        self.ef.len() * std::mem::size_of::<TinyEFUnit>()
     }
 }
 
