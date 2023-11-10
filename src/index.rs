@@ -1,19 +1,37 @@
 use std::{
     cmp::min,
+    iter,
     sync::atomic::{AtomicUsize, Ordering},
 };
+
+use lazy_static::lazy_static;
 
 use super::*;
 
 impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
-    #[inline(always)]
-    pub fn index_stream<'a, const K: usize>(
+    /// Takes an iterator over keys and returns an iterator over the indices of the keys.
+    ///
+    /// Uses a buffer of size K for prefetching ahead.
+    pub fn index_stream<'a, const K: usize, const MINIMAL: bool>(
         &'a self,
-        xs: &'a [Key],
+        xs: impl IntoIterator<Item = &'a Key> + 'a,
     ) -> impl Iterator<Item = usize> + 'a {
-        let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K] = next_hx.map(|hx| self.bucket(hx));
-        xs[K..].iter().enumerate().map(move |(idx, next_x)| {
+        lazy_static! {
+            static ref DEFAULT_KEY: Key = Key::default();
+        }
+        // Append K values at the end of the iterator to make sure we wrap sufficiently.
+        let tail = iter::repeat(&*DEFAULT_KEY).take(K);
+        let mut xs = xs.into_iter().chain(tail);
+
+        let mut next_hx: [Hash; K] = [Hash::default(); K];
+        let mut next_i: [usize; K] = [0; K];
+        // Initialize and prefetch first values.
+        for idx in 0..K {
+            next_hx[idx] = self.hash_key(xs.next().unwrap());
+            next_i[idx] = self.bucket(next_hx[idx]);
+            self.pilots.prefetch(next_i[idx]);
+        }
+        xs.enumerate().map(move |(idx, next_x)| {
             let idx = idx % K;
             let cur_hx = next_hx[idx];
             let cur_i = next_i[idx];
@@ -22,11 +40,17 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             self.pilots.prefetch(next_i[idx]);
             let pilot = self.pilots.index(cur_i);
             // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.slot`.
-            self.slot(cur_hx, pilot)
+            let slot = self.slot(cur_hx, pilot);
+            if MINIMAL && std::intrinsics::unlikely(slot >= self.n) {
+                self.remap.index(slot - self.n) as usize
+            } else {
+                slot
+            }
         })
     }
 
-    #[inline(always)]
+    /// Wrapper around `index_stream` that
+    #[doc(hidden = "internal testing only")]
     pub fn index_parallel<'a, const K: usize>(
         &'a self,
         xs: &'a [Key],
@@ -43,10 +67,11 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
                     let end = min((thread_idx + 1) * chunk_size, xs.len());
 
                     let thread_sum = if minimal {
-                        self.index_minimal_stream::<K>(&xs[start_idx..end])
+                        self.index_stream::<K, true>(&xs[start_idx..end])
                             .sum::<usize>()
                     } else {
-                        self.index_stream::<K>(&xs[start_idx..end]).sum::<usize>()
+                        self.index_stream::<K, false>(&xs[start_idx..end])
+                            .sum::<usize>()
                     };
                     sum.fetch_add(thread_sum, Ordering::Relaxed);
                 });
@@ -55,32 +80,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         sum.load(Ordering::Relaxed)
     }
 
-    #[inline(always)]
-    pub fn index_minimal_stream<'a, const K: usize>(
-        &'a self,
-        xs: &'a [Key],
-    ) -> impl Iterator<Item = usize> + 'a {
-        let mut next_hx: [Hash; K] = xs.split_array_ref().0.map(|x| self.hash_key(&x));
-        let mut next_i: [usize; K] = next_hx.map(|hx| self.bucket(hx));
-        xs[K..].iter().enumerate().map(move |(idx, next_x)| {
-            let idx = idx % K;
-            let cur_hx = next_hx[idx];
-            let cur_i = next_i[idx];
-            next_hx[idx] = self.hash_key(next_x);
-            next_i[idx] = self.bucket(next_hx[idx]);
-            self.pilots.prefetch(next_i[idx]);
-            let pilot = self.pilots.index(cur_i);
-            let slot = self.slot(cur_hx, pilot);
-            if std::intrinsics::likely(slot < self.n) {
-                slot
-            } else {
-                self.remap.index(slot - self.n) as usize
-            }
-        })
-    }
-
-    #[inline(always)]
-    pub fn index_stream_chunks<'a, const K: usize, const L: usize>(
+    #[allow(unused)]
+    fn index_stream_chunks<'a, const K: usize, const L: usize>(
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a
@@ -115,8 +116,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             })
     }
 
-    #[inline(always)]
-    pub fn index_stream_simd<'a, const K: usize, const L: usize>(
+    #[allow(unused)]
+    fn index_stream_simd<'a, const K: usize, const L: usize>(
         &'a self,
         xs: &'a [Key],
     ) -> impl Iterator<Item = usize> + 'a

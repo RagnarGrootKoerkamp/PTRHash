@@ -334,6 +334,7 @@ dependencies = [
  "colored",
  "fxhash",
  "itertools",
+ "lazy_static",
  "murmur2",
  "radsort",
  "rand",

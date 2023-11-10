@@ -170,7 +170,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// `alpha`) to reduce memory usage, at the cost of increasing construction
     /// time.
     ///
-    /// Construction may use all available threads. To limit to fewer threads, use:
+    /// By default, keys are partitioned into buckets of size ~250000, and parts are processed in parallel.
+    /// This will use all available threads. To limit to fewer threads, use:
     /// ```rust
     /// let threads = 1;
     /// rayon::ThreadPoolBuilder::new()
