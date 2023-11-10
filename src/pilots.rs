@@ -48,7 +48,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         'p: for p in 0u64..kmax {
             let hp = self.hash_pilot(p);
             // True when the slot for hx is already taken.
-            let check = |hx| unsafe { *taken.get_unchecked(self.position_in_part_hp(hx, hp)) };
+            let check = |hx| unsafe { *taken.get_unchecked(self.slot_in_part_hp(hx, hp)) };
 
             // Process chunks of 4 bucket elements at a time.
             // This reduces branch-misses (of all of displace) 3-fold, giving 20% speedup.
@@ -56,7 +56,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             for &hxs in chunks.clone() {
                 // Check all 4 elements of the chunk without early break.
                 // (Note that [_; 4]::map is non-lazy.)
-                // NOTE: It's hard to SIMD vectorize the `position` computation
+                // NOTE: It's hard to SIMD vectorize the `slot` computation
                 // here because it uses 64x64->128bit multiplies.
                 if hxs.map(check).iter().any(|&bad| bad) {
                     continue 'p;
@@ -78,22 +78,22 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         None
     }
 
-    /// Fill `taken` with the positions for `hp`, but backtrack as soon as a
+    /// Fill `taken` with the slots for `hp`, but backtrack as soon as a
     /// collision within the bucket is found.
     ///
     /// Returns true on success.
     fn try_take_pilot(&self, bucket: &[Hash], hp: Hash, taken: &mut BitSlice) -> bool {
         // This bucket does not collide with previous buckets, but it may still collide with itself.
         for (i, &hx) in bucket.iter().enumerate() {
-            let pos = self.position_in_part_hp(hx, hp);
-            if unsafe { *taken.get_unchecked(pos) } {
+            let slot = self.slot_in_part_hp(hx, hp);
+            if unsafe { *taken.get_unchecked(slot) } {
                 // Collision within the bucket. Clean already set entries.
                 for &hx in unsafe { bucket.get_unchecked(..i) } {
-                    unsafe { taken.set_unchecked(self.position_in_part_hp(hx, hp), false) };
+                    unsafe { taken.set_unchecked(self.slot_in_part_hp(hx, hp), false) };
                 }
                 return false;
             }
-            unsafe { taken.set_unchecked(pos, true) };
+            unsafe { taken.set_unchecked(slot, true) };
         }
         true
     }

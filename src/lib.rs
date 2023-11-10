@@ -288,15 +288,15 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         part * self.b + bucket
     }
 
-    fn position(&self, hx: Hash, p: u64) -> usize {
-        (self.part(hx) << self.s_bits) + self.position_in_part(hx, p)
+    fn slot(&self, hx: Hash, pilot: u64) -> usize {
+        (self.part(hx) << self.s_bits) + self.slot_in_part(hx, pilot)
     }
 
-    fn position_in_part(&self, hx: Hash, p: u64) -> usize {
-        (hx ^ self.hash_pilot(p)).reduce(self.rem_s)
+    fn slot_in_part(&self, hx: Hash, pilot: u64) -> usize {
+        (hx ^ self.hash_pilot(pilot)).reduce(self.rem_s)
     }
 
-    fn position_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
+    fn slot_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
         (hx ^ hp).reduce(self.rem_s)
     }
 
@@ -305,7 +305,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let hx = self.hash_key(x);
         let b = self.bucket(hx);
         let pilot = self.pilots.index(b);
-        self.position(hx, pilot)
+        self.slot(hx, pilot)
     }
 
     /// An implementation that also works for alpha<1.
@@ -313,11 +313,11 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let hx = self.hash_key(x);
         let b = self.bucket(hx);
         let p = self.pilots.index(b);
-        let pos = self.position(hx, p);
-        if std::intrinsics::likely(pos < self.n) {
-            pos
+        let slot = self.slot(hx, p);
+        if std::intrinsics::likely(slot < self.n) {
+            slot
         } else {
-            self.remap.index(pos - self.n) as usize
+            self.remap.index(slot - self.n) as usize
         }
     }
 

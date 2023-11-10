@@ -82,40 +82,40 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
         let mut stack = vec![];
 
-        let positions = |b: BucketIdx, p: Pilot| unsafe {
+        let slots_for_bucket = |b: BucketIdx, p: Pilot| unsafe {
             let hp = self.hash_pilot(p);
             hashes
                 .get_unchecked(starts[b] as usize..starts[b + 1] as usize)
                 .iter()
-                .map(move |&hx| self.position_in_part_hp(hx, hp))
+                .map(move |&hx| self.slot_in_part_hp(hx, hp))
         };
-        let mut duplicate_positions = {
-            let mut positions_tmp = vec![0; max_bucket_len];
+        let mut duplicate_slots = {
+            let mut slots_tmp = vec![0; max_bucket_len];
             move |b: BucketIdx, p: Pilot| {
-                positions_tmp.clear();
-                positions(b, p).collect_into(&mut positions_tmp);
-                positions_tmp.sort_unstable();
-                !positions_tmp.partition_dedup().1.is_empty()
+                slots_tmp.clear();
+                slots_for_bucket(b, p).collect_into(&mut slots_tmp);
+                slots_tmp.sort_unstable();
+                !slots_tmp.partition_dedup().1.is_empty()
             }
         };
 
         let mut recent = [BucketIdx::NONE; 4];
         let mut total_displacements = 0;
 
-        for (i, &b) in bucket_order.iter().enumerate() {
-            let bucket = &hashes[starts[b] as usize..starts[b + 1] as usize];
-            if bucket.is_empty() {
-                pilots[b] = 0;
+        for (i, &new_b) in bucket_order.iter().enumerate() {
+            let new_bucket = &hashes[starts[new_b] as usize..starts[new_b + 1] as usize];
+            if new_bucket.is_empty() {
+                pilots[new_b] = 0;
                 continue;
             }
-            let b_len = bucket.len();
+            let new_b_len = new_bucket.len();
 
             let mut displacements = 0usize;
 
-            stack.push(b);
+            stack.push(new_b);
             recent.fill(BucketIdx::NONE);
             let mut recent_idx = 0;
-            recent[0] = b;
+            recent[0] = new_b;
 
             'b: while let Some(b) = stack.pop() {
                 if displacements > self.s && displacements.is_power_of_two() {
@@ -142,17 +142,13 @@ Possible causes:
 
                 let bucket =
                     unsafe { hashes.get_unchecked(starts[b] as usize..starts[b + 1] as usize) };
-                let b_positions = |hp: Hash| {
-                    bucket
-                        .iter()
-                        .map(move |&hx| self.position_in_part_hp(hx, hp))
-                };
+                let b_slots = |hp: Hash| bucket.iter().map(move |&hx| self.slot_in_part_hp(hx, hp));
 
                 // 1b) Hot-path for when there are no collisions, which is most of the buckets.
                 if let Some((p, hp)) = self.find_pilot(kmax, bucket, taken) {
                     // HOT: Many branch misses here.
                     pilots[b] = p as u8;
-                    for p in b_positions(hp) {
+                    for p in b_slots(hp) {
                         unsafe {
                             // Taken is already filled by find_pilot.
                             // HOT: This is a hot instruction; takes as much time as finding the pilot.
@@ -175,7 +171,7 @@ Possible causes:
                     let p = (p + delta) % kmax;
                     let hp = self.hash_pilot(p);
                     let mut collision_score = 0;
-                    for p in b_positions(hp) {
+                    for p in b_slots(hp) {
                         let s = unsafe { *slots.get_unchecked(p) };
                         // HOT: many branches
                         let new_score = if s.is_none() {
@@ -194,12 +190,12 @@ Possible causes:
 
                     // This check takes 2% of times even though it almost
                     // always passes. Can we delay it to filling of the
-                    // positions table, and backtrack if needed.
-                    if !duplicate_positions(b, p) {
+                    // slots table, and backtrack if needed.
+                    if !duplicate_slots(b, p) {
                         best = (collision_score, p);
                         // Since we already checked for a collision-free solution,
                         // the next best is a single collision of size b_len.
-                        if collision_score == b_len * b_len {
+                        if collision_score == new_b_len * new_b_len {
                             break;
                         }
                     }
@@ -218,15 +214,15 @@ Possible causes:
                 let hp = self.hash_pilot(p);
 
                 // Drop the collisions and set the new pilot.
-                for pos in b_positions(hp) {
+                for slot in b_slots(hp) {
                     // THIS IS A HOT INSTRUCTION.
-                    let b2 = slots[pos];
+                    let b2 = slots[slot];
                     if b2.is_some() {
                         assert!(b2 != b);
                         // DROP BUCKET b
                         stack.push(b2);
                         displacements += 1;
-                        for p2 in positions(b2, pilots[b2] as Pilot) {
+                        for p2 in slots_for_bucket(b2, pilots[b2] as Pilot) {
                             unsafe {
                                 *slots.get_unchecked_mut(p2) = BucketIdx::NONE;
                                 taken.set_unchecked(p2, false);
@@ -234,8 +230,8 @@ Possible causes:
                         }
                     }
                     unsafe {
-                        *slots.get_unchecked_mut(pos) = b;
-                        taken.set_unchecked(pos, true);
+                        *slots.get_unchecked_mut(slot) = b;
+                        taken.set_unchecked(slot, true);
                     }
                 }
 

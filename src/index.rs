@@ -21,8 +21,8 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             next_i[idx] = self.bucket(next_hx[idx]);
             self.pilots.prefetch(next_i[idx]);
             let pilot = self.pilots.index(cur_i);
-            // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.position`.
-            self.position(cur_hx, pilot)
+            // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.slot`.
+            self.slot(cur_hx, pilot)
         })
     }
 
@@ -70,11 +70,11 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             next_i[idx] = self.bucket(next_hx[idx]);
             self.pilots.prefetch(next_i[idx]);
             let pilot = self.pilots.index(cur_i);
-            let pos = self.position(cur_hx, pilot);
-            if std::intrinsics::likely(pos < self.n) {
-                pos
+            let slot = self.slot(cur_hx, pilot);
+            if std::intrinsics::likely(slot < self.n) {
+                slot
             } else {
-                self.remap.index(pos - self.n) as usize
+                self.remap.index(slot - self.n) as usize
             }
         })
     }
@@ -107,7 +107,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                 }
                 unsafe {
                     (0..L)
-                        .map(|i| self.position(cur_hx_vec[i], self.pilots.index(cur_i_vec[i])))
+                        .map(|i| self.slot(cur_hx_vec[i], self.pilots.index(cur_i_vec[i])))
                         .array_chunks::<L>()
                         .next()
                         .unwrap_unchecked()
@@ -162,12 +162,12 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                 }
                 let pilot_vec = cur_i_vec.as_array().map(|cur_i| self.pilots.index(cur_i));
                 let mut i = 0;
-                let pos_vec = [(); L].map(move |_| {
-                    let pos = self.position(Hash::new(cur_hx_vec.as_array()[i]), pilot_vec[i]);
+                let slot_vec = [(); L].map(move |_| {
+                    let slot = self.slot(Hash::new(cur_hx_vec.as_array()[i]), pilot_vec[i]);
                     i += 1;
-                    pos
+                    slot
                 });
-                pos_vec
+                slot_vec
             })
     }
 }
