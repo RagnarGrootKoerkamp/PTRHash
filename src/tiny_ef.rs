@@ -3,9 +3,9 @@ use itertools::Itertools;
 /// Number of stored values per unit.
 const L: usize = 44;
 
-// Align to a cacheline.
+/// Single-cacheline Elias-Fano encoding that holds 44 values in a range of size 256*84=21504.
 #[repr(align(64))]
-struct TinyEFLine {
+struct TinyEFUnit {
     // The offset of the first element.
     // Lower 8 bits are always 0 for simplicity.
     offset: u32,
@@ -17,7 +17,7 @@ struct TinyEFLine {
     low_bits: [u8; L],
 }
 
-impl TinyEFLine {
+impl TinyEFUnit {
     fn new(vals: &[u32; L]) -> Self {
         assert!(
             vals[L - 1] - vals[0] <= 256 * (128 - L as u32),
@@ -86,7 +86,7 @@ impl TinyEFLine {
 
 #[derive(Default)]
 pub struct TinyEF {
-    ef: Vec<TinyEFLine>,
+    ef: Vec<TinyEFUnit>,
 }
 
 impl TinyEF {
@@ -94,11 +94,11 @@ impl TinyEF {
         let mut p = Vec::with_capacity(vals.len().div_ceil(L));
         let it = vals.array_chunks();
         for vs in it.clone() {
-            p.push(TinyEFLine::new(&vs.map(|x| x as u32)));
+            p.push(TinyEFUnit::new(&vs.map(|x| x as u32)));
         }
         let r = it.remainder();
         if !r.is_empty() {
-            p.push(TinyEFLine::new_slice(
+            p.push(TinyEFUnit::new_slice(
                 &r.iter().map(|&x| x as u32).collect_vec(),
             ));
         }
@@ -115,11 +115,8 @@ impl TinyEF {
             std::intrinsics::prefetch_read_data(address, 3);
         }
     }
-    pub fn to_vec(&self) -> Vec<u64> {
-        todo!()
-    }
     pub fn size_in_bytes(&self) -> usize {
-        self.ef.len() * std::mem::size_of::<TinyEFLine>()
+        self.ef.len() * std::mem::size_of::<TinyEFUnit>()
     }
 }
 
@@ -134,7 +131,7 @@ fn test() {
         vals.sort_unstable();
         vals[0] = 0;
 
-        let lef = TinyEFLine::new(&vals);
+        let lef = TinyEFUnit::new(&vals);
         for i in 0..L {
             assert_eq!(lef.get(i), vals[i], "error; full list: {:?}", vals);
         }
