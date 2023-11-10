@@ -173,7 +173,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     /// Only initialize the parameters; do not compute the pivots yet.
-    pub fn init_with_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
+    fn init_with_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
         // Target number of slots in total over all parts.
         let s_total_target = (n as f32 / alpha) as usize;
 
@@ -319,7 +319,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         }
     }
 
-    pub fn compute_pilots(&mut self, keys: &[Key]) {
+    fn compute_pilots(&mut self, keys: &[Key]) {
         // Step 4: Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
         let mut pilots: Vec<u8> = vec![];
