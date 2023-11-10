@@ -14,6 +14,7 @@ use rdst::RadixKey;
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
 pub struct Hash(u64);
 
+// Needed for radix_sort_unstable from rdst.
 impl RadixKey for Hash {
     const LEVELS: usize = 8;
 
@@ -29,12 +30,6 @@ impl Hash {
     }
     pub fn get(&self) -> u64 {
         self.0
-    }
-    pub fn get_low(&self) -> u32 {
-        self.0 as u32
-    }
-    pub fn get_high(&self) -> u32 {
-        (self.0 >> 32) as u32
     }
     pub fn reduce<R: Reduce>(self, d: R) -> usize {
         d.reduce(self.0)

@@ -6,7 +6,7 @@ use bitvec::{slice::BitSlice, vec::BitVec};
 use clap::ValueEnum;
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
-    pub fn find_pilot(
+    pub(super) fn find_pilot(
         &self,
         kmax: u64,
         bucket: &[Hash],
@@ -25,7 +25,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
             _ => self.find_pilot_slice(kmax, bucket, taken),
         }
     }
-    pub fn find_pilot_array<const L: usize>(
+    fn find_pilot_array<const L: usize>(
         &self,
         kmax: u64,
         bucket: &[Hash; L],
