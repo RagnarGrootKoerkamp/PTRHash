@@ -1,9 +1,5 @@
-#![allow(unused)]
-use std::intrinsics::{prefetch_read_data, unlikely};
-
 use super::*;
-use bitvec::{slice::BitSlice, vec::BitVec};
-use clap::ValueEnum;
+use bitvec::slice::BitSlice;
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     pub(super) fn find_pilot(

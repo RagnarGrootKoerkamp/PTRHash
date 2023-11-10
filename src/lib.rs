@@ -49,6 +49,8 @@ use reduce::{FastReduce, MulReduce, Reduce};
 
 type Key = u64;
 use hash::{Hasher, MulHash};
+use sucds::mii_sequences::EliasFano;
+use tiny_ef::TinyEF;
 
 // The integer type pilots are converted to.
 // They are stored as u8 always.
@@ -86,6 +88,10 @@ type Rp = FastReduce;
 type Rb = FastReduce;
 type Rs = MulReduce;
 const SPLIT_BUCKETS: bool = true;
+
+pub type SimplePT = PTHash<Vec<SlotIdx>, hash::FxHash>;
+pub type MinimalPT = PTHash<EliasFano, hash::FxHash>;
+pub type FastPT = PTHash<TinyEF, hash::FxHash>;
 
 /// R: How to compute `a % b` efficiently for constant `b`.
 /// T: Whether to use p2 = m/3 (true, for faster bucket modulus) or p2 = 0.3m (false).
@@ -207,7 +213,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
         // Map beta% of hashes to gamma% of buckets.
         // TODO: Understand why exactly this choice of parameters.
-        // FIXME: Can we just drop this???
         let beta = 0.6;
         let gamma = 1. / 3.0;
 

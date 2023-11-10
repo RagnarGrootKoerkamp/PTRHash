@@ -60,4 +60,4 @@ qm *args="":
     heaptrack cargo run -r --bin run -- query {{args}}
 
 modules:
-    cargo modules generate tree --lib --with-fns --with-traits --with-types
+    cargo modules generate tree --lib --fns --traits --types

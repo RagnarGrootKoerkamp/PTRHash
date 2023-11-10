@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::*;
 use crate::{stats::BucketStats, types::BucketIdx};
 use bitvec::{slice::BitSlice, vec::BitVec};

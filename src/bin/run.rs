@@ -1,14 +1,6 @@
-#![allow(unused_imports)]
-
 use clap::{Parser, Subcommand};
 use colored::Colorize;
-use pthash_rs::{
-    reduce::*,
-    tiny_ef::TinyEF,
-    util::{bench_index, time},
-    *,
-};
-use sucds::mii_sequences::EliasFano;
+use pthash_rs::{util::time, *};
 
 /// Print statistics on PTHash bucket sizes.
 #[derive(clap::Parser)]
@@ -56,9 +48,7 @@ enum Command {
     },
 }
 
-// type PT = PTHash<Vec<SlotIdx>, hash::FxHash>;
-// type PT = PTHash<EliasFano, hash::FxHash>;
-type PT = PTHash<TinyEF, hash::FxHash>;
+type PT = FastPT;
 
 fn main() {
     let Args { command } = Args::parse();
