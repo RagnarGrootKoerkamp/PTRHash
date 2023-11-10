@@ -54,17 +54,31 @@ use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEF, util::log_duratio
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Clone, Copy, Debug)]
 pub struct PTParams {
+    /// Use `n/alpha` slots approximately.
+    pub alpha: f64,
+    /// Use `c*n/lg(n)` buckets.
+    pub c: f64,
+    /// Map `beta` of elements...
+    pub beta: f64,
+    /// ... to `gamma` of buckets.
+    pub gamma: f64,
+    /// #slots/part will be the largest power of 2 not larger than this.
+    pub slots_per_part: usize,
+
     /// Print bucket size and pilot stats after construction.
     pub print_stats: bool,
-    /// Max number of buckets per partition.
-    pub slots_per_part: usize,
 }
 
 impl Default for PTParams {
     fn default() -> Self {
         Self {
-            print_stats: false,
+            alpha: 0.98,
+            c: 9.0,
+            // TODO: Understand why exactly this choice of parameters.
+            beta: 0.6,
+            gamma: 0.3,
             slots_per_part: 1 << 18,
+            print_stats: false,
         }
     }
 }
@@ -145,27 +159,17 @@ pub struct PTHash<F: Packed, Hx: Hasher> {
 }
 
 impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
-    /// Create PTHash datastructure for given `c` and `alpha` and `keys`.
-    pub fn new(c: f32, alpha: f32, keys: &Vec<Key>) -> Self {
-        Self::new_with_params(c, alpha, keys, Default::default())
-    }
-
     /// Additionally customize the part size `s`, `beta=0.6`, and `gamma=0.3`.
     /// Also allows to print statistics on bucket sizes and pilot values.
-    pub fn new_with_params(c: f32, alpha: f32, keys: &Vec<Key>, params: PTParams) -> Self {
-        let mut pthash = Self::init_with_params(keys.len(), c, alpha, params);
+    pub fn new(keys: &Vec<Key>, params: PTParams) -> Self {
+        let mut pthash = Self::init(keys.len(), params);
         pthash.compute_pilots(keys);
         pthash
     }
 
     /// PTHash with random pivots, for benchmarking query speed.
-    pub fn new_random(n: usize, c: f32, alpha: f32) -> Self {
-        Self::new_random_params(n, c, alpha, Default::default())
-    }
-
-    /// PTHash with random pivots, for benchmarking query speed.
-    pub fn new_random_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
-        let mut pthash = Self::init_with_params(n, c, alpha, params);
+    pub fn new_random(n: usize, params: PTParams) -> Self {
+        let mut pthash = Self::init(n, params);
         let k = (0..pthash.b_total)
             .map(|_| random::<u8>() as Pilot)
             .collect();
@@ -180,14 +184,14 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
     }
 
     /// Only initialize the parameters; do not compute the pivots yet.
-    fn init_with_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
+    fn init(n: usize, params: PTParams) -> Self {
         assert!(n <= u32::MAX as _, "Number of keys must be less than 2^32.");
 
         // Target number of slots in total over all parts.
-        let s_total_target = (n as f32 / alpha) as usize;
+        let s_total_target = (n as f64 / params.alpha) as usize;
 
         // Target number of buckets in total.
-        let b_total_target = c * (s_total_target as f32) / (s_total_target as f32).log2();
+        let b_total_target = params.c * (s_total_target as f64) / (s_total_target as f64).log2();
 
         // We start with the given maximum number of slots per part, since
         // that is what should fit in L1 or L2 cache.
@@ -196,7 +200,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         let num_parts = s_total_target.div_ceil(s);
         let s_total = s * num_parts;
         // b divisible by 3 is exploited by bucket_thirds.
-        let b = ((b_total_target / (num_parts as f32)).ceil() as usize).next_multiple_of(3);
+        let b = ((b_total_target / (num_parts as f64)).ceil() as usize).next_multiple_of(3);
         let b_total = b * num_parts;
         // TODO: Figure out if large gcd(b,s) is a problem for the original PTHash.
 
@@ -206,12 +210,11 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         eprintln!("   slots tot: {s_total:>10}");
         eprintln!(" buckets/prt: {b:>10}");
         eprintln!(" buckets tot: {b_total:>10}");
-        eprintln!(" keys/bucket: {:>13.2}", n as f32 / b_total as f32);
+        eprintln!(" keys/bucket: {:>13.2}", n as f64 / b_total as f64);
 
         // Map beta% of hashes to gamma% of buckets.
-        // TODO: Understand why exactly this choice of parameters.
-        let beta = 0.6;
-        let gamma = 1. / 3.0;
+        let beta = params.beta;
+        let gamma = params.gamma;
 
         let p1 = Hash::new((beta * u64::MAX as f64) as u64);
         let p2 = (gamma * b as f64) as usize;

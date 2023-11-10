@@ -8,7 +8,14 @@ fn construct() {
     for n in [10000000] {
         for _ in 0..3 {
             let keys = generate_keys(n);
-            let pthash = FastPT::new(7.0, 1.0, &keys);
+            let pthash = FastPT::new(
+                &keys,
+                PTParams {
+                    alpha: 1.,
+                    c: 7.0,
+                    ..Default::default()
+                },
+            );
 
             let mut done = vec![false; n];
 
@@ -27,7 +34,14 @@ fn queries_exact<F: Packed, H: Hasher>() {
     let total = black_box(100_000_000);
     let n = 100_000_000;
     let keys = generate_keys(n);
-    let mphf = PTHash::<F, H>::new_random(n, 7.0, 1.0);
+    let mphf = PTHash::<F, H>::new(
+        &keys,
+        PTParams {
+            alpha: 1.,
+            c: 7.0,
+            ..Default::default()
+        },
+    );
 
     let loops = total / n;
     let query = bench_index(loops, &keys, |key| mphf.index(key));
@@ -81,7 +95,14 @@ fn queries_random() {
     let total = black_box(100_000_000);
     let n = 10_000_000;
     let keys = generate_keys(n);
-    let mphf = FastPT::new_random(n, 7.0, 1.0);
+    let mphf = FastPT::new_random(
+        n,
+        PTParams {
+            alpha: 1.,
+            c: 7.0,
+            ..Default::default()
+        },
+    );
 
     let q = time(total, &keys, || mphf.index_stream::<64>(&keys).sum());
     eprintln!("{q:>4.1}");

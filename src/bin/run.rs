@@ -16,14 +16,13 @@ enum Command {
         #[arg(short)]
         n: usize,
         #[arg(short, default_value_t = 9.0)]
-        c: f32,
-        #[arg(short, default_value_t = 0.99)]
-        a: f32,
-        #[arg(short, default_value_t = 240000)]
+        c: f64,
+        #[arg(short, default_value_t = 0.98)]
+        alpha: f64,
+        #[arg(short, default_value_t = 300000)]
         s: usize,
         #[arg(long)]
         stats: bool,
-        /// Max slots per part
         #[arg(short, long, default_value_t = 0)]
         threads: usize,
     },
@@ -33,16 +32,15 @@ enum Command {
         #[arg(short)]
         n: usize,
         #[arg(short, default_value_t = 9.0)]
-        c: f32,
-        #[arg(short, default_value_t = 0.99)]
-        a: f32,
-        #[arg(short, default_value_t = 240000)]
+        c: f64,
+        #[arg(short, default_value_t = 0.98)]
+        alpha: f64,
+        #[arg(short, default_value_t = 300000)]
         s: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
         #[arg(long)]
         stats: bool,
-        /// Max slots per part
         #[arg(short, long, default_value_t = 0)]
         threads: usize,
     },
@@ -57,7 +55,7 @@ fn main() {
         Command::Build {
             n,
             c,
-            a,
+            alpha,
             stats,
             s,
             threads,
@@ -68,13 +66,14 @@ fn main() {
                 .unwrap();
             let keys = pthash_rs::util::generate_keys(n);
             let start = std::time::Instant::now();
-            let pt = PT::new_with_params(
-                c,
-                a,
+            let pt = PT::new(
                 &keys,
                 PTParams {
+                    c,
+                    alpha,
                     print_stats: stats,
                     slots_per_part: s,
+                    ..Default::default()
                 },
             );
             pt.print_bits_per_element();
@@ -86,7 +85,7 @@ fn main() {
         Command::Query {
             n,
             c,
-            a,
+            alpha,
             total,
             stats,
             s,
@@ -97,13 +96,14 @@ fn main() {
                 .build_global()
                 .unwrap();
             let keys = pthash_rs::util::generate_keys(n);
-            let pt = PT::new_random_params(
+            let pt = PT::new_random(
                 n,
-                c,
-                a,
                 PTParams {
+                    c,
+                    alpha,
                     print_stats: stats,
                     slots_per_part: s,
+                    ..Default::default()
                 },
             );
             pt.print_bits_per_element();
