@@ -13,8 +13,6 @@ pub trait Packed: Sync {
     fn index(&self, index: usize) -> u64;
     /// Prefetch the element at the given index.
     fn prefetch(&self, _index: usize) {}
-    /// Convert to a vector.
-    fn to_vec(&self) -> Vec<u64>;
     /// Size in bytes.
     fn size_in_bytes(&self) -> usize;
 }
@@ -43,14 +41,6 @@ macro_rules! vec_impl {
                     std::intrinsics::prefetch_read_data(address, 3);
                 }
             }
-            fn to_vec(&self) -> Vec<u64> {
-                self.iter()
-                    .map(|&x| {
-                        x.try_into()
-                            .expect("Pilot is too large to for underlying storage type.")
-                    })
-                    .collect()
-            }
             fn size_in_bytes(&self) -> usize {
                 self.len() * std::mem::size_of::<$t>()
             }
@@ -72,9 +62,6 @@ impl Packed for CompactVector {
     }
     fn index(&self, index: usize) -> u64 {
         self.get_int(index).unwrap() as u64
-    }
-    fn to_vec(&self) -> Vec<u64> {
-        self.iter().map(|x| x as u64).collect()
     }
     fn size_in_bytes(&self) -> usize {
         self.width() * self.len() / 8
@@ -102,10 +89,6 @@ impl Packed for EliasFano {
         self.select(index as _).unwrap() as u64
     }
 
-    fn to_vec(&self) -> Vec<u64> {
-        todo!()
-    }
-
     fn size_in_bytes(&self) -> usize {
         sucds::Serializable::size_in_bytes(self)
     }
@@ -123,9 +106,6 @@ impl Packed for TinyEF {
     }
     fn prefetch(&self, index: usize) {
         self.prefetch(index)
-    }
-    fn to_vec(&self) -> Vec<u64> {
-        self.to_vec()
     }
     fn size_in_bytes(&self) -> usize {
         self.size_in_bytes()
