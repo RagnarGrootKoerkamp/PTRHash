@@ -2,6 +2,15 @@
 name = "ptr_hash"
 version = "0.1.0"
 edition = "2021"
+license = "MIT"
+authors = ["Ragnar Groot Koerkamp"]
+repository = "https://github.com/RagnarGrootKoerkamp/ptrhash"
+homepage = "https://github.com/RagnarGrootKoerkamp/ptrhash"
+description = "A minimal perfect hash function adapted from PTHash"
+readme = "readme.md"
+keywords = ["hashing", "minimal", "perfect", "mphf"]
+categories = ["data-structures", "science"]
+include = ["src/**/*", "examples/*", "readme.md"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
