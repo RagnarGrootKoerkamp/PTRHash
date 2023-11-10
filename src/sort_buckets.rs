@@ -57,6 +57,7 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
                 })
                 .unwrap_err() as u32;
         }
+
         // Check max part len.
         let mut max_part_len = 0;
         for (part, (start, end)) in part_starts.iter().tuple_windows().enumerate() {

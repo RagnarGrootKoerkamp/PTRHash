@@ -26,10 +26,10 @@ fn main() {
         eprint!("Threads: {}", threads);
         let start = Instant::now();
         rayon::scope(|scope| {
-            for tid in 0..threads {
+            for &stride in strides.iter().take(threads) {
                 // let data = data.clone();
                 let data = &data;
-                scope.spawn(move |_| test_stride::<true>(data, strides[tid]));
+                scope.spawn(move |_| test_stride::<true>(data, stride));
             }
         });
         let e = start.elapsed();

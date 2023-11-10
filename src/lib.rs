@@ -13,18 +13,22 @@
     split_array
 )]
 #![allow(incomplete_features)]
-mod displace;
+#![allow(clippy::needless_range_loop)]
+
 pub mod hash;
+pub mod reduce;
+pub mod tiny_ef;
+
+pub mod util;
+
+mod displace;
 mod index;
 mod pack;
-pub mod pilots;
-pub mod reduce;
+mod pilots;
 mod sort_buckets;
 #[cfg(test)]
 mod test;
-pub mod tiny_ef;
 mod types;
-pub mod util;
 
 use std::{
     collections::HashSet,
@@ -174,6 +178,8 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
 
     /// Only initialize the parameters; do not compute the pivots yet.
     fn init_with_params(n: usize, c: f32, alpha: f32, params: PTParams) -> Self {
+        assert!(n <= u32::MAX as _, "Number of keys must be less than 2^32.");
+
         // Target number of slots in total over all parts.
         let s_total_target = (n as f32 / alpha) as usize;
 
