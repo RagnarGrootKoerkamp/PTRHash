@@ -1,41 +1,7 @@
-#![allow(dead_code)]
+use crate::{hash::*, util::*};
 use std::{hint::black_box, time::SystemTime};
 
-use rand::{thread_rng, Rng};
-use rayon::{
-    prelude::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator},
-    slice::ParallelSlice,
-};
-use rdst::RadixSort;
-
-use crate::hash::*;
-
 use super::*;
-
-pub fn generate_keys(n: usize) -> Vec<Key> {
-    let start = Instant::now();
-    let keys = loop {
-        let start = Instant::now();
-        let keys: Vec<_> = (0..n)
-            .into_par_iter()
-            .map_init(thread_rng, |rng, _| rng.gen())
-            .collect();
-        let start = log_duration("┌   gen keys", start);
-        let mut keys2: Vec<_> = keys.par_iter().copied().collect();
-        let start = log_duration("├      clone", start);
-        keys2.radix_sort_unstable();
-        let start = log_duration("├       sort", start);
-        let distinct = keys2.par_windows(2).all(|w| w[0] < w[1]);
-        log_duration("├ duplicates", start);
-        if distinct {
-            break keys;
-        }
-        eprintln!("DUPLICATE KEYS GENERATED");
-    };
-    log_duration("generatekeys", start);
-    keys
-}
-
 /// Construct the MPHF and test all keys are mapped to unique indices.
 #[test]
 fn construct() {
@@ -53,65 +19,6 @@ fn construct() {
             }
         }
     }
-}
-
-// All other combinations time out.
-// Not enough entropy, only 32 low bits
-// test_construct!(FM32L, FM32L, construct_m32l);
-// Not enough entropy, only 32 low bits
-// test_construct!(FM32L, FR32L, construct_m32l_r32l);
-// Not enough entropy, only 32 high bits
-// test_construct!(FM32H, FM32H, construct_m32h);
-// r64 and m32h are not sufficiently independent.
-// test_construct!(FM32H, FR64, construct_m32h_r64);
-// Not enough entropy only 32 high bits
-// test_construct!(FM32H, FR32H, construct_m32h_r32h);
-// Works, but 10x slower to construct.
-// test_construct!(FR64, FM64, construct_r64_m64);
-// Works, but 10x slower to construct.
-// test_construct!(FR64, FM32L, construct_r64_m32l);
-// Not enough entropy: only 32 high bits
-// test_construct!(FR64, FM32H, construct_r64_m32h);
-// Not enough entropy: only 32 high bits
-// test_construct!(FR64, FR64, construct_r64);
-// Works, but 10x slower to construct.
-// test_construct!(FR64, FR32L, construct_r64_r32l);
-// Not enough entropy: only 32 high bits
-// test_construct!(FR64, FR32H, construct_r64_r32h);
-// Not enough entropy: only 32 low bits
-// test_construct!(FR32L, FM32L, construct_r32l_m32l);
-// Not enough entropy
-// test_construct!(FR32L, FR32L, construct_r32l);
-// test_construct!(FR32H, FM64, construct_r32h_m64);
-// test_construct!(FR32H, FM32L, construct_r32h_m32l);
-// test_construct!(FR32H, FM32H, construct_r32h_m32h);
-// test_construct!(FR32H, FR64, construct_r32h_r64);
-// test_construct!(FR32H, FR32L, construct_r32h_r32l);
-// test_construct!(FR32H, FR32H, construct_r32h);
-
-#[must_use]
-pub fn bench_index(loops: usize, keys: &Vec<u64>, index: impl Fn(&Key) -> usize) -> f32 {
-    let start = SystemTime::now();
-    let mut sum = 0;
-    for _ in 0..loops {
-        for key in keys {
-            sum += index(key);
-        }
-    }
-    black_box(sum);
-    start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
-}
-
-#[must_use]
-pub fn time<F>(loops: usize, keys: &[u64], f: F) -> f32
-where
-    F: Fn() -> usize,
-{
-    let start = SystemTime::now();
-    for _ in 0..loops {
-        black_box(f());
-    }
-    start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
 }
 
 #[cfg(test)]

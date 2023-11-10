@@ -20,9 +20,11 @@ mod pack;
 pub mod pilots;
 pub mod reduce;
 mod sort_buckets;
-pub mod test;
+#[cfg(test)]
+mod test;
 pub mod tiny_ef;
 mod types;
+pub mod util;
 
 use std::{
     collections::HashSet,
@@ -52,7 +54,7 @@ pub type SlotIdx = u32;
 // type Remap = sucds::mii_sequences::EliasFano;
 // type Remap = Vec<SlotIdx>;
 
-use crate::hash::Hash;
+use crate::{hash::Hash, util::log_duration};
 
 /// Parameters for PTHash construction.
 ///
@@ -168,10 +170,6 @@ impl<F: Packed, Hx: Hasher> PTHash<F, Hx> {
         remap_vals.radix_sort_unstable();
         pthash.remap = Packed::new(remap_vals);
         pthash
-    }
-
-    pub fn init(n: usize, c: f32, alpha: f32) -> Self {
-        Self::init_with_params(n, c, alpha, Default::default())
     }
 
     /// Only initialize the parameters; do not compute the pivots yet.
@@ -605,12 +603,4 @@ pub fn print_bucket_sizes_with_pilots(buckets: impl Iterator<Item = (usize, u64)
         pct_new_p.iter().copied().sum::<usize>(),
         num_p_cuml,
     );
-}
-
-fn log_duration(name: &str, start: Instant) -> Instant {
-    eprintln!(
-        "{}",
-        format!("{name:>12}: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()
-    );
-    Instant::now()
 }

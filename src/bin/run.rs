@@ -4,8 +4,8 @@ use clap::{Parser, Subcommand};
 use colored::Colorize;
 use pthash_rs::{
     reduce::*,
-    test::{bench_index, time},
     tiny_ef::TinyEF,
+    util::{bench_index, time},
     *,
 };
 use sucds::mii_sequences::EliasFano;
@@ -100,7 +100,7 @@ fn main() {
                 .num_threads(threads)
                 .build_global()
                 .unwrap();
-            let keys = pthash_rs::test::generate_keys(n);
+            let keys = pthash_rs::util::generate_keys(n);
             let start = std::time::Instant::now();
             let pt = PT::new_with_params(
                 c,
@@ -130,7 +130,7 @@ fn main() {
                 .num_threads(threads)
                 .build_global()
                 .unwrap();
-            let keys = pthash_rs::test::generate_keys(n);
+            let keys = pthash_rs::util::generate_keys(n);
             let pt = PT::new_random_params(
                 n,
                 c,

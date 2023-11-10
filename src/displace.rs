@@ -203,7 +203,7 @@ Possible causes:
 
                 if best == (usize::MAX, u64::MAX) {
                     for hx in bucket {
-                        eprintln!("{:0b}", hx);
+                        eprintln!("{:0b}", hx.get());
                     }
                     eprintln!("part {part}: Indistinguishable hashes in bucket!");
                     return (false, 0);
