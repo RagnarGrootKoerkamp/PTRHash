@@ -12,20 +12,6 @@ pub trait Reduce: Copy + Sync + std::fmt::Debug {
     }
 }
 
-impl Reduce for u64 {
-    fn new(d: usize) -> Self {
-        d as u64
-    }
-
-    fn reduce(self, h: u64) -> usize {
-        (h % self) as usize
-    }
-
-    fn reduce_with_remainder(self, h: u64) -> (usize, u64) {
-        ((h % self) as usize, h / self)
-    }
-}
-
 /// FastReduce64
 /// Taken from https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
 /// NOTE: This only uses the lg(n) high-order bits of entropy from the hash.
@@ -51,7 +37,7 @@ impl Reduce for FastReduce {
 /// Only works when the modulus is a power of 2.
 #[derive(Copy, Clone, Debug)]
 pub struct MulReduce {
-    mask: u64,
+    mask: usize,
 }
 impl MulReduce {
     pub const C: u64 = MulHash::C;
@@ -59,9 +45,9 @@ impl MulReduce {
 impl Reduce for MulReduce {
     fn new(d: usize) -> Self {
         assert!(d.is_power_of_two());
-        Self { mask: d as u64 - 1 }
+        Self { mask: d - 1 }
     }
     fn reduce(self, h: u64) -> usize {
-        (((Self::C as u128 * h as u128) >> 64) as u64 & self.mask) as usize
+        ((Self::C as u128 * h as u128) >> 64) as usize & self.mask
     }
 }
