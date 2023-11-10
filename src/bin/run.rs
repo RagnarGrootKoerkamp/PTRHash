@@ -1,3 +1,8 @@
+use std::{
+    cmp::min,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
 use clap::{Parser, Subcommand};
 use colored::Colorize;
 use ptr_hash::{
@@ -124,11 +129,11 @@ fn main() {
             // eprint!(" (64): {query:>4.1}");
             for threads in 1..=6 {
                 let query = time(loops, &keys, || {
-                    pt.index_parallel::<64>(&keys, threads, false)
+                    index_parallel::<64>(&pt, &keys, threads, false)
                 });
                 eprintln!(" (64t{threads})  : {query:>5.2}ns");
                 let query = time(loops, &keys, || {
-                    pt.index_parallel::<64>(&keys, threads, true)
+                    index_parallel::<64>(&pt, &keys, threads, true)
                 });
                 eprintln!(" (64t{threads})+r: {query:>5.2}ns");
             }
@@ -149,4 +154,29 @@ fn main() {
             // eprintln!();
         }
     }
+}
+
+/// Wrapper around `index_stream` that runs multiple threads.
+fn index_parallel<const K: usize>(pt: &PT, xs: &[u64], threads: usize, minimal: bool) -> usize {
+    let chunk_size = xs.len().div_ceil(threads);
+    let sum = AtomicUsize::new(0);
+    rayon::scope(|scope| {
+        for thread_idx in 0..threads {
+            let sum = &sum;
+            scope.spawn(move |_| {
+                let start_idx = thread_idx * chunk_size;
+                let end = min((thread_idx + 1) * chunk_size, xs.len());
+
+                let thread_sum = if minimal {
+                    pt.index_stream::<K, true>(&xs[start_idx..end])
+                        .sum::<usize>()
+                } else {
+                    pt.index_stream::<K, false>(&xs[start_idx..end])
+                        .sum::<usize>()
+                };
+                sum.fetch_add(thread_sum, Ordering::Relaxed);
+            });
+        }
+    });
+    sum.load(Ordering::Relaxed)
 }

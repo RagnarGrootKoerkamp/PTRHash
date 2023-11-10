@@ -1,11 +1,3 @@
-use std::{
-    cmp::min,
-    iter,
-    sync::atomic::{AtomicUsize, Ordering},
-};
-
-use lazy_static::lazy_static;
-
 use super::*;
 
 impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
@@ -16,11 +8,11 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         &'a self,
         xs: impl IntoIterator<Item = &'a Key> + 'a,
     ) -> impl Iterator<Item = usize> + 'a {
-        lazy_static! {
+        lazy_static::lazy_static! {
             static ref DEFAULT_KEY: Key = Key::default();
         }
         // Append K values at the end of the iterator to make sure we wrap sufficiently.
-        let tail = iter::repeat(&*DEFAULT_KEY).take(K);
+        let tail = std::iter::repeat(&*DEFAULT_KEY).take(K);
         let mut xs = xs.into_iter().chain(tail);
 
         let mut next_hx: [Hash; K] = [Hash::default(); K];
@@ -47,37 +39,6 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
                 slot
             }
         })
-    }
-
-    /// Wrapper around `index_stream` that
-    #[doc(hidden = "internal testing only")]
-    pub fn index_parallel<'a, const K: usize>(
-        &'a self,
-        xs: &'a [Key],
-        threads: usize,
-        minimal: bool,
-    ) -> usize {
-        let chunk_size = xs.len().div_ceil(threads);
-        let sum = AtomicUsize::new(0);
-        rayon::scope(|scope| {
-            for thread_idx in 0..threads {
-                let sum = &sum;
-                scope.spawn(move |_| {
-                    let start_idx = thread_idx * chunk_size;
-                    let end = min((thread_idx + 1) * chunk_size, xs.len());
-
-                    let thread_sum = if minimal {
-                        self.index_stream::<K, true>(&xs[start_idx..end])
-                            .sum::<usize>()
-                    } else {
-                        self.index_stream::<K, false>(&xs[start_idx..end])
-                            .sum::<usize>()
-                    };
-                    sum.fetch_add(thread_sum, Ordering::Relaxed);
-                });
-            }
-        });
-        sum.load(Ordering::Relaxed)
     }
 
     #[allow(unused)]
