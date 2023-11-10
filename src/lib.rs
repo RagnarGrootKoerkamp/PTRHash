@@ -69,6 +69,10 @@ pub struct PtrHashParams {
     pub print_stats: bool,
 }
 
+/// Default parameter values should provide reasonably fast construction for all n up to 2^32:
+/// - `alpha=0.98`
+/// - `c=9.0`
+/// - `slots_per_part=2^18=262144`
 impl Default for PtrHashParams {
     fn default() -> Self {
         Self {
@@ -156,8 +160,24 @@ pub struct PtrHash<F: Packed, Hx: Hasher> {
 }
 
 impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
-    /// Additionally customize the part size `s`, `beta=0.6`, and `gamma=0.3`.
-    /// Also allows to print statistics on bucket sizes and pilot values.
+    /// Create a new PtrHash instance from the given keys.
+    ///
+    /// NOTE: Only up to 2^32 keys are supported.
+    ///
+    /// Default parameters `alpha=0.98` and `c=9.0` should give fast
+    /// construction that always succeeds, using `2.69 bits/key`.  Depending on
+    /// the number of keys, you may be able to lower `c` (or slightly increase
+    /// `alpha`) to reduce memory usage, at the cost of increasing construction
+    /// time.
+    ///
+    /// Construction may use all available threads. To limit to fewer threads, use:
+    /// ```rust
+    /// let threads = 1;
+    /// rayon::ThreadPoolBuilder::new()
+    /// .num_threads(threads)
+    /// .build_global()
+    /// .unwrap();
+    /// ```
     pub fn new(keys: &Vec<Key>, params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
         ptr_hash.compute_pilots(keys);
