@@ -330,8 +330,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         (hx ^ hp).reduce(self.rem_s)
     }
 
-    /// Get the index of the given key.
-    /// This does not remap values >n and does not give a MPHF. Use `index_minimal` for that.
+    /// Get a non-minimal index of the given key.
+    /// Use `index_minimal` to get a key in `[0, n)`.
     ///
     /// `index.rs` has additional streaming/SIMD implementations.
     pub fn index(&self, key: &Key) -> usize {
