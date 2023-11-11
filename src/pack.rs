@@ -1,6 +1,6 @@
 use sucds::mii_sequences::{EliasFano, EliasFanoBuilder};
 
-use crate::tiny_ef::TinyEF;
+use crate::tiny_ef::TinyEf;
 
 pub trait Packed: Sync {
     fn default() -> Self;
@@ -77,7 +77,7 @@ impl Packed for EliasFano {
     }
 }
 
-impl Packed for TinyEF {
+impl Packed for TinyEf {
     fn default() -> Self {
         Default::default()
     }

@@ -13,20 +13,20 @@ const L: usize = 44;
 /// The main benefit is that this only requires reading a single cacheline per
 /// query, where Elias-Fano encoding usually needs 3 reads.
 #[derive(Default)]
-pub struct TinyEF {
-    ef: Vec<TinyEFUnit>,
+pub struct TinyEf {
+    ef: Vec<TinyEfUnit>,
 }
 
-impl TinyEF {
+impl TinyEf {
     pub fn new(vals: Vec<u64>) -> Self {
         let mut p = Vec::with_capacity(vals.len().div_ceil(L));
         let it = vals.array_chunks();
         for vs in it.clone() {
-            p.push(TinyEFUnit::new(&vs.map(|x| x as u32)));
+            p.push(TinyEfUnit::new(&vs.map(|x| x as u32)));
         }
         let r = it.remainder();
         if !r.is_empty() {
-            p.push(TinyEFUnit::new_slice(
+            p.push(TinyEfUnit::new_slice(
                 &r.iter().map(|&x| x as u32).collect_vec(),
             ));
         }
@@ -44,13 +44,13 @@ impl TinyEF {
         }
     }
     pub fn size_in_bytes(&self) -> usize {
-        self.ef.len() * std::mem::size_of::<TinyEFUnit>()
+        self.ef.len() * std::mem::size_of::<TinyEfUnit>()
     }
 }
 
 /// Single-cacheline Elias-Fano encoding that holds 44 values in a range of size 256*84=21504.
 #[repr(align(64))]
-struct TinyEFUnit {
+struct TinyEfUnit {
     // The offset of the first element.
     // Lower 8 bits are always 0 for simplicity.
     offset: u32,
@@ -62,7 +62,7 @@ struct TinyEFUnit {
     low_bits: [u8; L],
 }
 
-impl TinyEFUnit {
+impl TinyEfUnit {
     fn new(vals: &[u32; L]) -> Self {
         assert!(
             vals[L - 1] - vals[0] <= 256 * (128 - L as u32),
@@ -140,7 +140,7 @@ fn test() {
         vals.sort_unstable();
         vals[0] = 0;
 
-        let lef = TinyEFUnit::new(&vals);
+        let lef = TinyEfUnit::new(&vals);
         for i in 0..L {
             assert_eq!(lef.get(i), vals[i], "error; full list: {:?}", vals);
         }

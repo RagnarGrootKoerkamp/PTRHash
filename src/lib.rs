@@ -47,7 +47,7 @@ use std::{
 };
 use sucds::mii_sequences::EliasFano;
 
-use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEF, util::log_duration};
+use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
 
 /// Parameters for PtrHash construction.
 ///
@@ -90,7 +90,7 @@ impl Default for PtrHashParams {
 // Externally visible aliases for convenience.
 
 /// The recommended way to use PtrHash is to use TinyEF as backing storage for the remap.
-pub type FastPtrHash = PtrHash<TinyEF, hash::FxHash>;
+pub type FastPtrHash = PtrHash<TinyEf, hash::FxHash>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
 pub type MinimalPtrHash = PtrHash<EliasFano, hash::FxHash>;
