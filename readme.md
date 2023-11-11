@@ -16,7 +16,7 @@ matrix [@curious_coding:matrix.org](https://matrix.to/#/@curious_coding:matrix.o
 ## Performance
 
 PTRHash supports up to $2^{32}$ keys. For default parameters $\alpha = 0.98$,
-$c=9$:
+$c=9$, and $n=10^9$:
 - Construction takes $19s$ on my `i7-10750H` ($3.6GHz$) using $6$ threads:
   - $5s$ to sort hashes,
   - $12s$ to find pilots.
@@ -27,7 +27,8 @@ $c=9$:
   - $18ns/key$ when indexing sequentially,
   - $8.2ns/key$ when streaming with prefetching,
   - $2.9ns/key$ when streaming with prefetching, using $4$ threads.
-- When giving up on minimality of the hash and allowing values up to $n/\alpha$, times go down slightly:
+- When giving up on minimality of the hash and allowing values up to $n/\alpha$,
+  query times slightly improve:
   - $14ns/key$ when indexing sequentially,
   - $7.5ns/key$ when streaming using prefetching,
   - $2.8ns/key$ when streaming with prefetching, using $4$ threads.
