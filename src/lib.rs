@@ -22,6 +22,7 @@ use bitvec::{bitvec, vec::BitVec};
 use itertools::Itertools;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{default::Default, marker::PhantomData, time::Instant};
 use sucds::mii_sequences::EliasFano;
@@ -160,6 +161,24 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// ```
     pub fn new(keys: &[Key], params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
+        ptr_hash.compute_pilots(keys.par_iter());
+        ptr_hash.print_bits_per_element();
+        ptr_hash
+    }
+
+    /// Same as `new` above, but takes a `ParallelIterator` over keys instead of a slice.
+    /// The iterator must be cloneable for two reasons:
+    /// - Construction can fail for the first seed (e.g. due to duplicate
+    ///   hashes), in which case a new pass over keys is need.
+    /// - TODO: When all hashes do not fit in memory simultaneously, multiple passes
+    ///   over the keys are made to process keys one shard at a time.
+    /// NOTE: The exact API may change here depending on what's most convenient to use.
+    pub fn new_from_par_iter<'a>(
+        n: usize,
+        keys: impl ParallelIterator<Item = &'a Key> + Clone,
+        params: PtrHashParams,
+    ) -> Self {
+        let mut ptr_hash = Self::init(n, params);
         ptr_hash.compute_pilots(keys);
         ptr_hash.print_bits_per_element();
         ptr_hash
@@ -333,7 +352,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         }
     }
 
-    fn compute_pilots(&mut self, keys: &[Key]) {
+    fn compute_pilots<'a>(&mut self, keys: impl ParallelIterator<Item = &'a Key> + Clone) {
         // Step 4: Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
         let mut pilots: Vec<u8> = vec![];
@@ -360,7 +379,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
 
             // Step 2: Determine the buckets.
             let start = std::time::Instant::now();
-            let Some((hashes, part_starts)) = self.sort_parts(keys) else {
+            let Some((hashes, part_starts)) = self.sort_parts(keys.clone()) else {
                 // Found duplicate hashes.
                 continue 's;
             };

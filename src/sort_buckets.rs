@@ -1,14 +1,7 @@
-use std::time::Instant;
-
-use rayon::{
-    prelude::{IntoParallelRefIterator, ParallelIterator},
-    slice::ParallelSlice,
-};
-use rdst::RadixSort;
-
-use crate::types::BucketIdx;
-
 use super::*;
+use crate::types::BucketIdx;
+use rdst::RadixSort;
+use std::time::Instant;
 
 impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// Returns:
@@ -18,7 +11,10 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     ///
     /// This returns None if duplicate hashes are found.
     #[must_use]
-    pub(super) fn sort_parts(&self, keys: &[Key]) -> Option<(Vec<Hash>, Vec<u32>)> {
+    pub(super) fn sort_parts<'a>(
+        &self,
+        keys: impl ParallelIterator<Item = &'a Key>,
+    ) -> Option<(Vec<Hash>, Vec<u32>)> {
         // For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
         // <self.p1 and those >=self.p1, and then sort each group using the low
@@ -27,7 +23,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
 
         let start = Instant::now();
         // 1. Collect hashes per part.
-        let mut hashes: Vec<Hash> = keys.par_iter().map(|key| self.hash_key(key)).collect();
+        let mut hashes: Vec<Hash> = keys.map(|key| self.hash_key(key)).collect();
         let start = log_duration("┌  hash keys", start);
         // 2. Radix sort hashes.
         // TODO: Write robinhood sort that inserts in the right place directly.

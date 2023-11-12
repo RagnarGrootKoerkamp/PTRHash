@@ -36,3 +36,10 @@ fn index_stream() {
         assert_eq!(sum, (n * (n - 1)) / 2);
     }
 }
+
+#[test]
+fn new_par_iter() {
+    let n = 10_000_000;
+    let keys = generate_keys(n);
+    FastPtrHash::new_from_par_iter(n, keys.par_iter(), Default::default());
+}
