@@ -49,7 +49,7 @@ impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
 /// Single-cacheline Elias-Fano encoding that holds 44 40-bit values in a range of size 256*84=21504.
 #[derive(Epserde, Clone, Copy)]
 #[repr(C)]
-#[repr(align(64))]
+//#[repr(align(64))]
 #[zero_copy]
 pub struct TinyEfUnit {
     // The offset of the first element, divided by 256.
