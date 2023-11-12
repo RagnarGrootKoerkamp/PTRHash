@@ -19,7 +19,7 @@ pub fn prefetch_read_data<T>(ptr: *const T) {
     }
     #[cfg(target_arch = "aarch64")]
     unsafe {
-        std::arch::aarch64::__prefetch(ptr as *const i8, std::arch::aarch64::_PREFETCH_LOCALITY3);
+        std::arch::aarch64::_prefetch(ptr as *const i8, std::arch::aarch64::_PREFETCH_LOCALITY3);
     }
     #[cfg(not(any(target_arch = "x86_64", target_arch = "x86", target_arch = "aarch64")))]
     {
