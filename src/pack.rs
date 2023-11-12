@@ -82,7 +82,7 @@ impl Packed for TinyEf {
         Default::default()
     }
     fn new(vals: Vec<u64>) -> Self {
-        Self::new(vals)
+        Self::new(&vals)
     }
     fn index(&self, index: usize) -> u64 {
         self.index(index)
