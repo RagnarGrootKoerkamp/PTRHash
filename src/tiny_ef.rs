@@ -53,12 +53,12 @@ impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
 #[repr(align(64))]
 #[zero_copy]
 pub struct TinyEfUnit {
-    // The offset of the first element, divided by 256.
-    reduced_offset: u32,
     // 2*64 = 128 bits to indicate where 256 boundaries are crossed.
     // There are 48 1-bits corresponding to the stored numbers, and the number
     // of 0-bits before each number indicates the number of times 256 must be added.
     high_boundaries: [u64; 2],
+    // The offset of the first element, divided by 256.
+    reduced_offset: u32,
     // Last 8 bits of each number.
     low_bits: [u8; L],
 }
