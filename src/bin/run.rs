@@ -5,7 +5,9 @@ use std::{
 
 use clap::{Parser, Subcommand};
 use colored::Colorize;
+use epserde::prelude::*;
 use ptr_hash::{
+    pack::Packed,
     util::{bench_index, time},
     *,
 };
@@ -53,9 +55,9 @@ enum Command {
     },
 }
 
-type PT = FastPtrHash;
+type PT<V> = FastPtrHash<V>;
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     let Args { command } = Args::parse();
 
     match command {
@@ -73,7 +75,7 @@ fn main() {
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
             let start = std::time::Instant::now();
-            PT::new(
+            let pt = PT::new(
                 &keys,
                 PtrHashParams {
                     c,
@@ -87,6 +89,7 @@ fn main() {
                 "{}",
                 format!(" total build: {:>14.2?}", start.elapsed()).bold()
             );
+            Serialize::store(&pt, "pt.bin")?;
         }
         Command::Query {
             n,
@@ -97,21 +100,8 @@ fn main() {
             s,
             threads,
         } => {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build_global()
-                .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
-            let pt = PT::new_random(
-                n,
-                PtrHashParams {
-                    c,
-                    alpha,
-                    print_stats: stats,
-                    slots_per_part: s,
-                    ..Default::default()
-                },
-            );
+            let pt = <PT<Vec<u8>>>::load_mem("pt.bin")?;
             let loops = total.div_ceil(n);
 
             let query = bench_index(loops, &keys, |key| pt.index(key));
@@ -127,11 +117,11 @@ fn main() {
             // eprint!(" (64): {query:>4.1}");
             for threads in 1..=6 {
                 let query = time(loops, &keys, || {
-                    index_parallel::<64>(&pt, &keys, threads, false)
+                    index_parallel::<64, _>(&pt, &keys, threads, false)
                 });
                 eprintln!(" (64t{threads})  : {query:>5.2}ns");
                 let query = time(loops, &keys, || {
-                    index_parallel::<64>(&pt, &keys, threads, true)
+                    index_parallel::<64, _>(&pt, &keys, threads, true)
                 });
                 eprintln!(" (64t{threads})+r: {query:>5.2}ns");
             }
@@ -152,13 +142,21 @@ fn main() {
             // eprintln!();
         }
     }
+
+    Ok(())
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<const K: usize>(pt: &PT, xs: &[u64], threads: usize, minimal: bool) -> usize {
+fn index_parallel<const K: usize, V: AsRef<[u8]> + Packed + Default>(
+    pt: impl AsRef<PT<V>> + Send + Sync,
+    xs: &[u64],
+    threads: usize,
+    minimal: bool,
+) -> usize {
     let chunk_size = xs.len().div_ceil(threads);
     let sum = AtomicUsize::new(0);
     rayon::scope(|scope| {
+        let pt = &pt;
         for thread_idx in 0..threads {
             let sum = &sum;
             scope.spawn(move |_| {
@@ -166,10 +164,12 @@ fn index_parallel<const K: usize>(pt: &PT, xs: &[u64], threads: usize, minimal: 
                 let end = min((thread_idx + 1) * chunk_size, xs.len());
 
                 let thread_sum = if minimal {
-                    pt.index_stream::<K, true>(&xs[start_idx..end])
+                    pt.as_ref()
+                        .index_stream::<K, true>(&xs[start_idx..end])
                         .sum::<usize>()
                 } else {
-                    pt.index_stream::<K, false>(&xs[start_idx..end])
+                    pt.as_ref()
+                        .index_stream::<K, false>(&xs[start_idx..end])
                         .sum::<usize>()
                 };
                 sum.fetch_add(thread_sum, Ordering::Relaxed);
