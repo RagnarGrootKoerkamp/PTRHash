@@ -347,7 +347,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         let b = self.bucket(hx);
         let p = self.pilots.index(b);
         let slot = self.slot(hx, p);
-        if std::intrinsics::likely(slot < self.n) {
+        if slot < self.n {
             slot
         } else {
             self.remap.index(slot - self.n) as usize

@@ -33,7 +33,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             let pilot = self.pilots.index(cur_i);
             // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.slot`.
             let slot = self.slot(cur_hx, pilot);
-            if MINIMAL && std::intrinsics::unlikely(slot >= self.n) {
+            if MINIMAL && slot >= self.n {
                 self.remap.index(slot - self.n) as usize
             } else {
                 slot
