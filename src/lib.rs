@@ -1,18 +1,3 @@
-#![feature(
-    array_chunks,
-    core_intrinsics,
-    generic_const_exprs,
-    is_sorted,
-    iter_advance_by,
-    iter_array_chunks,
-    iter_collect_into,
-    portable_simd,
-    slice_group_by,
-    slice_index_methods,
-    slice_partition_dedup,
-    split_array
-)]
-#![allow(incomplete_features)]
 #![allow(clippy::needless_range_loop)]
 
 /// Customizable Hasher trait.
@@ -39,13 +24,9 @@ use epserde::prelude::*;
 use itertools::Itertools;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use rayon::prelude::*;
 use rdst::RadixSort;
-use std::{
-    default::Default,
-    marker::PhantomData,
-    simd::{LaneCount, Simd, SupportedLaneCount},
-    time::Instant,
-};
+use std::{default::Default, marker::PhantomData, time::Instant};
 use sucds::mii_sequences::EliasFano;
 
 use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
@@ -183,8 +164,26 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
     /// .build_global()
     /// .unwrap();
     /// ```
-    pub fn new(keys: &Vec<Key>, params: PtrHashParams) -> Self {
+    pub fn new(keys: &[Key], params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
+        ptr_hash.compute_pilots(keys.par_iter());
+        ptr_hash.print_bits_per_element();
+        ptr_hash
+    }
+
+    /// Same as `new` above, but takes a `ParallelIterator` over keys instead of a slice.
+    /// The iterator must be cloneable for two reasons:
+    /// - Construction can fail for the first seed (e.g. due to duplicate
+    ///   hashes), in which case a new pass over keys is need.
+    /// - TODO: When all hashes do not fit in memory simultaneously, multiple passes
+    ///   over the keys are made to process keys one shard at a time.
+    /// NOTE: The exact API may change here depending on what's most convenient to use.
+    pub fn new_from_par_iter<'a>(
+        n: usize,
+        keys: impl ParallelIterator<Item = &'a Key> + Clone,
+        params: PtrHashParams,
+    ) -> Self {
+        let mut ptr_hash = Self::init(n, params);
         ptr_hash.compute_pilots(keys);
         ptr_hash.print_bits_per_element();
         ptr_hash
@@ -273,7 +272,92 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
         }
     }
 
-    fn compute_pilots(&mut self, keys: &[Key]) {
+    fn hash_key(&self, x: &Key) -> Hash {
+        Hx::hash(x, self.seed)
+    }
+
+    fn hash_pilot(&self, p: u64) -> Hash {
+        MulHash::hash(&p, self.seed)
+    }
+
+    fn part(&self, hx: Hash) -> usize {
+        hx.reduce(self.rem_parts)
+    }
+
+    /// Map hx to a bucket in the range [0, self.b).
+    /// Hashes <self.p1 are mapped to large buckets [0, self.p2).
+    /// Hashes >=self.p1 are mapped to small [self.p2, self.b).
+    ///
+    /// (Unless SPLIT_BUCKETS is false, in which case all hashes are mapped to [0, self.b).)
+    fn bucket_in_part(&self, hx: Hash) -> usize {
+        if !SPLIT_BUCKETS {
+            return hx.reduce(self.rem_b);
+        }
+
+        // NOTE: There is a lot of MOV/CMOV going on here.
+        let is_large = hx >= self.p1;
+        let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
+        let b = is_large as usize * self.c3 + hx.reduce(rem);
+
+        debug_assert!(!is_large || self.p2 <= b);
+        debug_assert!(!is_large || b < self.b);
+        debug_assert!(is_large || b < self.p2);
+
+        b
+    }
+
+    /// See bucket.rs for additional implementations.
+    /// Returns the offset in the slots array for the current part and the bucket index.
+    fn bucket(&self, hx: Hash) -> usize {
+        if !SPLIT_BUCKETS {
+            return hx.reduce(self.rem_b_total);
+        }
+
+        // Extract the high bits for part selection; do normal bucket
+        // computation within the part using the remaining bits.
+        // NOTE: This is somewhat slow, but doing better is hard.
+        let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
+        let bucket = self.bucket_in_part(hx);
+        part * self.b + bucket
+    }
+
+    fn slot(&self, hx: Hash, pilot: u64) -> usize {
+        (self.part(hx) << self.s_bits) + self.slot_in_part(hx, pilot)
+    }
+
+    fn slot_in_part(&self, hx: Hash, pilot: u64) -> usize {
+        (hx ^ self.hash_pilot(pilot)).reduce(self.rem_s)
+    }
+
+    fn slot_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
+        (hx ^ hp).reduce(self.rem_s)
+    }
+
+    /// Get a non-minimal index of the given key.
+    /// Use `index_minimal` to get a key in `[0, n)`.
+    ///
+    /// `index.rs` has additional streaming/SIMD implementations.
+    pub fn index(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
+        let b = self.bucket(hx);
+        let pilot = self.pilots.index(b);
+        self.slot(hx, pilot)
+    }
+
+    /// Get the index for `key` in `[0, n)`.
+    pub fn index_minimal(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
+        let b = self.bucket(hx);
+        let p = self.pilots.index(b);
+        let slot = self.slot(hx, p);
+        if slot < self.n {
+            slot
+        } else {
+            self.remap.index(slot - self.n) as usize
+        }
+    }
+
+    fn compute_pilots<'a>(&mut self, keys: impl ParallelIterator<Item = &'a Key> + Clone) {
         // Step 4: Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
         let mut pilots: Vec<u8> = vec![];
@@ -300,7 +384,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
 
             // Step 2: Determine the buckets.
             let start = std::time::Instant::now();
-            let Some((hashes, part_starts)) = self.sort_parts(keys) else {
+            let Some((hashes, part_starts)) = self.sort_parts(keys.clone()) else {
                 // Found duplicate hashes.
                 continue 's;
             };

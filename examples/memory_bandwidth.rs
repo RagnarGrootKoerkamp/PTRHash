@@ -1,6 +1,5 @@
 #![allow(unused)]
-#![feature(core_intrinsics)]
-use std::{hint::black_box, intrinsics::prefetch_read_data, time::Instant};
+use std::{hint::black_box, time::Instant};
 
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -75,7 +74,7 @@ fn test_stride<const PREFETCH: bool>(data: &Vec<u8>, s: usize) {
             for i in (offset * CACHELINE..n).step_by(cs) {
                 unsafe {
                     if PREFETCH {
-                        prefetch_read_data(data.as_ptr().add(i + 10 * cs), 3);
+                        ptr_hash::util::prefetch_read_data(data.as_ptr().add(i + 10 * cs));
                     }
                     sum2 += *data.get_unchecked(i) as u64;
                 }
