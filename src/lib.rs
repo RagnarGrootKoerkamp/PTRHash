@@ -158,7 +158,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// .build_global()
     /// .unwrap();
     /// ```
-    pub fn new(keys: &Vec<Key>, params: PtrHashParams) -> Self {
+    pub fn new(keys: &[Key], params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
         ptr_hash.compute_pilots(keys);
         ptr_hash.print_bits_per_element();
