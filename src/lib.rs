@@ -1,11 +1,8 @@
 #![feature(
     array_chunks,
     generic_const_exprs,
-    iter_advance_by,
     iter_array_chunks,
     portable_simd,
-    slice_group_by,
-    slice_index_methods,
     split_array
 )]
 #![allow(incomplete_features)]
