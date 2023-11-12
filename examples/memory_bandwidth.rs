@@ -1,5 +1,4 @@
 #![allow(unused)]
-#![feature(core_intrinsics)]
 use std::{hint::black_box, time::Instant};
 
 use rand::{thread_rng, Rng};
