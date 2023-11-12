@@ -36,7 +36,7 @@ macro_rules! vec_impl {
             fn prefetch(&self, index: usize) {
                 unsafe {
                     let address = self.as_ptr().add(index) as *const u64;
-                    std::intrinsics::prefetch_read_data(address, 3);
+                    crate::util::prefetch_read_data(address);
                 }
             }
             fn size_in_bytes(&self) -> usize {

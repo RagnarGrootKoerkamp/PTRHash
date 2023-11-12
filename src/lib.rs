@@ -1,8 +1,6 @@
 #![feature(
     array_chunks,
-    core_intrinsics,
     generic_const_exprs,
-    is_sorted,
     iter_advance_by,
     iter_array_chunks,
     iter_collect_into,

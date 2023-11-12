@@ -40,7 +40,7 @@ impl TinyEf {
     pub fn prefetch(&self, index: usize) {
         unsafe {
             let address = self.ef.as_ptr().add(index / L) as *const u64;
-            std::intrinsics::prefetch_read_data(address, 3);
+            crate::util::prefetch_read_data(address);
         }
     }
     pub fn size_in_bytes(&self) -> usize {
