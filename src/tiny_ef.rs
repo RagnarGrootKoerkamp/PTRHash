@@ -3,7 +3,7 @@ use std::cmp::min;
 /// Number of stored values per unit.
 const L: usize = 44;
 
-/// TinyEF is an integer encoding that packs chunks of 44 values into a single
+/// TinyEF is an integer encoding that packs chunks of 44 40-bit values into a single
 /// cacheline, using 64/44*8 = 11.6 bits per value.
 /// Each chunk can hold increasing values in a range of length 256*84=21504.
 ///
@@ -41,12 +41,11 @@ impl TinyEf {
     }
 }
 
-/// Single-cacheline Elias-Fano encoding that holds 44 values in a range of size 256*84=21504.
+/// Single-cacheline Elias-Fano encoding that holds 44 40-bit values in a range of size 256*84=21504.
 #[repr(align(64))]
 struct TinyEfUnit {
-    // The offset of the first element.
-    // Lower 8 bits are always 0 for simplicity.
-    offset: u32,
+    // The offset of the first element, divided by 256.
+    reduced_offset: u32,
     // 2*64 = 128 bits to indicate where 256 boundaries are crossed.
     // There are 48 1-bits corresponding to the stored numbers, and the number
     // of 0-bits before each number indicates the number of times 256 must be added.
@@ -67,9 +66,9 @@ impl TinyEfUnit {
             vals[0],
             vals[l - 1]
         );
-        assert!(vals[l - 1] <= u32::MAX as u64);
+        assert!(vals[l - 1] < (1 << 40));
 
-        let offset = vals[0] & 0xffff_ff00;
+        let offset = vals[0] & !0xff;
         let mut low_bits = [0u8; L];
         for (i, &v) in vals.iter().enumerate() {
             low_bits[i] = (v & 0xff) as u8;
@@ -81,7 +80,7 @@ impl TinyEfUnit {
             high_boundaries[idx / 64] |= 1 << (idx % 64);
         }
         Self {
-            offset: offset as u32,
+            reduced_offset: (offset >> 8) as u32,
             high_boundaries,
             low_bits,
         }
@@ -95,7 +94,7 @@ impl TinyEfUnit {
             64 + select_in_word(self.high_boundaries[1], idx - p)
         };
 
-        self.offset as u64 + self.low_bits[idx] as u64 + 256 * (one_pos as u64 - idx as u64)
+        256 * self.reduced_offset as u64 + 256 * (one_pos - idx) as u64 + self.low_bits[idx] as u64
     }
 }
 
