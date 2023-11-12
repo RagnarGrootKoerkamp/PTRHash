@@ -1,4 +1,5 @@
 use crate::hash::MulHash;
+use epserde::prelude::*;
 
 pub trait Reduce: Copy + Sync + std::fmt::Debug {
     /// Reduce into the range [0, d).
@@ -15,7 +16,9 @@ pub trait Reduce: Copy + Sync + std::fmt::Debug {
 /// FastReduce64
 /// Taken from https://lemire.me/blog/2016/06/27/a-fast-alternative-to-the-modulo-reduction/
 /// NOTE: This only uses the lg(n) high-order bits of entropy from the hash.
-#[derive(Copy, Clone, Debug)]
+#[derive(Epserde, Copy, Clone, Debug)]
+#[repr(C)]
+#[zero_copy]
 pub struct FastReduce {
     d: usize,
 }
@@ -35,7 +38,9 @@ impl Reduce for FastReduce {
 /// Multiply-Reduce 64
 /// Multiply by mixing constant C and take the required number of bits.
 /// Only works when the modulus is a power of 2.
-#[derive(Copy, Clone, Debug)]
+#[derive(Epserde, Copy, Clone, Debug)]
+#[repr(C)]
+#[zero_copy]
 pub struct MulReduce {
     mask: usize,
 }

@@ -1,3 +1,4 @@
+use epserde::prelude::*;
 use std::ops::{BitXor, Sub};
 
 use crate::{reduce::Reduce, Key};
@@ -11,8 +12,12 @@ use rdst::RadixKey;
 /// - xor, for h(x) ^ h(k)
 /// - reduce: h(x) -> [0, n)
 /// - ord: h(x) < p1 * n
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
-pub struct Hash(u64);
+#[derive(Epserde, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
+#[repr(C)]
+#[zero_copy]
+pub struct Hash {
+    hash: u64,
+}
 
 // Needed for radix_sort_unstable from rdst.
 impl RadixKey for Hash {
@@ -20,23 +25,23 @@ impl RadixKey for Hash {
 
     #[inline]
     fn get_level(&self, level: usize) -> u8 {
-        (self.0 >> (level * 8)) as u8
+        (self.hash >> (level * 8)) as u8
     }
 }
 
 impl Hash {
     pub fn new(v: u64) -> Self {
-        Hash(v)
+        Hash { hash: v }
     }
     pub fn get(&self) -> u64 {
-        self.0
+        self.hash
     }
     pub fn reduce<R: Reduce>(self, d: R) -> usize {
-        d.reduce(self.0)
+        d.reduce(self.hash)
     }
     pub fn reduce_with_remainder<R: Reduce>(self, d: R) -> (usize, Hash) {
-        let (r, h) = d.reduce_with_remainder(self.0);
-        (r, Hash(h))
+        let (r, h) = d.reduce_with_remainder(self.hash);
+        (r, Hash { hash: h })
     }
 }
 
@@ -44,7 +49,9 @@ impl Sub for Hash {
     type Output = Self;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        Self(self.0 - rhs.0)
+        Self {
+            hash: self.hash - rhs.hash,
+        }
     }
 }
 
@@ -52,7 +59,9 @@ impl BitXor for Hash {
     type Output = Self;
 
     fn bitxor(self, rhs: Self) -> Self::Output {
-        Self(self.0 ^ rhs.0)
+        Self {
+            hash: self.hash ^ rhs.hash,
+        }
     }
 }
 
@@ -64,13 +73,18 @@ pub struct Murmur;
 
 impl Hasher for Murmur {
     fn hash(x: &Key, seed: u64) -> Hash {
-        Hash(murmur64a(
-            // Pass the key as a byte slice.
-            unsafe {
-                std::slice::from_raw_parts(x as *const Key as *const u8, std::mem::size_of::<Key>())
-            },
-            seed,
-        ))
+        Hash {
+            hash: murmur64a(
+                // Pass the key as a byte slice.
+                unsafe {
+                    std::slice::from_raw_parts(
+                        x as *const Key as *const u8,
+                        std::mem::size_of::<Key>(),
+                    )
+                },
+                seed,
+            ),
+        }
     }
 }
 
@@ -79,7 +93,7 @@ pub struct XorHash;
 
 impl Hasher for XorHash {
     fn hash(x: &Key, seed: u64) -> Hash {
-        Hash(*x ^ seed)
+        Hash { hash: *x ^ seed }
     }
 }
 
@@ -95,7 +109,9 @@ impl MulHash {
 
 impl Hasher for MulHash {
     fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash(Self::C.wrapping_mul(*x))
+        Hash {
+            hash: Self::C.wrapping_mul(*x),
+        }
     }
 }
 
@@ -104,14 +120,17 @@ pub struct NoHash;
 
 impl Hasher for NoHash {
     fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash(*x)
+        Hash { hash: *x }
     }
 }
 
+#[derive(Epserde, Clone, Copy)]
 pub struct FxHash;
 
 impl Hasher for FxHash {
     fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash(fxhash::hash64(x))
+        Hash {
+            hash: fxhash::hash64(x),
+        }
     }
 }

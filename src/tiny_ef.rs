@@ -1,6 +1,6 @@
-use std::cmp::min;
-
 use common_traits::SelectInWord;
+use epserde::prelude::*;
+use std::cmp::min;
 
 /// Number of stored values per unit.
 const L: usize = 44;
@@ -14,7 +14,7 @@ const L: usize = 44;
 ///
 /// The main benefit is that this only requires reading a single cacheline per
 /// query, where Elias-Fano encoding usually needs 3 reads.
-#[derive(Default)]
+#[derive(Epserde, Default)]
 pub struct TinyEf {
     ef: Vec<TinyEfUnit>,
 }
@@ -44,7 +44,10 @@ impl TinyEf {
 }
 
 /// Single-cacheline Elias-Fano encoding that holds 44 40-bit values in a range of size 256*84=21504.
+#[derive(Epserde, Clone, Copy)]
+#[repr(C)]
 #[repr(align(64))]
+#[zero_copy]
 struct TinyEfUnit {
     // The offset of the first element, divided by 256.
     reduced_offset: u32,

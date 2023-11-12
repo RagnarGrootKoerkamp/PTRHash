@@ -51,6 +51,36 @@ vec_impl!(u16);
 vec_impl!(u32);
 vec_impl!(u64);
 
+macro_rules! ref_impl {
+    ($t:ty) => {
+        impl Packed for &[$t] {
+            fn default() -> Self {
+                Default::default()
+            }
+            fn new(_vals: Vec<u64>) -> Self {
+                unreachable!();
+            }
+            fn index(&self, index: usize) -> u64 {
+                unsafe { (*self.get_unchecked(index)) as u64 }
+            }
+            fn prefetch(&self, index: usize) {
+                unsafe {
+                    let address = self.as_ptr().add(index) as *const u64;
+                    crate::util::prefetch_read_data(address);
+                }
+            }
+            fn size_in_bytes(&self) -> usize {
+                self.len() * std::mem::size_of::<$t>()
+            }
+        }
+    };
+}
+
+ref_impl!(u8);
+ref_impl!(u16);
+ref_impl!(u32);
+ref_impl!(u64);
+
 impl Packed for EliasFano {
     fn default() -> Self {
         Default::default()
