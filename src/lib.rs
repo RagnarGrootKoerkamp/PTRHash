@@ -1,11 +1,4 @@
-#![feature(
-    array_chunks,
-    generic_const_exprs,
-    iter_array_chunks,
-    portable_simd,
-    split_array
-)]
-#![allow(incomplete_features)]
+#![feature(array_chunks, split_array)]
 #![allow(clippy::needless_range_loop)]
 
 /// Customizable Hasher trait.
@@ -32,12 +25,7 @@ use itertools::Itertools;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rdst::RadixSort;
-use std::{
-    default::Default,
-    marker::PhantomData,
-    simd::{LaneCount, Simd, SupportedLaneCount},
-    time::Instant,
-};
+use std::{default::Default, marker::PhantomData, time::Instant};
 use sucds::mii_sequences::EliasFano;
 
 use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
