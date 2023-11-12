@@ -102,7 +102,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             let mut slots_tmp = vec![0; max_bucket_len];
             move |b: BucketIdx, p: Pilot| {
                 slots_tmp.clear();
-                slots_for_bucket(b, p).collect_into(&mut slots_tmp);
+                slots_tmp.extend(slots_for_bucket(b, p));
                 slots_tmp.sort_unstable();
                 !slots_tmp.partition_dedup().1.is_empty()
             }
