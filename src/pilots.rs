@@ -10,14 +10,14 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     ) -> Option<(u64, Hash)> {
         // This gives ~10% speedup.
         match bucket.len() {
-            1 => self.find_pilot_array(kmax, bucket.split_array_ref::<1>().0, taken),
-            2 => self.find_pilot_array(kmax, bucket.split_array_ref::<2>().0, taken),
-            3 => self.find_pilot_array(kmax, bucket.split_array_ref::<3>().0, taken),
-            4 => self.find_pilot_array(kmax, bucket.split_array_ref::<4>().0, taken),
-            5 => self.find_pilot_array(kmax, bucket.split_array_ref::<5>().0, taken),
-            6 => self.find_pilot_array(kmax, bucket.split_array_ref::<6>().0, taken),
-            7 => self.find_pilot_array(kmax, bucket.split_array_ref::<7>().0, taken),
-            8 => self.find_pilot_array(kmax, bucket.split_array_ref::<8>().0, taken),
+            1 => self.find_pilot_array::<1>(kmax, bucket.try_into().unwrap(), taken),
+            2 => self.find_pilot_array::<2>(kmax, bucket.try_into().unwrap(), taken),
+            3 => self.find_pilot_array::<3>(kmax, bucket.try_into().unwrap(), taken),
+            4 => self.find_pilot_array::<4>(kmax, bucket.try_into().unwrap(), taken),
+            5 => self.find_pilot_array::<5>(kmax, bucket.try_into().unwrap(), taken),
+            6 => self.find_pilot_array::<6>(kmax, bucket.try_into().unwrap(), taken),
+            7 => self.find_pilot_array::<7>(kmax, bucket.try_into().unwrap(), taken),
+            8 => self.find_pilot_array::<8>(kmax, bucket.try_into().unwrap(), taken),
             _ => self.find_pilot_slice(kmax, bucket, taken),
         }
     }
