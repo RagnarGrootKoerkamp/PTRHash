@@ -6,7 +6,6 @@
     portable_simd,
     slice_group_by,
     slice_index_methods,
-    slice_partition_dedup,
     split_array
 )]
 #![allow(incomplete_features)]

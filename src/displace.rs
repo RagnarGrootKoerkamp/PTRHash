@@ -104,7 +104,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
                 slots_tmp.clear();
                 slots_tmp.extend(slots_for_bucket(b, p));
                 slots_tmp.sort_unstable();
-                !slots_tmp.partition_dedup().1.is_empty()
+                slots_tmp.iter().tuple_windows().any(|(a, b)| a == b)
             }
         };
 
