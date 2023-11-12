@@ -31,6 +31,7 @@ use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
 use sucds::mii_sequences::EliasFano;
+use tiny_ef::TinyEfUnit;
 
 use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
 
@@ -87,10 +88,10 @@ impl Default for PtrHashParams {
 // Externally visible aliases for convenience.
 
 /// The recommended way to use PtrHash is to use TinyEF as backing storage for the remap.
-pub type FastPtrHash<V> = PtrHash<TinyEf, hash::FxHash, V>;
+pub type FastPtrHash<E, V> = PtrHash<E, hash::FxHash, V>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type MinimalPtrHash<V> = PtrHash<EliasFano, hash::FxHash, V>;
+pub type MinimalPtrHash<E, V> = PtrHash<E, hash::FxHash, V>;
 
 /// They key type to be hashed.
 type Key = u64;

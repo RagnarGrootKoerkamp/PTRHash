@@ -1,5 +1,6 @@
 use common_traits::SelectInWord;
 use epserde::prelude::*;
+use itertools::Itertools;
 use std::cmp::min;
 
 /// Number of stored values per unit.
@@ -15,11 +16,11 @@ const L: usize = 44;
 /// The main benefit is that this only requires reading a single cacheline per
 /// query, where Elias-Fano encoding usually needs 3 reads.
 #[derive(Epserde, Default)]
-pub struct TinyEf {
-    ef: Vec<TinyEfUnit>,
+pub struct TinyEf<E = Vec<TinyEfUnit>> {
+    ef: E,
 }
 
-impl TinyEf {
+impl TinyEf<Vec<TinyEfUnit>> {
     pub fn new(vals: &[u64]) -> Self {
         let mut p = Vec::with_capacity(vals.len().div_ceil(L));
         for i in (0..vals.len()).step_by(L) {
@@ -28,18 +29,21 @@ impl TinyEf {
 
         Self { ef: p }
     }
+}
+
+impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
     pub fn index(&self, index: usize) -> u64 {
         // Note: This division is inlined by the compiler.
-        unsafe { (*self.ef.get_unchecked(index / L)).get(index % L) }
+        unsafe { (*self.ef.as_ref().get_unchecked(index / L)).get(index % L) }
     }
     pub fn prefetch(&self, index: usize) {
         unsafe {
-            let address = self.ef.as_ptr().add(index / L) as *const u64;
+            let address = self.ef.as_ref().as_ptr().add(index / L) as *const u64;
             crate::util::prefetch_read_data(address);
         }
     }
     pub fn size_in_bytes(&self) -> usize {
-        self.ef.len() * std::mem::size_of::<TinyEfUnit>()
+        self.ef.as_ref().len() * std::mem::size_of::<TinyEfUnit>()
     }
 }
 
@@ -48,7 +52,7 @@ impl TinyEf {
 #[repr(C)]
 #[repr(align(64))]
 #[zero_copy]
-struct TinyEfUnit {
+pub struct TinyEfUnit {
     // The offset of the first element, divided by 256.
     reduced_offset: u32,
     // 2*64 = 128 bits to indicate where 256 boundaries are crossed.

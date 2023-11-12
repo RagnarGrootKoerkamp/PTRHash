@@ -16,7 +16,7 @@ fn construct() {
         100_000_000,
     ] {
         let keys = generate_keys(n);
-        let ptr_hash = FastPtrHash::new(&keys, Default::default());
+        let ptr_hash = FastPtrHash::<TinyEf, _>::new(&keys, Default::default());
         let mut done = bitvec![0; n];
         for key in keys {
             let idx = ptr_hash.index_minimal(&key);
@@ -30,7 +30,7 @@ fn construct() {
 fn index_stream() {
     for n in [2, 10, 100, 1000, 10_000, 100_000, 1_000_000] {
         let keys = generate_keys(n);
-        let ptr_hash = FastPtrHash::new(&keys, Default::default());
+        let ptr_hash = FastPtrHash::<TinyEf, _>::new(&keys, Default::default());
         let sum = ptr_hash.index_stream::<32, true>(&keys).sum::<usize>();
         assert_eq!(sum, (n * (n - 1)) / 2);
     }
@@ -40,7 +40,7 @@ fn index_stream() {
 fn new_par_iter() {
     let n = 10_000_000;
     let keys = generate_keys(n);
-    FastPtrHash::new_from_par_iter(n, keys.par_iter(), Default::default());
+    FastPtrHash::<TinyEf, _>::new_from_par_iter(n, keys.par_iter(), Default::default());
 }
 
 #[test]
@@ -48,7 +48,7 @@ fn in_memory_sharding() {
     let n = 1 << 29;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
-    let ptr_hash = FastPtrHash::new_from_par_iter(
+    let ptr_hash = FastPtrHash::<TinyEf, _>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
@@ -71,7 +71,7 @@ fn on_disk_sharding() {
     let n = 1 << 29;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
-    let ptr_hash = FastPtrHash::new_from_par_iter(
+    let ptr_hash = FastPtrHash::<TinyEf, _>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
@@ -97,7 +97,7 @@ fn many_keys_memory() {
     let n_query = 1 << 27;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
-    let ptr_hash = FastPtrHash::new_from_par_iter(
+    let ptr_hash = FastPtrHash::<TinyEf, _>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
@@ -127,7 +127,7 @@ fn many_keys_disk() {
     let n_query = 1 << 27;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
-    let ptr_hash = FastPtrHash::new_from_par_iter(
+    let ptr_hash = FastPtrHash::<TinyEf, _>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
