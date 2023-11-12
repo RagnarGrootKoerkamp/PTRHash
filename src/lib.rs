@@ -1,4 +1,3 @@
-#![feature(array_chunks)]
 #![allow(clippy::needless_range_loop)]
 
 /// Customizable Hasher trait.

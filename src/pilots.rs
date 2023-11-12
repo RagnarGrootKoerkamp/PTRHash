@@ -41,6 +41,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         bucket: &[Hash],
         taken: &mut BitSlice,
     ) -> Option<(u64, Hash)> {
+        let r = bucket.len() / 4 * 4;
         'p: for p in 0u64..kmax {
             let hp = self.hash_pilot(p);
             // True when the slot for hx is already taken.
@@ -48,19 +49,25 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
 
             // Process chunks of 4 bucket elements at a time.
             // This reduces branch-misses (of all of displace) 3-fold, giving 20% speedup.
-            let chunks = bucket.array_chunks::<4>();
-            for &hxs in chunks.clone() {
+            for i in (0..r).step_by(4) {
                 // Check all 4 elements of the chunk without early break.
-                // (Note that [_; 4]::map is non-lazy.)
                 // NOTE: It's hard to SIMD vectorize the `slot` computation
                 // here because it uses 64x64->128bit multiplies.
-                if hxs.map(check).iter().any(|&bad| bad) {
+                let checks: [bool; 4] = unsafe {
+                    [
+                        check(*bucket.get_unchecked(i)),
+                        check(*bucket.get_unchecked(i + 1)),
+                        check(*bucket.get_unchecked(i + 2)),
+                        check(*bucket.get_unchecked(i + 3)),
+                    ]
+                };
+                if checks.iter().any(|&bad| bad) {
                     continue 'p;
                 }
             }
             // Check remaining elements.
             let mut bad = false;
-            for &hx in chunks.remainder() {
+            for &hx in &bucket[r..] {
                 bad |= check(hx);
             }
             if bad {
