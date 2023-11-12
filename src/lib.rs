@@ -19,7 +19,6 @@ mod test;
 mod types;
 
 use bitvec::{bitvec, vec::BitVec};
-use colored::Colorize;
 use itertools::Itertools;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
