@@ -28,6 +28,7 @@ use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{default::Default, marker::PhantomData, time::Instant};
 use sucds::mii_sequences::EliasFano;
+use tiny_ef::TinyEfUnit;
 
 use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
 
@@ -74,10 +75,10 @@ impl Default for PtrHashParams {
 // Externally visible aliases for convenience.
 
 /// The recommended way to use PtrHash is to use TinyEF as backing storage for the remap.
-pub type FastPtrHash<V> = PtrHash<TinyEf, hash::FxHash, V>;
+pub type FastPtrHash<E, V> = PtrHash<E, hash::FxHash, V>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type MinimalPtrHash<V> = PtrHash<EliasFano, hash::FxHash, V>;
+pub type MinimalPtrHash<E, V> = PtrHash<E, hash::FxHash, V>;
 
 /// They key type to be hashed.
 type Key = u64;
@@ -272,91 +273,6 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
         }
     }
 
-    fn hash_key(&self, x: &Key) -> Hash {
-        Hx::hash(x, self.seed)
-    }
-
-    fn hash_pilot(&self, p: u64) -> Hash {
-        MulHash::hash(&p, self.seed)
-    }
-
-    fn part(&self, hx: Hash) -> usize {
-        hx.reduce(self.rem_parts)
-    }
-
-    /// Map hx to a bucket in the range [0, self.b).
-    /// Hashes <self.p1 are mapped to large buckets [0, self.p2).
-    /// Hashes >=self.p1 are mapped to small [self.p2, self.b).
-    ///
-    /// (Unless SPLIT_BUCKETS is false, in which case all hashes are mapped to [0, self.b).)
-    fn bucket_in_part(&self, hx: Hash) -> usize {
-        if !SPLIT_BUCKETS {
-            return hx.reduce(self.rem_b);
-        }
-
-        // NOTE: There is a lot of MOV/CMOV going on here.
-        let is_large = hx >= self.p1;
-        let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
-        let b = is_large as usize * self.c3 + hx.reduce(rem);
-
-        debug_assert!(!is_large || self.p2 <= b);
-        debug_assert!(!is_large || b < self.b);
-        debug_assert!(is_large || b < self.p2);
-
-        b
-    }
-
-    /// See bucket.rs for additional implementations.
-    /// Returns the offset in the slots array for the current part and the bucket index.
-    fn bucket(&self, hx: Hash) -> usize {
-        if !SPLIT_BUCKETS {
-            return hx.reduce(self.rem_b_total);
-        }
-
-        // Extract the high bits for part selection; do normal bucket
-        // computation within the part using the remaining bits.
-        // NOTE: This is somewhat slow, but doing better is hard.
-        let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
-        let bucket = self.bucket_in_part(hx);
-        part * self.b + bucket
-    }
-
-    fn slot(&self, hx: Hash, pilot: u64) -> usize {
-        (self.part(hx) << self.s_bits) + self.slot_in_part(hx, pilot)
-    }
-
-    fn slot_in_part(&self, hx: Hash, pilot: u64) -> usize {
-        (hx ^ self.hash_pilot(pilot)).reduce(self.rem_s)
-    }
-
-    fn slot_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
-        (hx ^ hp).reduce(self.rem_s)
-    }
-
-    /// Get a non-minimal index of the given key.
-    /// Use `index_minimal` to get a key in `[0, n)`.
-    ///
-    /// `index.rs` has additional streaming/SIMD implementations.
-    pub fn index(&self, key: &Key) -> usize {
-        let hx = self.hash_key(key);
-        let b = self.bucket(hx);
-        let pilot = self.pilots.index(b);
-        self.slot(hx, pilot)
-    }
-
-    /// Get the index for `key` in `[0, n)`.
-    pub fn index_minimal(&self, key: &Key) -> usize {
-        let hx = self.hash_key(key);
-        let b = self.bucket(hx);
-        let p = self.pilots.index(b);
-        let slot = self.slot(hx, p);
-        if slot < self.n {
-            slot
-        } else {
-            self.remap.index(slot - self.n) as usize
-        }
-    }
-
     fn compute_pilots<'a>(&mut self, keys: impl ParallelIterator<Item = &'a Key> + Clone) {
         // Step 4: Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
@@ -481,6 +397,8 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed + Default> PtrHash<F, Hx, V>
     }
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
+    /// See bucket.rs for additional implementations.
+    /// Returns the offset in the slots array for the current part and the bucket index.
     fn bucket(&self, hx: Hash) -> usize {
         if !SPLIT_BUCKETS {
             return hx.reduce(self.rem_b_total);
@@ -523,7 +441,7 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed + Default> PtrHash<F, Hx, V>
         let b = self.bucket(hx);
         let p = self.pilots.index(b);
         let slot = self.slot(hx, p);
-        if std::intrinsics::likely(slot < self.n) {
+        if slot < self.n {
             slot
         } else {
             self.remap.index(slot - self.n) as usize

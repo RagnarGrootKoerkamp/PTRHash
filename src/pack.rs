@@ -1,6 +1,6 @@
 use sucds::mii_sequences::{EliasFano, EliasFanoBuilder};
 
-use crate::tiny_ef::TinyEf;
+use crate::tiny_ef::{TinyEf, TinyEfUnit};
 
 pub trait Packed: Sync {
     fn default() -> Self;
@@ -66,7 +66,7 @@ macro_rules! ref_impl {
             fn prefetch(&self, index: usize) {
                 unsafe {
                     let address = self.as_ptr().add(index) as *const u64;
-                    std::intrinsics::prefetch_read_data(address, 3);
+                    crate::util::prefetch_read_data(address);
                 }
             }
             fn size_in_bytes(&self) -> usize {
@@ -107,12 +107,30 @@ impl Packed for EliasFano {
     }
 }
 
-impl Packed for TinyEf {
+impl Packed for TinyEf<Vec<TinyEfUnit>> {
     fn default() -> Self {
         Default::default()
     }
     fn new(vals: Vec<u64>) -> Self {
         Self::new(&vals)
+    }
+    fn index(&self, index: usize) -> u64 {
+        self.index(index)
+    }
+    fn prefetch(&self, index: usize) {
+        self.prefetch(index)
+    }
+    fn size_in_bytes(&self) -> usize {
+        self.size_in_bytes()
+    }
+}
+
+impl Packed for TinyEf<&[TinyEfUnit]> {
+    fn default() -> Self {
+        Default::default()
+    }
+    fn new(_vals: Vec<u64>) -> Self {
+        unreachable!();
     }
     fn index(&self, index: usize) -> u64 {
         self.index(index)

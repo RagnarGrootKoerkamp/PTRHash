@@ -8,6 +8,7 @@ use colored::Colorize;
 use epserde::prelude::*;
 use ptr_hash::{
     pack::Packed,
+    tiny_ef::{TinyEf, TinyEfUnit},
     util::{bench_index, time},
     *,
 };
@@ -55,7 +56,7 @@ enum Command {
     },
 }
 
-type PT<V> = FastPtrHash<V>;
+type PT<E, V> = FastPtrHash<E, V>;
 
 fn main() -> anyhow::Result<()> {
     let Args { command } = Args::parse();
@@ -75,7 +76,7 @@ fn main() -> anyhow::Result<()> {
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
             let start = std::time::Instant::now();
-            let pt = PT::new(
+            let pt = PT::<TinyEf, _>::new(
                 &keys,
                 PtrHashParams {
                     c,
@@ -101,7 +102,7 @@ fn main() -> anyhow::Result<()> {
             threads,
         } => {
             let keys = ptr_hash::util::generate_keys(n);
-            let pt = <PT<Vec<u8>>>::load_mem("pt.bin")?;
+            let pt = <PT<TinyEf, Vec<u8>>>::mmap("pt.bin", Flags::default())?;
             let loops = total.div_ceil(n);
 
             let query = bench_index(loops, &keys, |key| pt.index(key));
@@ -147,8 +148,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<const K: usize, V: AsRef<[u8]> + Packed + Default>(
-    pt: impl AsRef<PT<V>> + Send + Sync,
+fn index_parallel<'a, const K: usize, V: AsRef<[u8]> + Packed + Default>(
+    pt: impl AsRef<PT<TinyEf<&'a [TinyEfUnit]>, V>> + Send + Sync,
     xs: &[u64],
     threads: usize,
     minimal: bool,
