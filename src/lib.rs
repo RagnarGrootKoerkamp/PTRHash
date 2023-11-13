@@ -21,6 +21,7 @@ mod test;
 mod types;
 
 use bitvec::{bitvec, vec::BitVec};
+use either::Either;
 use itertools::{izip, Itertools};
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -50,6 +51,9 @@ pub struct PtrHashParams {
     /// Upper bound on number of keys per shard.
     /// Default is 2^33, or 32GB of hashes per shard.
     pub keys_per_shard: usize,
+    /// When true, write each shard to a file instead of iterating multiple
+    /// times.
+    pub shard_to_disk: bool,
 
     /// Print bucket size and pilot stats after construction.
     pub print_stats: bool,
@@ -70,6 +74,7 @@ impl Default for PtrHashParams {
             slots_per_part: 1 << 18,
             // By default, limit to 2^32 keys per shard, whose hashes take 8B*2^32=32GB.
             keys_per_shard: 1 << 33,
+            shard_to_disk: true,
             print_stats: false,
         }
     }
@@ -420,7 +425,11 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             taken.resize_with(self.num_parts, || bitvec![0; self.s]);
 
             // Iterate over shards.
-            let shard_hashes = self.shard_keys(keys.clone());
+            let shard_hashes = if self.params.shard_to_disk {
+                Either::Left(self.shard_keys_to_disk(keys.clone()))
+            } else {
+                Either::Right(self.shard_keys(keys.clone()))
+            };
             let shard_pilots = pilots.chunks_mut(self.b * self.parts_per_shard);
             let shard_taken = taken.chunks_mut(self.parts_per_shard);
             // eprintln!("Num shards (keys) {}", shard_keys.());
