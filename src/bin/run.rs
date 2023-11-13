@@ -59,6 +59,7 @@ enum Command {
 type PT<E, V> = FastPtrHash<E, V>;
 
 fn main() -> anyhow::Result<()> {
+    dbg!(std::mem::size_of::<TinyEfUnit>());
     let Args { command } = Args::parse();
 
     match command {
