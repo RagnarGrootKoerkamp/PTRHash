@@ -30,10 +30,8 @@ use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
-use sucds::mii_sequences::EliasFano;
-use tiny_ef::TinyEfUnit;
 
-use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
+use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
 /// Parameters for PtrHash construction.
 ///

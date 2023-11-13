@@ -1,5 +1,5 @@
 use super::*;
-use crate::util::generate_keys;
+use crate::{tiny_ef::TinyEf, util::generate_keys};
 
 /// Construct the MPHF and test all keys are mapped to unique indices.
 #[test]

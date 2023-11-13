@@ -1,6 +1,5 @@
 use common_traits::SelectInWord;
 use epserde::prelude::*;
-use itertools::Itertools;
 use std::cmp::min;
 
 /// Number of stored values per unit.
@@ -43,7 +42,7 @@ impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
         }
     }
     pub fn size_in_bytes(&self) -> usize {
-        self.ef.as_ref().len() * std::mem::size_of::<TinyEfUnit>()
+        std::mem::size_of_val(self.ef.as_ref())
     }
 }
 
