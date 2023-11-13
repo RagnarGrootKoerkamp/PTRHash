@@ -1,7 +1,7 @@
 use super::*;
 use crate::types::BucketIdx;
 use rdst::RadixSort;
-use std::{borrow::Borrow, time::Instant};
+use std::time::Instant;
 
 impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// Returns:
@@ -14,7 +14,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(super) fn sort_parts(
         &self,
         shard: usize,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>>,
+        mut hashes: Vec<Hash>,
     ) -> Option<(Vec<Hash>, Vec<u32>)> {
         // For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
@@ -24,7 +24,6 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
 
         let start = Instant::now();
         // 1. Collect hashes per part.
-        let mut hashes: Vec<Hash> = keys.map(|key| self.hash_key(key.borrow())).collect();
         let start = log_duration("┌  hash keys", start);
         // 2. Radix sort hashes.
         // TODO: Write robinhood sort that inserts in the right place directly.
@@ -42,8 +41,10 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         }
 
         // 4. Find the start of each part using binary search.
-        assert!(shard * self.parts_per_shard <= self.part(hashes[0]));
-        assert!(self.part(*hashes.last().unwrap()) < (shard + 1) * self.parts_per_shard);
+        if !hashes.is_empty() {
+            assert!(shard * self.parts_per_shard <= self.part(hashes[0]));
+            assert!(self.part(*hashes.last().unwrap()) < (shard + 1) * self.parts_per_shard);
+        }
         let mut part_starts = vec![0u32; self.parts_per_shard + 1];
         for part_in_shard in 1..=self.parts_per_shard {
             part_starts[part_in_shard] = hashes

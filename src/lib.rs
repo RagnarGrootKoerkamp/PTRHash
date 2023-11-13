@@ -420,18 +420,18 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             taken.resize_with(self.num_parts, || bitvec![0; self.s]);
 
             // Iterate over shards.
-            let shard_keys = self.shards(keys.clone());
+            let shard_hashes = self.shard_keys(keys.clone());
             let shard_pilots = pilots.chunks_mut(self.b * self.parts_per_shard);
             let shard_taken = taken.chunks_mut(self.parts_per_shard);
             // eprintln!("Num shards (keys) {}", shard_keys.());
-            for (shard, (keys, pilots, taken)) in
-                izip!(shard_keys, shard_pilots, shard_taken).enumerate()
+            for (shard, (hashes, pilots, taken)) in
+                izip!(shard_hashes, shard_pilots, shard_taken).enumerate()
             {
                 eprintln!("Shard {shard:>3}/{:3}", self.num_shards);
 
                 // Determine the buckets.
                 let start = std::time::Instant::now();
-                let Some((hashes, part_starts)) = self.sort_parts(shard, keys) else {
+                let Some((hashes, part_starts)) = self.sort_parts(shard, hashes) else {
                     // Found duplicate hashes.
                     continue 's;
                 };
