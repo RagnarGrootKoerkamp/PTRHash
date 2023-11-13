@@ -159,11 +159,10 @@ checksum = "a2bd12c1caf447e69cd4528f47f94d203fd2582878ecb9e9465484c4148a8223"
 
 [[package]]
 name = "cc"
-version = "1.0.83"
+version = "1.0.84"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
+checksum = "0f8e7c90afad890484a21653d08b6e209ae34770fb5ee298f9c699fcc1e5c856"
 dependencies = [
- "jobserver",
  "libc",
 ]
 
@@ -388,9 +387,9 @@ dependencies = [
 
 [[package]]
 name = "epserde"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3911d54eff78d9c732b0e77d70105490cf6fbc8da4412fae101a667699cde730"
+checksum = "049c524ce79ed2f2a8421454e785f94a51778f7316fed3aa3e76456149e3fd52"
 dependencies = [
  "anyhow",
  "bitflags 2.4.1",
@@ -402,9 +401,9 @@ dependencies = [
 
 [[package]]
 name = "epserde-derive"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dcc697d0db7b9fb053efc14690279687f0f09fe5147dd7c5a87f3aae6842cb68"
+checksum = "9c03a214e6c0e73222106e9d153985c330da1a3a4474a60517d8064f1e62f8af"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -544,15 +543,6 @@ name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
-
-[[package]]
-name = "jobserver"
-version = "0.1.27"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c37f63953c4c63420ed5fd3d6d398c719489b9f872b9fa683262f8edd363c7d"
-dependencies = [
- "libc",
-]
 
 [[package]]
 name = "js-sys"
@@ -758,7 +748,6 @@ dependencies = [
  "clap",
  "colored",
  "epserde",
- "epserde-derive",
  "fxhash",
  "itertools",
  "lazy_static",
