@@ -356,6 +356,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     }
 
     fn compute_pilots<'a>(&mut self, keys: impl ParallelIterator<Item = &'a Key> + Clone) {
+        let overall_start = std::time::Instant::now();
+
         // Step 4: Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
         let mut pilots: Vec<u8> = vec![];
@@ -404,6 +406,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         let start = std::time::Instant::now();
         self.remap_free_slots(taken);
         log_duration("remap free", start);
+        log_duration("total build", overall_start);
 
         // Pack the data.
         self.pilots = pilots;

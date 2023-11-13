@@ -4,7 +4,6 @@ use std::{
 };
 
 use clap::{Parser, Subcommand};
-use colored::Colorize;
 use ptr_hash::{
     util::{bench_index, time},
     *,
@@ -16,17 +15,21 @@ struct Args {
     command: Command,
 }
 
+const DEFAULT_C: f64 = 9.0;
+const DEFAULT_ALPHA: f64 = 0.98;
+const DEFAULT_SLOTS_PER_PART: usize = 1 << 18;
+
 #[derive(Subcommand)]
 enum Command {
     /// Construct PtrHash.
     Build {
         #[arg(short)]
         n: usize,
-        #[arg(short, default_value_t = 9.0)]
+        #[arg(short, default_value_t = DEFAULT_C)]
         c: f64,
-        #[arg(short, default_value_t = 0.98)]
+        #[arg(short, default_value_t = DEFAULT_ALPHA)]
         alpha: f64,
-        #[arg(short, default_value_t = 300000)]
+        #[arg(short, default_value_t = DEFAULT_SLOTS_PER_PART)]
         s: usize,
         #[arg(long)]
         stats: bool,
@@ -38,11 +41,11 @@ enum Command {
     Query {
         #[arg(short)]
         n: usize,
-        #[arg(short, default_value_t = 9.0)]
+        #[arg(short, default_value_t = DEFAULT_C)]
         c: f64,
-        #[arg(short, default_value_t = 0.98)]
+        #[arg(short, default_value_t = DEFAULT_ALPHA)]
         alpha: f64,
-        #[arg(short, default_value_t = 300000)]
+        #[arg(short, default_value_t = DEFAULT_SLOTS_PER_PART)]
         s: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
@@ -72,7 +75,6 @@ fn main() {
                 .build_global()
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
-            let start = std::time::Instant::now();
             PT::new(
                 &keys,
                 PtrHashParams {
@@ -82,10 +84,6 @@ fn main() {
                     slots_per_part: s,
                     ..Default::default()
                 },
-            );
-            eprintln!(
-                "{}",
-                format!(" total build: {:>14.2?}", start.elapsed()).bold()
             );
         }
         Command::Query {
