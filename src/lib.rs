@@ -1,3 +1,4 @@
+#![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
 #![allow(clippy::needless_range_loop)]
 
 /// Customizable Hasher trait.
@@ -132,7 +133,7 @@ pub struct PtrHash<F: Packed, Hx: Hasher> {
     // Computed state.
     /// The global seed.
     seed: u64,
-    /// The pivots.
+    /// The pilots.
     pilots: Vec<u8>,
     /// Remap the out-of-bound slots to free slots.
     remap: F,
@@ -184,7 +185,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         ptr_hash
     }
 
-    /// PtrHash with random pivots, for benchmarking query speed.
+    /// PtrHash with random pilots, for benchmarking query speed.
     pub fn new_random(n: usize, params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(n, params);
         let k = (0..ptr_hash.b_total)
@@ -201,7 +202,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         ptr_hash
     }
 
-    /// Only initialize the parameters; do not compute the pivots yet.
+    /// Only initialize the parameters; do not compute the pilots yet.
     fn init(n: usize, params: PtrHashParams) -> Self {
         assert!(n > 1, "Things break if n=1.");
         assert!(n <= u32::MAX as _, "Number of keys must be less than 2^32.");
