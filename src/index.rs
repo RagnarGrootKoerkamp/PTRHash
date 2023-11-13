@@ -4,6 +4,9 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// Takes an iterator over keys and returns an iterator over the indices of the keys.
     ///
     /// Uses a buffer of size K for prefetching ahead.
+    //
+    // TODO: A chunked version that processes K keys at a time.
+    // TODO: SIMD to determine buckets/positions in parallel.
     pub fn index_stream<'a, const K: usize, const MINIMAL: bool>(
         &'a self,
         xs: impl IntoIterator<Item = &'a Key> + 'a,

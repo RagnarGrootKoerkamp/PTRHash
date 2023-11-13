@@ -173,6 +173,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     ///   hashes), in which case a new pass over keys is need.
     /// - TODO: When all hashes do not fit in memory simultaneously, multiple passes
     ///   over the keys are made to process keys one shard at a time.
+    /// - TODO: When all hashes do not fit in memory simultaneously, shard hashes into multiple files.
+    /// - TODO: 128bit hashes.
     /// NOTE: The exact API may change here depending on what's most convenient to use.
     pub fn new_from_par_iter<'a>(
         n: usize,
