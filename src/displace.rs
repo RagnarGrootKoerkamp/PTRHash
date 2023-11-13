@@ -8,8 +8,9 @@ use std::sync::{
 };
 
 impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
-    pub(super) fn displace(
+    pub(super) fn displace_shard(
         &self,
+        shard: usize,
         hashes: &[Hash],
         part_starts: &[u32],
         pilots: &mut [u8],
@@ -20,11 +21,13 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         let iter = pilots_per_part.zip(taken).enumerate();
 
         let total_displacements = AtomicUsize::new(0);
-        let parts_done = AtomicUsize::new(0);
+        let parts_done = AtomicUsize::new(shard * self.parts_per_shard);
         let stats = Mutex::new(BucketStats::new());
 
-        let ok = iter.try_for_each(|(part, (pilots, taken))| {
-            let hashes = &hashes[part_starts[part] as usize..part_starts[part + 1] as usize];
+        let ok = iter.try_for_each(|(part_in_shard, (pilots, taken))| {
+            let part = shard * self.parts_per_shard + part_in_shard;
+            let hashes = &hashes
+                [part_starts[part_in_shard] as usize..part_starts[part_in_shard + 1] as usize];
             let cnt = self.displace_part(part, hashes, pilots, taken, &stats)?;
             let parts_done = parts_done.fetch_add(1, Ordering::Relaxed);
             total_displacements.fetch_add(cnt, Ordering::Relaxed);
@@ -41,6 +44,11 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             return false;
         }
 
+        assert_eq!(
+            parts_done.load(Ordering::Relaxed),
+            (shard + 1) * self.parts_per_shard
+        );
+
         let total_displacements: usize = total_displacements.load(Ordering::Relaxed);
         let sum_pilots = pilots.iter().map(|&k| k as Pilot).sum::<Pilot>();
 
@@ -48,11 +56,11 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         eprint!("\x1b[K");
         eprintln!(
             "  displ./bkt: {:>14.3}",
-            total_displacements as f32 / self.b_total as f32
+            total_displacements as f32 / (self.b * self.parts_per_shard) as f32
         );
         eprintln!(
             "   avg pilot: {:>14.3}",
-            sum_pilots as f32 / self.b_total as f32
+            sum_pilots as f32 / (self.b * self.parts_per_shard) as f32
         );
 
         if self.params.print_stats {

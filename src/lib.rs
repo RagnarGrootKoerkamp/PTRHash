@@ -13,6 +13,7 @@ mod index;
 mod pack;
 mod pilots;
 mod reduce;
+mod shard;
 mod sort_buckets;
 mod stats;
 #[cfg(test)]
@@ -20,7 +21,7 @@ mod test;
 mod types;
 
 use bitvec::{bitvec, vec::BitVec};
-use itertools::Itertools;
+use itertools::{izip, Itertools};
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
@@ -44,7 +45,11 @@ pub struct PtrHashParams {
     /// ... to `gamma` of buckets.
     pub gamma: f64,
     /// #slots/part will be the largest power of 2 not larger than this.
+    /// Default is 2^18.
     pub slots_per_part: usize,
+    /// Upper bound on number of keys per shard.
+    /// Default is 2^33, or 32GB of hashes per shard.
+    pub keys_per_shard: usize,
 
     /// Print bucket size and pilot stats after construction.
     pub print_stats: bool,
@@ -63,6 +68,8 @@ impl Default for PtrHashParams {
             beta: 0.6,
             gamma: 0.3,
             slots_per_part: 1 << 18,
+            // By default, limit to 2^32 keys per shard, whose hashes take 8B*2^32=32GB.
+            keys_per_shard: 1 << 33,
             print_stats: false,
         }
     }
@@ -95,9 +102,13 @@ pub struct PtrHash<F: Packed, Hx: Hasher> {
 
     /// The number of keys.
     n: usize,
-
-    /// The number of parts in the partition.
+    /// The total number of parts.
     num_parts: usize,
+    /// The number of shards.
+    num_shards: usize,
+    /// The maximal number of parts per shard.
+    /// The last shard may have fewer parts.
+    parts_per_shard: usize,
     /// The total number of slots.
     s_total: usize,
     /// The total number of buckets.
@@ -116,6 +127,8 @@ pub struct PtrHash<F: Packed, Hx: Hasher> {
     c3: usize,
 
     // Precomputed fast modulo operations.
+    /// Fast %shards.
+    rem_shards: Rp,
     /// Fast %parts.
     rem_parts: Rp,
     /// Fast &b.
@@ -171,8 +184,6 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// The iterator must be cloneable for two reasons:
     /// - Construction can fail for the first seed (e.g. due to duplicate
     ///   hashes), in which case a new pass over keys is need.
-    /// - TODO: When all hashes do not fit in memory simultaneously, multiple passes
-    ///   over the keys are made to process keys one shard at a time.
     /// - TODO: When all hashes do not fit in memory simultaneously, shard hashes into multiple files.
     /// - TODO: 128bit hashes.
     /// NOTE: The exact API may change here depending on what's most convenient to use.
@@ -207,7 +218,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// Only initialize the parameters; do not compute the pilots yet.
     fn init(n: usize, params: PtrHashParams) -> Self {
         assert!(n > 1, "Things break if n=1.");
-        assert!(n <= u32::MAX as _, "Number of keys must be less than 2^32.");
+        assert!(n < (1 << 40), "Number of keys must be less than 2^40.");
 
         // Target number of slots in total over all parts.
         let s_total_target = (n as f64 / params.alpha) as usize;
@@ -215,11 +226,18 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         // Target number of buckets in total.
         let b_total_target = params.c * (s_total_target as f64) / (s_total_target as f64).log2();
 
+        assert!(
+            params.slots_per_part <= u32::MAX as _,
+            "Each part must have <2^32 slots"
+        );
         // We start with the given maximum number of slots per part, since
         // that is what should fit in L1 or L2 cache.
         // Thus, the number of partitions is:
         let s = 1 << params.slots_per_part.ilog2();
-        let num_parts = s_total_target.div_ceil(s);
+        let num_shards = n.div_ceil(params.keys_per_shard);
+        let parts_per_shard = s_total_target.div_ceil(s).div_ceil(num_shards);
+        let num_parts = num_shards * parts_per_shard;
+
         let s_total = s * num_parts;
         // b divisible by 3 is exploited by bucket_thirds.
         let b = ((b_total_target / (num_parts as f64)).ceil() as usize).next_multiple_of(3);
@@ -227,6 +245,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         // TODO: Figure out if large gcd(b,s) is a problem for the original PtrHash.
 
         eprintln!("        keys: {n:>10}");
+        eprintln!("      shards: {num_shards:>10}");
         eprintln!("       parts: {num_parts:>10}");
         eprintln!("   slots/prt: {s:>10}");
         eprintln!("   slots tot: {s_total:>10}");
@@ -249,6 +268,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             params,
             n,
             num_parts,
+            num_shards,
+            parts_per_shard,
             s_total,
             s,
             s_bits: s.ilog2(),
@@ -257,6 +278,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             p1,
             p2,
             c3,
+            rem_shards: Rp::new(num_shards),
             rem_parts: Rp::new(num_parts),
             rem_b: Rb::new(b),
             rem_b_total: Rb::new(b_total),
@@ -276,6 +298,10 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
 
     fn hash_pilot(&self, p: u64) -> Hash {
         MulHash::hash(&p, self.seed)
+    }
+
+    fn shard(&self, hx: Hash) -> usize {
+        hx.reduce(self.rem_shards)
     }
 
     fn part(&self, hx: Hash) -> usize {
@@ -361,7 +387,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     ) {
         let overall_start = std::time::Instant::now();
 
-        // Step 4: Initialize arrays;
+        // Initialize arrays;
         let mut taken: Vec<BitVec> = vec![];
         let mut pilots: Vec<u8> = vec![];
 
@@ -382,30 +408,43 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
                 eprintln!("Try {tries} for global seed.");
             }
 
-            // Step 1: choose a global seed s.
+            // Choose a global seed s.
             self.seed = rng.gen();
 
             // Reset output-memory.
             pilots.clear();
             pilots.resize(self.b_total, 0);
+
             for taken in taken.iter_mut() {
                 taken.clear();
                 taken.resize(self.s, false);
             }
             taken.resize_with(self.num_parts, || bitvec![0; self.s]);
 
-            // Step 2: Determine the buckets.
-            let start = std::time::Instant::now();
-            let Some((hashes, part_starts)) = self.sort_parts(keys.clone()) else {
-                // Found duplicate hashes.
-                continue 's;
-            };
-            let start = log_duration("sort buckets", start);
+            // Iterate over shards.
+            let shard_keys = self.shards(keys.clone());
+            let shard_pilots = pilots.chunks_mut(self.b * self.parts_per_shard);
+            let shard_taken = taken.chunks_mut(self.parts_per_shard);
+            // eprintln!("Num shards (keys) {}", shard_keys.());
+            for (shard, (keys, pilots, taken)) in
+                izip!(shard_keys, shard_pilots, shard_taken).enumerate()
+            {
+                eprintln!("Shard {shard:>3}/{:3}", self.num_shards);
 
-            if !self.displace(&hashes, &part_starts, &mut pilots, &mut taken) {
-                continue 's;
+                // Determine the buckets.
+                let start = std::time::Instant::now();
+                let Some((hashes, part_starts)) = self.sort_parts(shard, keys) else {
+                    // Found duplicate hashes.
+                    continue 's;
+                };
+                let start = log_duration("sort buckets", start);
+
+                // Compute pilots.
+                if !self.displace_shard(shard, &hashes, &part_starts, pilots, taken) {
+                    continue 's;
+                }
+                log_duration("displace", start);
             }
-            log_duration("displace", start);
 
             // Found a suitable seed.
             if tries > 1 {

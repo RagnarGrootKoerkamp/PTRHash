@@ -13,6 +13,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     #[must_use]
     pub(super) fn sort_parts(
         &self,
+        shard: usize,
         keys: impl ParallelIterator<Item = impl Borrow<Key>>,
     ) -> Option<(Vec<Hash>, Vec<u32>)> {
         // For FastReduce methods, we can just sort by hash directly
@@ -41,11 +42,13 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         }
 
         // 4. Find the start of each part using binary search.
-        let mut part_starts = vec![0u32; self.num_parts + 1];
-        for i in 1..=self.num_parts {
-            part_starts[i] = hashes
+        assert!(shard * self.parts_per_shard <= self.part(hashes[0]));
+        assert!(self.part(*hashes.last().unwrap()) < (shard + 1) * self.parts_per_shard);
+        let mut part_starts = vec![0u32; self.parts_per_shard + 1];
+        for part_in_shard in 1..=self.parts_per_shard {
+            part_starts[part_in_shard] = hashes
                 .binary_search_by(|h| {
-                    if self.part(*h) < i {
+                    if self.part(*h) < shard * self.parts_per_shard + part_in_shard {
                         std::cmp::Ordering::Less
                     } else {
                         std::cmp::Ordering::Greater
@@ -61,7 +64,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             max_part_len = max_part_len.max(len);
             if len as usize > self.s {
                 eprintln!(
-                    "Part {part}: More elements than slots! elements {len} > {} slots",
+                    "Shard {shard} Part {part}: More elements than slots! elements {len} > {} slots",
                     self.s
                 );
                 return None;
@@ -107,6 +110,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             bucket_len_cnt[l] += 1;
             bucket_starts.push(end as u32);
         }
+
+        assert_eq!(end, hashes.len());
 
         let max_bucket_size = bucket_len_cnt.len() - 1;
         {

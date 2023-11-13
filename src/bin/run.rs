@@ -18,6 +18,7 @@ struct Args {
 const DEFAULT_C: f64 = 9.0;
 const DEFAULT_ALPHA: f64 = 0.98;
 const DEFAULT_SLOTS_PER_PART: usize = 1 << 18;
+const DEFAULT_KEYS_PER_SHARD: usize = 1 << 33;
 
 #[derive(Subcommand)]
 enum Command {
@@ -31,6 +32,8 @@ enum Command {
         alpha: f64,
         #[arg(short, default_value_t = DEFAULT_SLOTS_PER_PART)]
         s: usize,
+        #[arg(short, default_value_t = DEFAULT_KEYS_PER_SHARD)]
+        keys_per_shard: usize,
         #[arg(long)]
         stats: bool,
         #[arg(short, long, default_value_t = 0)]
@@ -47,6 +50,8 @@ enum Command {
         alpha: f64,
         #[arg(short, default_value_t = DEFAULT_SLOTS_PER_PART)]
         s: usize,
+        #[arg(short, default_value_t = DEFAULT_KEYS_PER_SHARD)]
+        keys_per_shard: usize,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
         #[arg(long)]
@@ -68,6 +73,7 @@ fn main() {
             alpha,
             stats,
             s,
+            keys_per_shard,
             threads,
         } => {
             rayon::ThreadPoolBuilder::new()
@@ -82,6 +88,7 @@ fn main() {
                     alpha,
                     print_stats: stats,
                     slots_per_part: s,
+                    keys_per_shard,
                     ..Default::default()
                 },
             );
@@ -93,6 +100,7 @@ fn main() {
             total,
             stats,
             s,
+            keys_per_shard,
             threads,
         } => {
             rayon::ThreadPoolBuilder::new()
@@ -107,6 +115,7 @@ fn main() {
                     alpha,
                     print_stats: stats,
                     slots_per_part: s,
+                    keys_per_shard,
                     ..Default::default()
                 },
             );
