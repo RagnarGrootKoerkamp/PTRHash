@@ -25,7 +25,7 @@ use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rdst::RadixSort;
-use std::{default::Default, marker::PhantomData, time::Instant};
+use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
 use sucds::mii_sequences::EliasFano;
 
 use crate::{hash::*, pack::Packed, reduce::*, tiny_ef::TinyEf, util::log_duration};
@@ -178,7 +178,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     /// NOTE: The exact API may change here depending on what's most convenient to use.
     pub fn new_from_par_iter<'a>(
         n: usize,
-        keys: impl ParallelIterator<Item = &'a Key> + Clone,
+        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
         params: PtrHashParams,
     ) -> Self {
         let mut ptr_hash = Self::init(n, params);
@@ -355,7 +355,10 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         }
     }
 
-    fn compute_pilots<'a>(&mut self, keys: impl ParallelIterator<Item = &'a Key> + Clone) {
+    fn compute_pilots<'a>(
+        &mut self,
+        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+    ) {
         let overall_start = std::time::Instant::now();
 
         // Step 4: Initialize arrays;
