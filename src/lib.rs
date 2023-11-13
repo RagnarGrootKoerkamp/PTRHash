@@ -176,7 +176,6 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub fn new(keys: &[Key], params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
         ptr_hash.compute_pilots(keys.par_iter());
-        ptr_hash.print_bits_per_element();
         ptr_hash
     }
 
@@ -194,7 +193,6 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     ) -> Self {
         let mut ptr_hash = Self::init(n, params);
         ptr_hash.compute_pilots(keys);
-        ptr_hash.print_bits_per_element();
         ptr_hash
     }
 
@@ -457,6 +455,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         let start = std::time::Instant::now();
         self.remap_free_slots(taken);
         log_duration("remap free", start);
+        self.print_bits_per_element();
         log_duration("total build", overall_start);
 
         // Pack the data.
