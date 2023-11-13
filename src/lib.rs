@@ -382,6 +382,15 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             // Step 1: choose a global seed s.
             self.seed = rng.gen();
 
+            // Reset output-memory.
+            pilots.clear();
+            pilots.resize(self.b_total, 0);
+            for taken in taken.iter_mut() {
+                taken.clear();
+                taken.resize(self.s, false);
+            }
+            taken.resize_with(self.num_parts, || bitvec![0; self.s]);
+
             // Step 2: Determine the buckets.
             let start = std::time::Instant::now();
             let Some((hashes, part_starts)) = self.sort_parts(keys.clone()) else {

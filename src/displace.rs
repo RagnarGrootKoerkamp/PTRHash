@@ -12,19 +12,9 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         &self,
         hashes: &[Hash],
         part_starts: &[u32],
-        pilots: &mut Vec<u8>,
-        taken: &mut Vec<BitVec>,
+        pilots: &mut [u8],
+        taken: &mut [BitVec],
     ) -> bool {
-        // Reset output-memory.
-        pilots.clear();
-        pilots.resize(self.b_total, 0);
-
-        for taken in taken.iter_mut() {
-            taken.clear();
-            taken.resize(self.s, false);
-        }
-        taken.resize_with(self.num_parts, || bitvec![0; self.s]);
-
         let pilots_per_part = pilots.par_chunks_exact_mut(self.b);
 
         let iter = pilots_per_part.zip(taken).enumerate();
