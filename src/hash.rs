@@ -1,4 +1,3 @@
-use epserde::prelude::*;
 use std::ops::{BitXor, Sub};
 
 use crate::{reduce::Reduce, Key};
@@ -12,7 +11,8 @@ use rdst::RadixKey;
 /// - xor, for h(x) ^ h(k)
 /// - reduce: h(x) -> [0, n)
 /// - ord: h(x) < p1 * n
-#[derive(Epserde, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
+#[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct Hash {
     hash: u64,
 }
@@ -122,7 +122,8 @@ impl Hasher for NoHash {
     }
 }
 
-#[derive(Epserde, Clone, Copy)]
+#[derive(Clone, Copy)]
+#[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct FxHash;
 
 impl Hasher for FxHash {

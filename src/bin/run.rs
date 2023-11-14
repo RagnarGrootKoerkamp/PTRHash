@@ -1,15 +1,16 @@
-use std::{
-    cmp::min,
-    sync::atomic::{AtomicUsize, Ordering},
-};
-
+#![allow(unused)]
 use clap::{Parser, Subcommand};
+#[cfg(feature = "epserde")]
 use epserde::prelude::*;
 use ptr_hash::{
     pack::Packed,
     tiny_ef::{TinyEf, TinyEfUnit},
     util::{bench_index, time},
     *,
+};
+use std::{
+    cmp::min,
+    sync::atomic::{AtomicUsize, Ordering},
 };
 
 #[derive(clap::Parser)]
@@ -102,7 +103,11 @@ fn main() -> anyhow::Result<()> {
                     ..Default::default()
                 },
             );
-            Serialize::store(&pt, "pt.bin")?;
+
+            #[cfg(feature = "epserde")]
+            {
+                Serialize::store(&pt, "pt.bin")?;
+            }
         }
         Command::Query {
             n,
@@ -115,20 +120,27 @@ fn main() -> anyhow::Result<()> {
             disk,
             threads,
         } => {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build_global()
+                .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
-            // let pt = PT::new_random(
-            //     n,
-            //     PtrHashParams {
-            //         c,
-            //         alpha,
-            //         print_stats: stats,
-            //         slots_per_part: s,
-            //         keys_per_shard,
-            //         shard_to_disk: disk,
-            //         ..Default::default()
-            //     },
-            // );
+            #[cfg(feature = "epserde")]
             let pt = <PT<TinyEf, Vec<u8>>>::mmap("pt.bin", Flags::default())?;
+            #[cfg(not(feature = "epserde"))]
+            let pt = PT::<TinyEf, Vec<u8>>::new_random(
+                n,
+                PtrHashParams {
+                    c,
+                    alpha,
+                    print_stats: stats,
+                    slots_per_part: s,
+                    keys_per_shard,
+                    shard_to_disk: disk,
+                    ..Default::default()
+                },
+            );
+
             let loops = total.div_ceil(n);
 
             let query = bench_index(loops, &keys, |key| pt.index(key));
@@ -144,11 +156,11 @@ fn main() -> anyhow::Result<()> {
             // eprint!(" (64): {query:>4.1}");
             for threads in 1..=6 {
                 let query = time(loops, &keys, || {
-                    index_parallel::<64, _>(&pt, &keys, threads, false)
+                    index_parallel::<64, _, _>(&pt, &keys, threads, false)
                 });
                 eprintln!(" (64t{threads})  : {query:>5.2}ns");
                 let query = time(loops, &keys, || {
-                    index_parallel::<64, _>(&pt, &keys, threads, true)
+                    index_parallel::<64, _, _>(&pt, &keys, threads, true)
                 });
                 eprintln!(" (64t{threads})+r: {query:>5.2}ns");
             }
@@ -174,12 +186,15 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<'a, const K: usize, V: AsRef<[u8]> + Packed + Default>(
-    pt: impl AsRef<PT<TinyEf<&'a [TinyEfUnit]>, V>> + Send + Sync,
+fn index_parallel<const K: usize, T: AsRef<[TinyEfUnit]>, V: AsRef<[u8]> + Packed + Default>(
+    pt: &PT<TinyEf<T>, V>,
     xs: &[u64],
     threads: usize,
     minimal: bool,
-) -> usize {
+) -> usize
+where
+    TinyEf<T>: Packed,
+{
     let chunk_size = xs.len().div_ceil(threads);
     let sum = AtomicUsize::new(0);
     rayon::scope(|scope| {
@@ -191,12 +206,10 @@ fn index_parallel<'a, const K: usize, V: AsRef<[u8]> + Packed + Default>(
                 let end = min((thread_idx + 1) * chunk_size, xs.len());
 
                 let thread_sum = if minimal {
-                    pt.as_ref()
-                        .index_stream::<K, true>(&xs[start_idx..end])
+                    pt.index_stream::<K, true>(&xs[start_idx..end])
                         .sum::<usize>()
                 } else {
-                    pt.as_ref()
-                        .index_stream::<K, false>(&xs[start_idx..end])
+                    pt.index_stream::<K, false>(&xs[start_idx..end])
                         .sum::<usize>()
                 };
                 sum.fetch_add(thread_sum, Ordering::Relaxed);

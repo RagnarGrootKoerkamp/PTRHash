@@ -22,7 +22,6 @@ mod types;
 
 use bitvec::{bitvec, vec::BitVec};
 use either::Either;
-use epserde::prelude::*;
 use itertools::izip;
 use itertools::Itertools;
 use rand::{random, Rng, SeedableRng};
@@ -36,7 +35,8 @@ use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 /// Parameters for PtrHash construction.
 ///
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
-#[derive(Epserde, Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug)]
+#[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct PtrHashParams {
     /// Use `n/alpha` slots approximately.
     pub alpha: f64,
@@ -103,7 +103,7 @@ const SPLIT_BUCKETS: bool = true;
 ///
 /// `F`: The packing to use for the remapping array.
 /// `Hx`: The hasher to use for keys.
-#[derive(Epserde)]
+#[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct PtrHash<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed = Vec<u8>> {
     params: PtrHashParams,
 
