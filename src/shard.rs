@@ -8,7 +8,7 @@ use std::{
 
 use super::*;
 
-impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
+impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
     /// Loop over the keys once per shard.
     /// Return an iterator over shards.
     /// For each shard, a filtered copy of the ParallelIterator is returned.

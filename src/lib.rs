@@ -92,8 +92,23 @@ pub type DefaultPtrHash = PtrHash<TinyEf, hash::FxHash, Vec<u8>>;
 /// Using EliasFano for the remap is slower but uses slightly less memory.
 pub type EfPtrHash = PtrHash<EliasFano, hash::FxHash, Vec<u8>>;
 
-/// They key type to be hashed.
-type Key = u64;
+/// Trait that keys must satisfy.
+/// Currently implemented for `u64` and `[u8]`.
+pub trait KeyT: Send + Sync + std::hash::Hash + 'static {
+    fn default() -> &'static Self;
+}
+const ZERO: u64 = 0;
+impl KeyT for u64 {
+    fn default() -> &'static Self {
+        &ZERO
+    }
+}
+const EMPTY_SLICE: [u8; 0] = [];
+impl KeyT for [u8] {
+    fn default() -> &'static Self {
+        &EMPTY_SLICE
+    }
+}
 
 // Some fixed algorithmic decisions.
 type Rp = FastReduce;
@@ -110,7 +125,12 @@ const SPLIT_BUCKETS: bool = true;
 /// `Hx`: The hasher to use for keys, default `FxHash`.
 /// `V`: The pilots type. Usually `Vec<u8>`, or `&[u8]` for Epserde.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
-pub struct PtrHash<F: Packed = TinyEf, Hx: Hasher = hash::FxHash, V: AsRef<[u8]> = Vec<u8>> {
+pub struct PtrHash<
+    Key: KeyT = u64,
+    F: Packed = TinyEf,
+    Hx: Hasher<Key> = hash::FxHash,
+    V: AsRef<[u8]> = Vec<u8>,
+> {
     params: PtrHashParams,
 
     /// The number of keys.
@@ -163,11 +183,12 @@ pub struct PtrHash<F: Packed = TinyEf, Hx: Hasher = hash::FxHash, V: AsRef<[u8]>
     pilots: V,
     /// Remap the out-of-bound slots to free slots.
     remap: F,
+    _key: PhantomData<Key>,
     _hx: PhantomData<Hx>,
 }
 
 /// Construction methods.
-impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
+impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
     /// Create a new PtrHash instance from the given keys.
     ///
     /// NOTE: Only up to 2^40 keys are supported.
@@ -302,6 +323,7 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
             seed: 0,
             pilots: Default::default(),
             remap: F::default(),
+            _key: PhantomData,
             _hx: PhantomData,
         }
     }
@@ -427,7 +449,7 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
 }
 
 /// Indexing methods.
-impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
+impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, V> {
     /// Return the number of bits per element used for the pilots (`.0`) and the
     /// remapping (`.1)`.
     pub fn bits_per_element(&self) -> (f32, f32) {
@@ -478,11 +500,8 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
         &'a self,
         xs: impl IntoIterator<Item = &'a Key> + 'a,
     ) -> impl Iterator<Item = usize> + 'a {
-        lazy_static::lazy_static! {
-            static ref DEFAULT_KEY: Key = Key::default();
-        }
         // Append K values at the end of the iterator to make sure we wrap sufficiently.
-        let tail = std::iter::repeat(&*DEFAULT_KEY).take(K);
+        let tail = std::iter::repeat(KeyT::default()).take(K);
         let mut xs = xs.into_iter().chain(tail);
 
         let mut next_hx: [Hx::H; K] = [Hx::H::default(); K];

@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::Key;
+use crate::KeyT;
 
 /// A wrapper trait that supports both 64 and 128bit hashes.
 pub trait Hash: Copy + Debug + Default + Send + Sync + Eq + rdst::RadixKey {
@@ -28,14 +28,14 @@ impl Hash for u128 {
     }
 }
 
-pub trait Hasher: Sync {
+pub trait Hasher<Key>: Sync {
     type H: Hash;
     fn hash(x: &Key, seed: u64) -> Self::H;
 }
 
 pub struct Murmur;
 
-impl Hasher for Murmur {
+impl<Key> Hasher<Key> for Murmur {
     type H = u64;
     fn hash(x: &Key, seed: u64) -> u64 {
         murmur2::murmur64a(
@@ -58,9 +58,9 @@ impl MulHash {
     pub const C: u64 = 0x517cc1b727220a95;
 }
 
-impl Hasher for MulHash {
+impl Hasher<u64> for MulHash {
     type H = u64;
-    fn hash(x: &Key, _seed: u64) -> u64 {
+    fn hash(x: &u64, _seed: u64) -> u64 {
         Self::C.wrapping_mul(*x)
     }
 }
@@ -69,9 +69,9 @@ impl Hasher for MulHash {
 /// Used for benchmarking.
 pub struct NoHash;
 
-impl Hasher for NoHash {
+impl Hasher<u64> for NoHash {
     type H = u64;
-    fn hash(x: &Key, _seed: u64) -> u64 {
+    fn hash(x: &u64, _seed: u64) -> u64 {
         *x
     }
 }
@@ -79,7 +79,7 @@ impl Hasher for NoHash {
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct FxHash;
 
-impl Hasher for FxHash {
+impl<Key: KeyT> Hasher<Key> for FxHash {
     type H = u64;
     fn hash(x: &Key, _seed: u64) -> u64 {
         fxhash::hash64(x)

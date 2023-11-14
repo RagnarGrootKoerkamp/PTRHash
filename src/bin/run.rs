@@ -185,8 +185,8 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<const K: usize, T: Packed, H: Hasher, V: AsRef<[u8]> + Sync>(
-    pt: &PtrHash<T, H, V>,
+fn index_parallel<const K: usize, T: Packed, H: Hasher<u64>, V: AsRef<[u8]> + Sync>(
+    pt: &PtrHash<u64, T, H, V>,
     xs: &[u64],
     threads: usize,
     minimal: bool,

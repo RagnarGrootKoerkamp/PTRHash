@@ -7,7 +7,7 @@ use std::sync::{
     Mutex,
 };
 
-impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
+impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
     pub(super) fn displace_shard(
         &self,
         shard: usize,

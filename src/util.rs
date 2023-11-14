@@ -37,7 +37,7 @@ pub fn log_duration(name: &str, start: Instant) -> Instant {
     Instant::now()
 }
 
-pub fn generate_keys(n: usize) -> Vec<Key> {
+pub fn generate_keys(n: usize) -> Vec<u64> {
     // TODO: Deterministic key generation.
     let start = Instant::now();
     let keys = loop {
@@ -63,7 +63,7 @@ pub fn generate_keys(n: usize) -> Vec<Key> {
 }
 
 #[must_use]
-pub fn bench_index(loops: usize, keys: &[u64], index: impl Fn(&Key) -> usize) -> f32 {
+pub fn bench_index(loops: usize, keys: &[u64], index: impl Fn(&u64) -> usize) -> f32 {
     let start = SystemTime::now();
     let mut sum = 0;
     for _ in 0..loops {
