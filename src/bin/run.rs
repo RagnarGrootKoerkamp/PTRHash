@@ -186,7 +186,7 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<const K: usize, T: AsRef<[TinyEfUnit]>, V: AsRef<[u8]> + Packed + Default>(
+fn index_parallel<const K: usize, T: AsRef<[TinyEfUnit]>, V: AsRef<[u8]> + Sync>(
     pt: &PT<TinyEf<T>, V>,
     xs: &[u64],
     threads: usize,

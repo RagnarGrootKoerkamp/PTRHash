@@ -105,7 +105,7 @@ const SPLIT_BUCKETS: bool = true;
 /// `F`: The packing to use for the remapping array.
 /// `Hx`: The hasher to use for keys.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
-pub struct PtrHash<F: Packed, Hx: Hasher, V: Packed = Vec<u8>> {
+pub struct PtrHash<F: Packed, Hx: Hasher, V: AsRef<[u8]> = Vec<u8>> {
     params: PtrHashParams,
 
     /// The number of keys.
@@ -420,7 +420,7 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
 }
 
 /// Read-only methods for Packed.
-impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
+impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
     fn hash_key(&self, x: &Key) -> Hash {
         Hx::hash(x, self.seed)
     }
@@ -493,7 +493,7 @@ impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
     pub fn index(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
         let b = self.bucket(hx);
-        let pilot = self.pilots.index(b);
+        let pilot = self.pilots.as_ref().index(b);
         self.slot(hx, pilot)
     }
 
@@ -501,7 +501,7 @@ impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
     pub fn index_minimal(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
         let b = self.bucket(hx);
-        let p = self.pilots.index(b);
+        let p = self.pilots.as_ref().index(b);
         let slot = self.slot(hx, p);
         if slot < self.n {
             slot
@@ -513,7 +513,7 @@ impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
     /// Return the number of bits per element used for the pilots (`.0`) and the
     /// remapping (`.1)`.
     pub fn bits_per_element(&self) -> (f32, f32) {
-        let pilots = self.pilots.size_in_bytes() as f32 / self.n as f32;
+        let pilots = self.pilots.as_ref().size_in_bytes() as f32 / self.n as f32;
         let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
         (8. * pilots, 8. * remap)
     }
