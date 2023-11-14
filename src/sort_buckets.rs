@@ -1,5 +1,5 @@
 use super::*;
-use crate::types::BucketIdx;
+use crate::bucket_idx::BucketIdx;
 use rdst::RadixSort;
 use std::time::Instant;
 

@@ -3,22 +3,21 @@
 
 /// Customizable Hasher trait.
 pub mod hash;
+/// Extendable backing storage trait and types.
+pub mod pack;
 /// Reusable Tiny Elias-Fano implementation.
 pub mod tiny_ef;
-/// Some logging and testing utilities.
+/// Some internal logging and testing utilities.
 pub mod util;
 
+mod bucket_idx;
 mod displace;
-mod index;
-pub mod pack;
-mod pilots;
 mod reduce;
 mod shard;
 mod sort_buckets;
 mod stats;
 #[cfg(test)]
 mod test;
-mod types;
 
 use bitvec::{bitvec, vec::BitVec};
 use either::Either;
@@ -428,6 +427,89 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
 
 /// Indexing methods.
 impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
+    /// Return the number of bits per element used for the pilots (`.0`) and the
+    /// remapping (`.1)`.
+    pub fn bits_per_element(&self) -> (f32, f32) {
+        let pilots = self.pilots.as_ref().size_in_bytes() as f32 / self.n as f32;
+        let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
+        (8. * pilots, 8. * remap)
+    }
+
+    pub fn print_bits_per_element(&self) {
+        let (p, r) = self.bits_per_element();
+        eprintln!(
+            "bits/element: {:>13.2}  (pilots {p:4.2}, remap {r:4.2})",
+            p + r
+        );
+    }
+
+    /// Get a non-minimal index of the given key.
+    /// Use `index_minimal` to get a key in `[0, n)`.
+    ///
+    /// `index.rs` has additional streaming/SIMD implementations.
+    pub fn index(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
+        let b = self.bucket(hx);
+        let pilot = self.pilots.as_ref().index(b);
+        self.slot(hx, pilot)
+    }
+
+    /// Get the index for `key` in `[0, n)`.
+    pub fn index_minimal(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
+        let b = self.bucket(hx);
+        let p = self.pilots.as_ref().index(b);
+        let slot = self.slot(hx, p);
+        if slot < self.n {
+            slot
+        } else {
+            self.remap.index(slot - self.n) as usize
+        }
+    }
+
+    /// Takes an iterator over keys and returns an iterator over the indices of the keys.
+    ///
+    /// Uses a buffer of size K for prefetching ahead.
+    //
+    // TODO: A chunked version that processes K keys at a time.
+    // TODO: SIMD to determine buckets/positions in parallel.
+    pub fn index_stream<'a, const K: usize, const MINIMAL: bool>(
+        &'a self,
+        xs: impl IntoIterator<Item = &'a Key> + 'a,
+    ) -> impl Iterator<Item = usize> + 'a {
+        lazy_static::lazy_static! {
+            static ref DEFAULT_KEY: Key = Key::default();
+        }
+        // Append K values at the end of the iterator to make sure we wrap sufficiently.
+        let tail = std::iter::repeat(&*DEFAULT_KEY).take(K);
+        let mut xs = xs.into_iter().chain(tail);
+
+        let mut next_hx: [Hash; K] = [Hash::default(); K];
+        let mut next_i: [usize; K] = [0; K];
+        // Initialize and prefetch first values.
+        for idx in 0..K {
+            next_hx[idx] = self.hash_key(xs.next().unwrap());
+            next_i[idx] = self.bucket(next_hx[idx]);
+            crate::util::prefetch_index(self.pilots.as_ref(), next_i[idx]);
+        }
+        xs.enumerate().map(move |(idx, next_x)| {
+            let idx = idx % K;
+            let cur_hx = next_hx[idx];
+            let cur_i = next_i[idx];
+            next_hx[idx] = self.hash_key(next_x);
+            next_i[idx] = self.bucket(next_hx[idx]);
+            crate::util::prefetch_index(self.pilots.as_ref(), next_i[idx]);
+            let pilot = self.pilots.as_ref().index(cur_i);
+            // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.slot`.
+            let slot = self.slot(cur_hx, pilot);
+            if MINIMAL && slot >= self.n {
+                self.remap.index(slot - self.n) as usize
+            } else {
+                slot
+            }
+        })
+    }
+
     fn hash_key(&self, x: &Key) -> Hash {
         Hx::hash(x, self.seed)
     }
@@ -491,46 +573,5 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
 
     fn slot_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
         (hx ^ hp).reduce(self.rem_s)
-    }
-
-    /// Get a non-minimal index of the given key.
-    /// Use `index_minimal` to get a key in `[0, n)`.
-    ///
-    /// `index.rs` has additional streaming/SIMD implementations.
-    pub fn index(&self, key: &Key) -> usize {
-        let hx = self.hash_key(key);
-        let b = self.bucket(hx);
-        let pilot = self.pilots.as_ref().index(b);
-        self.slot(hx, pilot)
-    }
-
-    /// Get the index for `key` in `[0, n)`.
-    pub fn index_minimal(&self, key: &Key) -> usize {
-        let hx = self.hash_key(key);
-        let b = self.bucket(hx);
-        let p = self.pilots.as_ref().index(b);
-        let slot = self.slot(hx, p);
-        if slot < self.n {
-            slot
-        } else {
-            self.remap.index(slot - self.n) as usize
-        }
-    }
-
-    /// Return the number of bits per element used for the pilots (`.0`) and the
-    /// remapping (`.1)`.
-    pub fn bits_per_element(&self) -> (f32, f32) {
-        let pilots = self.pilots.as_ref().size_in_bytes() as f32 / self.n as f32;
-        let remap = self.remap.size_in_bytes() as f32 / self.n as f32;
-        (8. * pilots, 8. * remap)
-    }
-
-    /// Print the number of bits per element.
-    pub fn print_bits_per_element(&self) {
-        let (p, r) = self.bits_per_element();
-        eprintln!(
-            "bits/element: {:>13.2}  (pilots {p:4.2}, remap {r:4.2})",
-            p + r
-        );
     }
 }
