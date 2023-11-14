@@ -13,8 +13,6 @@ use rdst::RadixKey;
 /// - reduce: h(x) -> [0, n)
 /// - ord: h(x) < p1 * n
 #[derive(Epserde, Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
-#[repr(C)]
-#[zero_copy]
 pub struct Hash {
     hash: u64,
 }

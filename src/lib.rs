@@ -37,8 +37,6 @@ use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 ///
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
 #[derive(Epserde, Clone, Copy, Debug)]
-#[repr(C)]
-#[zero_copy]
 pub struct PtrHashParams {
     /// Use `n/alpha` slots approximately.
     pub alpha: f64,
