@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 #[cfg(feature = "epserde")]
 use epserde::prelude::*;
 use ptr_hash::{
+    hash::Hasher,
     pack::Packed,
     tiny_ef::{TinyEf, TinyEfUnit},
     util::{bench_index, time},
@@ -70,8 +71,6 @@ enum Command {
     },
 }
 
-type PT<E, V> = FastPtrHash<E, V>;
-
 fn main() -> anyhow::Result<()> {
     let Args { command } = Args::parse();
 
@@ -91,7 +90,7 @@ fn main() -> anyhow::Result<()> {
                 .build_global()
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
-            let pt = PT::<TinyEf, _>::new(
+            let pt = <PtrHash>::new(
                 &keys,
                 PtrHashParams {
                     c,
@@ -126,9 +125,9 @@ fn main() -> anyhow::Result<()> {
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
             #[cfg(feature = "epserde")]
-            let pt = <PT<TinyEf, Vec<u8>>>::mmap("pt.bin", Flags::default())?;
+            let pt = <PtrHash>::mmap("pt.bin", Flags::default())?;
             #[cfg(not(feature = "epserde"))]
-            let pt = PT::<TinyEf, Vec<u8>>::new_random(
+            let pt = PtrHash::new_random(
                 n,
                 PtrHashParams {
                     c,
@@ -156,11 +155,11 @@ fn main() -> anyhow::Result<()> {
             // eprint!(" (64): {query:>4.1}");
             for threads in 1..=6 {
                 let query = time(loops, &keys, || {
-                    index_parallel::<64, _, _>(&pt, &keys, threads, false)
+                    index_parallel::<64, _, _, _>(&pt, &keys, threads, false)
                 });
                 eprintln!(" (64t{threads})  : {query:>5.2}ns");
                 let query = time(loops, &keys, || {
-                    index_parallel::<64, _, _>(&pt, &keys, threads, true)
+                    index_parallel::<64, _, _, _>(&pt, &keys, threads, true)
                 });
                 eprintln!(" (64t{threads})+r: {query:>5.2}ns");
             }
@@ -186,15 +185,12 @@ fn main() -> anyhow::Result<()> {
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<const K: usize, T: AsRef<[TinyEfUnit]>, V: AsRef<[u8]> + Sync>(
-    pt: &PT<TinyEf<T>, V>,
+fn index_parallel<const K: usize, T: Packed, H: Hasher, V: AsRef<[u8]> + Sync>(
+    pt: &PtrHash<T, H, V>,
     xs: &[u64],
     threads: usize,
     minimal: bool,
-) -> usize
-where
-    TinyEf<T>: Packed,
-{
+) -> usize {
     let chunk_size = xs.len().div_ceil(threads);
     let sum = AtomicUsize::new(0);
     rayon::scope(|scope| {

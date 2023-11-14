@@ -24,12 +24,14 @@ use bitvec::{bitvec, vec::BitVec};
 use either::Either;
 use itertools::izip;
 use itertools::Itertools;
+use pack::EliasFano;
 use pack::MutPacked;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
+use tiny_ef::TinyEf;
 
 use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
@@ -84,11 +86,12 @@ impl Default for PtrHashParams {
 
 // Externally visible aliases for convenience.
 
-/// The recommended way to use PtrHash is to use TinyEF as backing storage for the remap.
-pub type FastPtrHash<E, V> = PtrHash<E, hash::FxHash, V>;
+/// An alias for PtrHash with default generic arguments.
+/// Using this, you can write `DefaultPtrHash::new()` instead of `<PtrHash>::new()`.
+pub type DefaultPtrHash = PtrHash<TinyEf, hash::FxHash, Vec<u8>>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type MinimalPtrHash<E, V> = PtrHash<E, hash::FxHash, V>;
+pub type EfPtrHash = PtrHash<EliasFano, hash::FxHash, Vec<u8>>;
 
 /// They key type to be hashed.
 type Key = u64;
@@ -101,11 +104,13 @@ type Pilot = u64;
 const SPLIT_BUCKETS: bool = true;
 
 /// PtrHash datastructure.
+/// The recommended way to use PtrHash with default types.
 ///
-/// `F`: The packing to use for the remapping array.
-/// `Hx`: The hasher to use for keys.
+/// `F`: The packing to use for remapping free slots, default `TinyEf`.
+/// `Hx`: The hasher to use for keys, default `FxHash`.
+/// `V`: The pilots type. Usually `Vec<u8>`, or `&[u8]` for Epserde.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
-pub struct PtrHash<F: Packed, Hx: Hasher, V: AsRef<[u8]> = Vec<u8>> {
+pub struct PtrHash<F: Packed = TinyEf, Hx: Hasher = hash::FxHash, V: AsRef<[u8]> = Vec<u8>> {
     params: PtrHashParams,
 
     /// The number of keys.
@@ -161,11 +166,11 @@ pub struct PtrHash<F: Packed, Hx: Hasher, V: AsRef<[u8]> = Vec<u8>> {
     _hx: PhantomData<Hx>,
 }
 
-/// Construction methods for MutPacked and Vec<u8>.
+/// Construction methods.
 impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
     /// Create a new PtrHash instance from the given keys.
     ///
-    /// NOTE: Only up to 2^32 keys are supported.
+    /// NOTE: Only up to 2^40 keys are supported.
     ///
     /// Default parameters `alpha=0.98` and `c=9.0` should give fast
     /// construction that always succeeds, using `2.69 bits/key`.  Depending on
@@ -182,6 +187,8 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
     /// .build_global()
     /// .unwrap();
     /// ```
+    ///
+    /// NOTE: Use `<PtrHash>::new()` or `DefaultPtrHash::new()` instead of simply `PtrHash::new()`.
     pub fn new(keys: &[Key], params: PtrHashParams) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
         ptr_hash.compute_pilots(keys.par_iter());
@@ -419,7 +426,7 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
     }
 }
 
-/// Read-only methods for Packed.
+/// Indexing methods.
 impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
     fn hash_key(&self, x: &Key) -> Hash {
         Hx::hash(x, self.seed)
