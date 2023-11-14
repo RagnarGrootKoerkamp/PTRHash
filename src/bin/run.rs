@@ -6,12 +6,13 @@ use ptr_hash::{
     hash::Hasher,
     pack::Packed,
     tiny_ef::{TinyEf, TinyEfUnit},
-    util::{bench_index, time},
     *,
 };
 use std::{
     cmp::min,
+    hint::black_box,
     sync::atomic::{AtomicUsize, Ordering},
+    time::SystemTime,
 };
 
 #[derive(clap::Parser)]
@@ -182,6 +183,31 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+#[must_use]
+pub fn bench_index(loops: usize, keys: &[u64], index: impl Fn(&u64) -> usize) -> f32 {
+    let start = SystemTime::now();
+    let mut sum = 0;
+    for _ in 0..loops {
+        for key in keys {
+            sum += index(key);
+        }
+    }
+    black_box(sum);
+    start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
+}
+
+#[must_use]
+pub fn time<F>(loops: usize, keys: &[u64], f: F) -> f32
+where
+    F: Fn() -> usize,
+{
+    let start = SystemTime::now();
+    for _ in 0..loops {
+        black_box(f());
+    }
+    start.elapsed().unwrap().as_nanos() as f32 / (loops * keys.len()) as f32
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
