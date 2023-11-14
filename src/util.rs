@@ -38,6 +38,7 @@ pub fn log_duration(name: &str, start: Instant) -> Instant {
 }
 
 pub fn generate_keys(n: usize) -> Vec<Key> {
+    // TODO: Deterministic key generation.
     let start = Instant::now();
     let keys = loop {
         let start = Instant::now();
