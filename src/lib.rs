@@ -100,6 +100,7 @@ type Rp = FastReduce;
 type Rb = FastReduce;
 type Rs = MulReduce;
 type Pilot = u64;
+type PilotHash = u64;
 const SPLIT_BUCKETS: bool = true;
 
 /// PtrHash datastructure.
@@ -134,7 +135,7 @@ pub struct PtrHash<F: Packed = TinyEf, Hx: Hasher = hash::FxHash, V: AsRef<[u8]>
     b: usize,
 
     /// Additional constants.
-    p1: crate::Hash,
+    p1: u64,
     p2: usize,
     c3: usize,
 
@@ -220,7 +221,7 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
         ptr_hash.pilots = MutPacked::new(k);
         let rem_s_total = FastReduce::new(ptr_hash.s_total);
         let mut remap_vals = (ptr_hash.n..ptr_hash.s_total)
-            .map(|_| Hash::new(random::<u64>()).reduce(rem_s_total) as _)
+            .map(|_| rem_s_total.reduce(random::<u64>()) as _)
             .collect_vec();
         remap_vals.radix_sort_unstable();
         ptr_hash.remap = MutPacked::new(remap_vals);
@@ -270,7 +271,7 @@ impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
         let beta = params.beta;
         let gamma = params.gamma;
 
-        let p1 = Hash::new((beta * u64::MAX as f64) as u64);
+        let p1 = (beta * u64::MAX as f64) as u64;
         let p2 = (gamma * b as f64) as usize;
         let c1 = (gamma / beta * (b - 1) as f64).floor() as usize;
         // (b-2) to avoid rounding issues.
@@ -484,7 +485,7 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
         let tail = std::iter::repeat(&*DEFAULT_KEY).take(K);
         let mut xs = xs.into_iter().chain(tail);
 
-        let mut next_hx: [Hash; K] = [Hash::default(); K];
+        let mut next_hx: [Hx::H; K] = [Hx::H::default(); K];
         let mut next_i: [usize; K] = [0; K];
         // Initialize and prefetch first values.
         for idx in 0..K {
@@ -510,36 +511,36 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
         })
     }
 
-    fn hash_key(&self, x: &Key) -> Hash {
+    fn hash_key(&self, x: &Key) -> Hx::H {
         Hx::hash(x, self.seed)
     }
 
-    fn hash_pilot(&self, p: u64) -> Hash {
+    fn hash_pilot(&self, p: Pilot) -> PilotHash {
         MulHash::hash(&p, self.seed)
     }
 
-    fn shard(&self, hx: Hash) -> usize {
-        hx.reduce(self.rem_shards)
+    fn shard(&self, hx: Hx::H) -> usize {
+        self.rem_shards.reduce(hx.high())
     }
 
-    fn part(&self, hx: Hash) -> usize {
-        hx.reduce(self.rem_parts)
+    fn part(&self, hx: Hx::H) -> usize {
+        self.rem_parts.reduce(hx.high())
     }
 
-    /// Map hx to a bucket in the range [0, self.b).
+    /// Map `hx_remainder` to a bucket in the range [0, self.b).
     /// Hashes <self.p1 are mapped to large buckets [0, self.p2).
     /// Hashes >=self.p1 are mapped to small [self.p2, self.b).
     ///
     /// (Unless SPLIT_BUCKETS is false, in which case all hashes are mapped to [0, self.b).)
-    fn bucket_in_part(&self, hx: Hash) -> usize {
+    fn bucket_in_part(&self, hx_remainder: u64) -> usize {
         if !SPLIT_BUCKETS {
-            return hx.reduce(self.rem_b);
+            return self.rem_b.reduce(hx_remainder);
         }
 
         // NOTE: There is a lot of MOV/CMOV going on here.
-        let is_large = hx >= self.p1;
+        let is_large = hx_remainder >= self.p1;
         let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
-        let b = is_large as usize * self.c3 + hx.reduce(rem);
+        let b = is_large as usize * self.c3 + rem.reduce(hx_remainder);
 
         debug_assert!(!is_large || self.p2 <= b);
         debug_assert!(!is_large || b < self.b);
@@ -550,28 +551,30 @@ impl<F: Packed, Hx: Hasher, V: AsRef<[u8]>> PtrHash<F, Hx, V> {
 
     /// See bucket.rs for additional implementations.
     /// Returns the offset in the slots array for the current part and the bucket index.
-    fn bucket(&self, hx: Hash) -> usize {
+    fn bucket(&self, hx: Hx::H) -> usize {
         if !SPLIT_BUCKETS {
-            return hx.reduce(self.rem_b_total);
+            return self.rem_b_total.reduce(hx.high());
         }
 
         // Extract the high bits for part selection; do normal bucket
         // computation within the part using the remaining bits.
         // NOTE: This is somewhat slow, but doing better is hard.
-        let (part, hx) = hx.reduce_with_remainder(self.rem_parts);
+        let (part, hx) = self.rem_parts.reduce_with_remainder(hx.high());
         let bucket = self.bucket_in_part(hx);
         part * self.b + bucket
     }
 
-    fn slot(&self, hx: Hash, pilot: u64) -> usize {
+    /// Slot uses the 64 low bits of the hash.
+    fn slot(&self, hx: Hx::H, pilot: u64) -> usize {
         (self.part(hx) << self.s_bits) + self.slot_in_part(hx, pilot)
     }
 
-    fn slot_in_part(&self, hx: Hash, pilot: u64) -> usize {
-        (hx ^ self.hash_pilot(pilot)).reduce(self.rem_s)
+    fn slot_in_part(&self, hx: Hx::H, pilot: Pilot) -> usize {
+        self.slot_in_part_hp(hx, self.hash_pilot(pilot))
     }
 
-    fn slot_in_part_hp(&self, hx: Hash, hp: Hash) -> usize {
-        (hx ^ hp).reduce(self.rem_s)
+    /// Slot uses the 64 low bits of the hash.
+    fn slot_in_part_hp(&self, hx: Hx::H, hp: PilotHash) -> usize {
+        self.rem_s.reduce(hx.low() ^ hp)
     }
 }

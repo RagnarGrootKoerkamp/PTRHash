@@ -1,88 +1,50 @@
-use std::ops::{BitXor, Sub};
+use std::fmt::Debug;
 
-use crate::{reduce::Reduce, Key};
-use murmur2::murmur64a;
-use rdst::RadixKey;
+use crate::Key;
 
-/// Strong type for 64bit hashes.
-///
-/// We want to limit what kind of operations we do on hashes.
-/// In particular we only need:
-/// - xor, for h(x) ^ h(k)
-/// - reduce: h(x) -> [0, n)
-/// - ord: h(x) < p1 * n
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Default, Ord)]
-#[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
-pub struct Hash {
-    hash: u64,
+/// A wrapper trait that supports both 64 and 128bit hashes.
+pub trait Hash: Copy + Debug + Default + Send + Sync + Eq + rdst::RadixKey {
+    /// Returns the low 64bits.
+    fn low(&self) -> u64;
+    /// Returns the high 64bits.
+    fn high(&self) -> u64;
 }
 
-// Needed for radix_sort_unstable from rdst.
-impl RadixKey for Hash {
-    const LEVELS: usize = 8;
-
-    #[inline]
-    fn get_level(&self, level: usize) -> u8 {
-        (self.hash >> (level * 8)) as u8
+impl Hash for u64 {
+    fn low(&self) -> u64 {
+        *self
+    }
+    fn high(&self) -> u64 {
+        *self
     }
 }
 
-impl Hash {
-    pub fn new(v: u64) -> Self {
-        Hash { hash: v }
+impl Hash for u128 {
+    fn low(&self) -> u64 {
+        *self as u64
     }
-    pub fn get(&self) -> u64 {
-        self.hash
-    }
-    pub fn reduce<R: Reduce>(self, d: R) -> usize {
-        d.reduce(self.hash)
-    }
-    pub fn reduce_with_remainder<R: Reduce>(self, d: R) -> (usize, Hash) {
-        let (r, h) = d.reduce_with_remainder(self.hash);
-        (r, Hash { hash: h })
-    }
-}
-
-impl Sub for Hash {
-    type Output = Self;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        Self {
-            hash: self.hash - rhs.hash,
-        }
-    }
-}
-
-impl BitXor for Hash {
-    type Output = Self;
-
-    fn bitxor(self, rhs: Self) -> Self::Output {
-        Self {
-            hash: self.hash ^ rhs.hash,
-        }
+    fn high(&self) -> u64 {
+        (*self >> 64) as u64
     }
 }
 
 pub trait Hasher: Sync {
-    fn hash(x: &Key, seed: u64) -> Hash;
+    type H: Hash;
+    fn hash(x: &Key, seed: u64) -> Self::H;
 }
 
 pub struct Murmur;
 
 impl Hasher for Murmur {
-    fn hash(x: &Key, seed: u64) -> Hash {
-        Hash {
-            hash: murmur64a(
-                // Pass the key as a byte slice.
-                unsafe {
-                    std::slice::from_raw_parts(
-                        x as *const Key as *const u8,
-                        std::mem::size_of::<Key>(),
-                    )
-                },
-                seed,
-            ),
-        }
+    type H = u64;
+    fn hash(x: &Key, seed: u64) -> u64 {
+        murmur2::murmur64a(
+            // Pass the key as a byte slice.
+            unsafe {
+                std::slice::from_raw_parts(x as *const Key as *const u8, std::mem::size_of::<Key>())
+            },
+            seed,
+        )
     }
 }
 
@@ -90,8 +52,9 @@ impl Hasher for Murmur {
 pub struct XorHash;
 
 impl Hasher for XorHash {
-    fn hash(x: &Key, seed: u64) -> Hash {
-        Hash { hash: *x ^ seed }
+    type H = u64;
+    fn hash(x: &Key, seed: u64) -> u64 {
+        *x ^ seed
     }
 }
 
@@ -106,10 +69,9 @@ impl MulHash {
 }
 
 impl Hasher for MulHash {
-    fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash {
-            hash: Self::C.wrapping_mul(*x),
-        }
+    type H = u64;
+    fn hash(x: &Key, _seed: u64) -> u64 {
+        Self::C.wrapping_mul(*x)
     }
 }
 
@@ -117,8 +79,9 @@ impl Hasher for MulHash {
 pub struct NoHash;
 
 impl Hasher for NoHash {
-    fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash { hash: *x }
+    type H = u64;
+    fn hash(x: &Key, _seed: u64) -> u64 {
+        *x
     }
 }
 
@@ -127,9 +90,8 @@ impl Hasher for NoHash {
 pub struct FxHash;
 
 impl Hasher for FxHash {
-    fn hash(x: &Key, _seed: u64) -> Hash {
-        Hash {
-            hash: fxhash::hash64(x),
-        }
+    type H = u64;
+    fn hash(x: &Key, _seed: u64) -> u64 {
+        fxhash::hash64(x)
     }
 }

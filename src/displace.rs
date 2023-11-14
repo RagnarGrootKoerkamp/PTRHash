@@ -11,7 +11,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(super) fn displace_shard(
         &self,
         shard: usize,
-        hashes: &[Hash],
+        hashes: &[Hx::H],
         part_starts: &[u32],
         pilots: &mut [u8],
         taken: &mut [BitVec],
@@ -73,7 +73,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     fn displace_part(
         &self,
         part: usize,
-        hashes: &[Hash],
+        hashes: &[Hx::H],
         pilots: &mut [u8],
         taken: &mut BitSlice,
         stats: &Mutex<BucketStats>,
@@ -149,7 +149,8 @@ Possible causes:
 
                 let bucket =
                     unsafe { hashes.get_unchecked(starts[b] as usize..starts[b + 1] as usize) };
-                let b_slots = |hp: Hash| bucket.iter().map(move |&hx| self.slot_in_part_hp(hx, hp));
+                let b_slots =
+                    |hp: PilotHash| bucket.iter().map(move |&hx| self.slot_in_part_hp(hx, hp));
 
                 // 1b) Hot-path for when there are no collisions, which is most of the buckets.
                 if let Some((p, hp)) = self.find_pilot(kmax, bucket, taken) {
@@ -210,7 +211,7 @@ Possible causes:
 
                 if best == (usize::MAX, u64::MAX) {
                     for hx in bucket {
-                        eprintln!("{:0b}", hx.get());
+                        eprintln!("{:x?}", hx);
                     }
                     eprintln!("part {part}: Indistinguishable hashes in bucket!");
                     return None;
@@ -259,7 +260,12 @@ Possible causes:
         Some(total_displacements)
     }
 
-    fn find_pilot(&self, kmax: u64, bucket: &[Hash], taken: &mut BitSlice) -> Option<(u64, Hash)> {
+    fn find_pilot(
+        &self,
+        kmax: u64,
+        bucket: &[Hx::H],
+        taken: &mut BitSlice,
+    ) -> Option<(Pilot, PilotHash)> {
         // This gives ~10% speedup.
         match bucket.len() {
             1 => self.find_pilot_array::<1>(kmax, bucket.try_into().unwrap(), taken),
@@ -276,9 +282,9 @@ Possible causes:
     fn find_pilot_array<const L: usize>(
         &self,
         kmax: u64,
-        bucket: &[Hash; L],
+        bucket: &[Hx::H; L],
         taken: &mut BitSlice,
-    ) -> Option<(u64, Hash)> {
+    ) -> Option<(Pilot, PilotHash)> {
         self.find_pilot_slice(kmax, bucket, taken)
     }
 
@@ -290,9 +296,9 @@ Possible causes:
     fn find_pilot_slice(
         &self,
         kmax: u64,
-        bucket: &[Hash],
+        bucket: &[Hx::H],
         taken: &mut BitSlice,
-    ) -> Option<(u64, Hash)> {
+    ) -> Option<(Pilot, PilotHash)> {
         let r = bucket.len() / 4 * 4;
         'p: for p in 0u64..kmax {
             let hp = self.hash_pilot(p);
@@ -337,7 +343,7 @@ Possible causes:
     /// collision within the bucket is found.
     ///
     /// Returns true on success.
-    fn try_take_pilot(&self, bucket: &[Hash], hp: Hash, taken: &mut BitSlice) -> bool {
+    fn try_take_pilot(&self, bucket: &[Hx::H], hp: PilotHash, taken: &mut BitSlice) -> bool {
         // This bucket does not collide with previous buckets, but it may still collide with itself.
         for (i, &hx) in bucket.iter().enumerate() {
             let slot = self.slot_in_part_hp(hx, hp);

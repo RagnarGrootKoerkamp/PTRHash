@@ -14,8 +14,8 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(super) fn sort_parts(
         &self,
         shard: usize,
-        mut hashes: Vec<Hash>,
-    ) -> Option<(Vec<Hash>, Vec<u32>)> {
+        mut hashes: Vec<Hx::H>,
+    ) -> Option<(Vec<Hx::H>, Vec<u32>)> {
         // For FastReduce methods, we can just sort by hash directly
         // instead of sorting by bucket id: For FR32L, first partition by those
         // <self.p1 and those >=self.p1, and then sort each group using the low
@@ -83,7 +83,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     }
 
     // Sort the buckets in the given part and corresponding range of hashes.
-    pub(super) fn sort_buckets(&self, part: usize, hashes: &[Hash]) -> (Vec<u32>, Vec<BucketIdx>) {
+    pub(super) fn sort_buckets(&self, part: usize, hashes: &[Hx::H]) -> (Vec<u32>, Vec<BucketIdx>) {
         // Where each bucket starts in hashes.
         let mut bucket_starts = Vec::with_capacity(self.b + 1);
 

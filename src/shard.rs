@@ -15,7 +15,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(crate) fn shard_keys<'a>(
         &'a self,
         keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
-    ) -> impl Iterator<Item = Vec<Hash>> + 'a {
+    ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
         (0..self.num_shards).map(move |shard| {
             keys.clone()
                 .map(|key| self.hash_key(key.borrow()))
@@ -34,7 +34,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     pub(crate) fn shard_keys_to_disk<'a>(
         &'a self,
         keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
-    ) -> impl Iterator<Item = Vec<Hash>> + 'a {
+    ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
         let temp_dir = tempfile::TempDir::new().unwrap();
         eprintln!("TMP PATH: {:?}", temp_dir.path());
 
@@ -61,7 +61,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
         keys.for_each_init(init, |bufs, key| {
             let h = self.hash_key(key.borrow());
             let shard = self.shard(h);
-            bufs[shard].push(h.get());
+            bufs[shard].push(h);
         });
 
         eprintln!("Wrote all files. Pausing.");
@@ -84,7 +84,7 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
             .collect_vec();
 
         files.into_iter().map(move |(f, cnt)| {
-            let mut v = vec![Hash::default(); cnt];
+            let mut v = vec![Hx::H::default(); cnt];
             let mut f = BufReader::new(f);
             let (pre, data, post) = unsafe { v.align_to_mut::<u8>() };
             assert!(pre.is_empty());
@@ -95,19 +95,19 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx> {
     }
 }
 
-struct ThreadLocalBuf<'a> {
-    buf: Vec<u64>,
+struct ThreadLocalBuf<'a, H> {
+    buf: Vec<H>,
     file: &'a Mutex<(BufWriter<File>, usize)>,
 }
 
-impl<'a> ThreadLocalBuf<'a> {
+impl<'a, H> ThreadLocalBuf<'a, H> {
     fn new(file: &'a Mutex<(BufWriter<File>, usize)>) -> Self {
         Self {
             buf: Vec::with_capacity(1 << 16),
             file,
         }
     }
-    fn push(&mut self, h: u64) {
+    fn push(&mut self, h: H) {
         self.buf.push(h);
         // L2 size
         if self.buf.len() == (1 << 16) {
@@ -125,7 +125,7 @@ impl<'a> ThreadLocalBuf<'a> {
     }
 }
 
-impl<'a> Drop for ThreadLocalBuf<'a> {
+impl<'a, H> Drop for ThreadLocalBuf<'a, H> {
     fn drop(&mut self) {
         self.flush();
     }
