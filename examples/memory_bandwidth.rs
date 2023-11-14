@@ -74,7 +74,7 @@ fn test_stride<const PREFETCH: bool>(data: &Vec<u8>, s: usize) {
             for i in (offset * CACHELINE..n).step_by(cs) {
                 unsafe {
                     if PREFETCH {
-                        ptr_hash::util::prefetch_read_data(data.as_ptr().add(i + 10 * cs));
+                        ptr_hash::util::prefetch_index(data, i + 10 * cs);
                     }
                     sum2 += *data.get_unchecked(i) as u64;
                 }

@@ -24,7 +24,7 @@ impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
         for idx in 0..K {
             next_hx[idx] = self.hash_key(xs.next().unwrap());
             next_i[idx] = self.bucket(next_hx[idx]);
-            self.pilots.prefetch(next_i[idx]);
+            crate::util::prefetch_index(self.pilots.as_ref(), next_i[idx]);
         }
         xs.enumerate().map(move |(idx, next_x)| {
             let idx = idx % K;
@@ -32,8 +32,8 @@ impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
             let cur_i = next_i[idx];
             next_hx[idx] = self.hash_key(next_x);
             next_i[idx] = self.bucket(next_hx[idx]);
-            self.pilots.prefetch(next_i[idx]);
-            let pilot = self.pilots.index(cur_i);
+            crate::util::prefetch_index(self.pilots.as_ref(), next_i[idx]);
+            let pilot = self.pilots.as_ref().index(cur_i);
             // NOTE: Caching `part` slows things down, so it's recomputed as part of `self.slot`.
             let slot = self.slot(cur_hx, pilot);
             if MINIMAL && slot >= self.n {

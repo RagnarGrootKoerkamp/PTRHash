@@ -38,10 +38,7 @@ macro_rules! vec_impl {
                 unsafe { (*self.get_unchecked(index)) as u64 }
             }
             fn prefetch(&self, index: usize) {
-                unsafe {
-                    let address = self.as_ptr().add(index) as *const u64;
-                    crate::util::prefetch_read_data(address);
-                }
+                crate::util::prefetch_index(self, index);
             }
             fn size_in_bytes(&self) -> usize {
                 self.len() * std::mem::size_of::<$t>()
@@ -62,10 +59,7 @@ macro_rules! slice_impl {
                 unsafe { (*self.get_unchecked(index)) as u64 }
             }
             fn prefetch(&self, index: usize) {
-                unsafe {
-                    let address = self.as_ptr().add(index) as *const u64;
-                    crate::util::prefetch_read_data(address);
-                }
+                crate::util::prefetch_index(self, index);
             }
             fn size_in_bytes(&self) -> usize {
                 self.len() * std::mem::size_of::<$t>()

@@ -8,7 +8,8 @@ use rdst::RadixSort;
 use std::{hint::black_box, time::SystemTime};
 
 /// Prefetch the given cacheline into L1 cache.
-pub fn prefetch_read_data<T>(ptr: *const T) {
+pub fn prefetch_index<T>(s: &[T], index: usize) {
+    let ptr = unsafe { s.as_ptr().add(index) as *const u64 };
     #[cfg(target_arch = "x86_64")]
     unsafe {
         std::arch::x86_64::_mm_prefetch(ptr as *const i8, std::arch::x86_64::_MM_HINT_T0);

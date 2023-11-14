@@ -36,10 +36,7 @@ impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
         unsafe { (*self.ef.as_ref().get_unchecked(index / L)).get(index % L) }
     }
     pub fn prefetch(&self, index: usize) {
-        unsafe {
-            let address = self.ef.as_ref().as_ptr().add(index / L) as *const u64;
-            crate::util::prefetch_read_data(address);
-        }
+        crate::util::prefetch_index(self.ef.as_ref(), index / L);
     }
     pub fn size_in_bytes(&self) -> usize {
         std::mem::size_of_val(self.ef.as_ref())
