@@ -1,6 +1,6 @@
 use super::*;
 
-impl<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed + Default> PtrHash<F, Hx, V> {
+impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
     /// Takes an iterator over keys and returns an iterator over the indices of the keys.
     ///
     /// Uses a buffer of size K for prefetching ahead.

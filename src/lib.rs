@@ -24,6 +24,7 @@ use bitvec::{bitvec, vec::BitVec};
 use either::Either;
 use itertools::izip;
 use itertools::Itertools;
+use pack::MutPacked;
 use rand::{random, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
@@ -104,7 +105,7 @@ const SPLIT_BUCKETS: bool = true;
 /// `F`: The packing to use for the remapping array.
 /// `Hx`: The hasher to use for keys.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
-pub struct PtrHash<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed = Vec<u8>> {
+pub struct PtrHash<F: Packed, Hx: Hasher, V: Packed = Vec<u8>> {
     params: PtrHashParams,
 
     /// The number of keys.
@@ -160,7 +161,8 @@ pub struct PtrHash<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed = Vec<u8>> {
     _hx: PhantomData<Hx>,
 }
 
-impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
+/// Construction methods for MutPacked and Vec<u8>.
+impl<F: MutPacked, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
     /// Create a new PtrHash instance from the given keys.
     ///
     /// NOTE: Only up to 2^32 keys are supported.
@@ -209,13 +211,13 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
         let k = (0..ptr_hash.b_total)
             .map(|_| random::<u8>() as Pilot)
             .collect();
-        ptr_hash.pilots = Packed::new(k);
+        ptr_hash.pilots = MutPacked::new(k);
         let rem_s_total = FastReduce::new(ptr_hash.s_total);
         let mut remap_vals = (ptr_hash.n..ptr_hash.s_total)
             .map(|_| Hash::new(random::<u64>()).reduce(rem_s_total) as _)
             .collect_vec();
         remap_vals.radix_sort_unstable();
-        ptr_hash.remap = Packed::new(remap_vals);
+        ptr_hash.remap = MutPacked::new(remap_vals);
         ptr_hash.print_bits_per_element();
         ptr_hash
     }
@@ -413,11 +415,12 @@ impl<F: Packed, Hx: Hasher> PtrHash<F, Hx, Vec<u8>> {
             }
             v.push(i as u64);
         }
-        self.remap = Packed::new(v);
+        self.remap = MutPacked::new(v);
     }
 }
 
-impl<F: Packed, Hx: Hasher, V: AsRef<[u8]> + Packed + Default> PtrHash<F, Hx, V> {
+/// Read-only methods for Packed.
+impl<F: Packed, Hx: Hasher, V: Packed> PtrHash<F, Hx, V> {
     fn hash_key(&self, x: &Key) -> Hash {
         Hx::hash(x, self.seed)
     }

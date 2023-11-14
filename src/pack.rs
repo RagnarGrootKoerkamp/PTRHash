@@ -1,12 +1,9 @@
-use sucds::mii_sequences::{EliasFano, EliasFanoBuilder};
+use sucds::mii_sequences::EliasFanoBuilder;
 
 use crate::tiny_ef::{TinyEf, TinyEfUnit};
 
+/// A trait for backing storage types.
 pub trait Packed: Sync {
-    fn default() -> Self;
-    fn new(vals: Vec<u64>) -> Self;
-    /// Index the pack.
-    /// It is guaranteed that the index is within bounds.
     /// This uses get_unchecked internally, so you must ensure that index is within bounds.
     fn index(&self, index: usize) -> u64;
     /// Prefetch the element at the given index.
@@ -15,21 +12,28 @@ pub trait Packed: Sync {
     fn size_in_bytes(&self) -> usize;
 }
 
+/// An extension of Packed that can be used during construction.
+pub trait MutPacked: Packed {
+    fn default() -> Self;
+    fn new(vals: Vec<u64>) -> Self;
+}
+
 macro_rules! vec_impl {
     ($t:ty) => {
-        impl Packed for Vec<$t> {
+        impl MutPacked for Vec<$t> {
             fn default() -> Self {
                 Default::default()
             }
             fn new(vals: Vec<u64>) -> Self {
                 vals.into_iter()
                     .map(|x| {
-                        x.try_into().expect(&format!(
-                            "Computed pilot {x} is larger than backing type can hold."
-                        ))
+                        x.try_into()
+                            .expect(&format!("Value {x} is larger than backing type can hold."))
                     })
                     .collect()
             }
+        }
+        impl Packed for Vec<$t> {
             fn index(&self, index: usize) -> u64 {
                 unsafe { (*self.get_unchecked(index)) as u64 }
             }
@@ -51,15 +55,9 @@ vec_impl!(u16);
 vec_impl!(u32);
 vec_impl!(u64);
 
-macro_rules! ref_impl {
+macro_rules! slice_impl {
     ($t:ty) => {
         impl Packed for &[$t] {
-            fn default() -> Self {
-                Default::default()
-            }
-            fn new(_vals: Vec<u64>) -> Self {
-                unreachable!();
-            }
             fn index(&self, index: usize) -> u64 {
                 unsafe { (*self.get_unchecked(index)) as u64 }
             }
@@ -76,44 +74,21 @@ macro_rules! ref_impl {
     };
 }
 
-ref_impl!(u8);
-ref_impl!(u16);
-ref_impl!(u32);
-ref_impl!(u64);
+slice_impl!(u8);
+slice_impl!(u16);
+slice_impl!(u32);
+slice_impl!(u64);
 
-impl Packed for EliasFano {
-    fn default() -> Self {
-        Default::default()
-    }
-
-    fn new(vals: Vec<u64>) -> Self {
-        if vals.is_empty() {
-            Default::default()
-        } else {
-            let mut builder =
-                EliasFanoBuilder::new(*vals.last().unwrap() as usize + 1, vals.len()).unwrap();
-            builder.extend(vals.iter().map(|&x| x as usize)).unwrap();
-            builder.build()
-        }
-    }
-
-    #[inline(always)]
-    fn index(&self, index: usize) -> u64 {
-        self.select(index as _).unwrap() as u64
-    }
-
-    fn size_in_bytes(&self) -> usize {
-        sucds::Serializable::size_in_bytes(self)
-    }
-}
-
-impl Packed for TinyEf<Vec<TinyEfUnit>> {
+impl MutPacked for TinyEf<Vec<TinyEfUnit>> {
     fn default() -> Self {
         Default::default()
     }
     fn new(vals: Vec<u64>) -> Self {
         Self::new(&vals)
     }
+}
+
+impl<T: AsRef<[TinyEfUnit]> + Sync> Packed for TinyEf<T> {
     fn index(&self, index: usize) -> u64 {
         self.index(index)
     }
@@ -125,20 +100,33 @@ impl Packed for TinyEf<Vec<TinyEfUnit>> {
     }
 }
 
-impl Packed for TinyEf<&[TinyEfUnit]> {
+/// Wrapper around the Sucds implementation.
+struct EliasFano(sucds::mii_sequences::EliasFano);
+
+impl MutPacked for EliasFano {
     fn default() -> Self {
-        Default::default()
+        EliasFano(Default::default())
     }
-    fn new(_vals: Vec<u64>) -> Self {
-        unreachable!();
+
+    fn new(vals: Vec<u64>) -> Self {
+        if vals.is_empty() {
+            Self::default()
+        } else {
+            let mut builder =
+                EliasFanoBuilder::new(*vals.last().unwrap() as usize + 1, vals.len()).unwrap();
+            builder.extend(vals.iter().map(|&x| x as usize)).unwrap();
+            EliasFano(builder.build())
+        }
     }
+}
+
+impl Packed for EliasFano {
+    #[inline(always)]
     fn index(&self, index: usize) -> u64 {
-        self.index(index)
+        self.0.select(index as _).unwrap() as u64
     }
-    fn prefetch(&self, index: usize) {
-        self.prefetch(index)
-    }
+
     fn size_in_bytes(&self) -> usize {
-        self.size_in_bytes()
+        sucds::Serializable::size_in_bytes(&self.0)
     }
 }
