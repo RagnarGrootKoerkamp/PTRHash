@@ -41,7 +41,7 @@ macro_rules! vec_impl {
                 crate::util::prefetch_index(self, index);
             }
             fn size_in_bytes(&self) -> usize {
-                self.len() * std::mem::size_of::<$t>()
+                std::mem::size_of_val(self.as_slice())
             }
         }
     };
@@ -54,7 +54,7 @@ vec_impl!(u64);
 
 macro_rules! slice_impl {
     ($t:ty) => {
-        impl Packed for &[$t] {
+        impl Packed for [$t] {
             fn index(&self, index: usize) -> u64 {
                 unsafe { (*self.get_unchecked(index)) as u64 }
             }
@@ -62,7 +62,7 @@ macro_rules! slice_impl {
                 crate::util::prefetch_index(self, index);
             }
             fn size_in_bytes(&self) -> usize {
-                self.len() * std::mem::size_of::<$t>()
+                std::mem::size_of_val(self)
             }
         }
     };
@@ -95,7 +95,7 @@ impl<T: AsRef<[TinyEfUnit]> + Sync> Packed for TinyEf<T> {
 }
 
 /// Wrapper around the Sucds implementation.
-struct EliasFano(sucds::mii_sequences::EliasFano);
+pub struct EliasFano(sucds::mii_sequences::EliasFano);
 
 impl MutPacked for EliasFano {
     fn default() -> Self {
