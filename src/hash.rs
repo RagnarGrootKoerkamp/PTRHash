@@ -48,16 +48,6 @@ impl Hasher for Murmur {
     }
 }
 
-/// Xor the key and seed.
-pub struct XorHash;
-
-impl Hasher for XorHash {
-    type H = u64;
-    fn hash(x: &Key, seed: u64) -> u64 {
-        *x ^ seed
-    }
-}
-
 /// Multiply the key by a mixing constant.
 pub struct MulHash;
 
@@ -76,6 +66,7 @@ impl Hasher for MulHash {
 }
 
 /// Pass the key through unchanged.
+/// Used for benchmarking.
 pub struct NoHash;
 
 impl Hasher for NoHash {
@@ -85,7 +76,6 @@ impl Hasher for NoHash {
     }
 }
 
-#[derive(Clone, Copy)]
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct FxHash;
 
