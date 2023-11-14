@@ -1,3 +1,5 @@
+This `hashers` branch compares many hash implementations for both 64 and 128bit hashes.
+
 # PTRHash
 
 PTRHash is a fast and space efficient *minimal perfect hash function* that maps

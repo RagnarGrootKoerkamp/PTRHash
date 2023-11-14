@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use epserde::prelude::*;
 use itertools::Itertools;
 use ptr_hash::{
-    hash::{Hasher, Murmur},
+    hash::{Hasher, Murmur2_64},
     pack::Packed,
     tiny_ef::{TinyEf, TinyEfUnit},
     *,
@@ -77,6 +77,20 @@ enum Command {
     },
 }
 
+// Fast hashes
+// type PH = PtrHash<TinyEf, hash::FxHash, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::Murmur2_64, Vec<u8>>;
+type PH<Key> = PtrHash<Key, TinyEf, hash::Murmur3_128, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::FastMurmur3_128, Vec<u8>>;
+
+// Slow hashes
+// type PH = PtrHash<TinyEf, hash::Highway64, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::City64, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::Xx128, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::Metro64, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::Spooky64, Vec<u8>>;
+// type PH = PtrHash<TinyEf, hash::Spooky128, Vec<u8>>;
+
 fn main() -> anyhow::Result<()> {
     let Args { command } = Args::parse();
 
@@ -96,7 +110,7 @@ fn main() -> anyhow::Result<()> {
                 .build_global()
                 .unwrap();
             let keys = ptr_hash::util::generate_keys(n);
-            let pt = <PtrHash>::new(
+            let pt = PH::new(
                 &keys,
                 PtrHashParams {
                     c,
@@ -131,45 +145,31 @@ fn main() -> anyhow::Result<()> {
                 .build_global()
                 .unwrap();
 
+            let params = PtrHashParams {
+                c,
+                alpha,
+                print_stats: stats,
+                slots_per_part: s,
+                keys_per_shard,
+                shard_to_disk: disk,
+                ..Default::default()
+            };
+
             if let Some(keys_file) = keys {
                 // read file keys_file
                 let file = std::fs::read_to_string(keys_file).unwrap();
                 let keys = file.lines().map(|l| l.as_bytes()).collect_vec();
-                let pt = DefaultPtrHash::<Murmur, _>::new(
-                    &keys,
-                    PtrHashParams {
-                        c,
-                        alpha,
-                        print_stats: stats,
-                        slots_per_part: s,
-                        keys_per_shard,
-                        shard_to_disk: disk,
-                        ..Default::default()
-                    },
-                );
-
-                n = keys.len();
-
-                benchmark_queries(total, n, &keys, &pt);
+                // let pt = DefaultPtrHash::<Murmur2_64, _>::new(&keys, params);
+                // benchmark_queries(total, &keys, &pt);
+                bench_hashers(total, &params, &keys);
             } else {
                 let keys = ptr_hash::util::generate_keys(n);
                 #[cfg(feature = "epserde")]
                 let pt = <PtrHash>::mmap("pt.bin", Flags::default())?;
                 #[cfg(not(feature = "epserde"))]
-                let pt = <PtrHash>::new_random(
-                    n,
-                    PtrHashParams {
-                        c,
-                        alpha,
-                        print_stats: stats,
-                        slots_per_part: s,
-                        keys_per_shard,
-                        shard_to_disk: disk,
-                        ..Default::default()
-                    },
-                );
-
-                benchmark_queries(total, n, &keys, &pt);
+                // let pt = <PtrHash>::new_random(n, params);
+                // benchmark_queries(total, &keys, &pt);
+                bench_hashers(total, &params, &keys);
             }
         }
     }
@@ -177,12 +177,58 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn bench_hashers<Key: KeyT>(total: usize, params: &PtrHashParams, keys: &[Key]) {
+    let n = keys.len();
+    let loops = total.div_ceil(n);
+    fn test<H: Hasher<Key>, Key: KeyT>(loops: usize, keys: &[Key], params: &PtrHashParams) {
+        type PH<Key, H> = PtrHash<Key, TinyEf, H, Vec<u8>>;
+        let pt = PH::<Key, H>::new_random(keys.len(), *params);
+
+        let query = bench_index(loops, keys, |key| pt.index(key));
+        eprintln!("  sequential: {query:>4.1}");
+        let query = time(loops, keys, || {
+            pt.index_stream::<64, false>(keys).sum::<usize>()
+        });
+        eprintln!(" prefetch 64: {query:>5.2}ns");
+    }
+
+    eprintln!("fxhash");
+    test::<hash::FxHash, _>(loops, keys, params);
+    eprintln!("murmur2");
+    test::<hash::Murmur2_64, _>(loops, keys, params);
+    eprintln!("murmur3");
+    test::<hash::FastMurmur3_128, _>(loops, keys, params);
+
+    eprintln!("highway64");
+    test::<hash::Highway64, _>(loops, keys, params);
+    eprintln!("highway128");
+    test::<hash::Highway128, _>(loops, keys, params);
+    eprintln!("city64");
+    test::<hash::City64, _>(loops, keys, params);
+    eprintln!("city128");
+    test::<hash::City128, _>(loops, keys, params);
+    eprintln!("wy64");
+    test::<hash::Wy64, _>(loops, keys, params);
+    eprintln!("xx64");
+    test::<hash::Xx64, _>(loops, keys, params);
+    eprintln!("xx128");
+    test::<hash::Xx128, _>(loops, keys, params);
+    eprintln!("metro64");
+    test::<hash::Metro64, _>(loops, keys, params);
+    eprintln!("metro128");
+    test::<hash::Metro128, _>(loops, keys, params);
+    eprintln!("spooky64");
+    test::<hash::Spooky64, _>(loops, keys, params);
+    eprintln!("spooky128");
+    test::<hash::Spooky128, _>(loops, keys, params);
+}
+
 fn benchmark_queries<Key: KeyT, H: Hasher<Key>, T: Packed, V: AsRef<[u8]> + Sync>(
     total: usize,
-    n: usize,
     keys: &[Key],
     pt: &PtrHash<Key, T, H, V>,
 ) {
+    let n = keys.len();
     let loops = total.div_ceil(n);
 
     eprintln!("BENCHMARKING loops {loops}");

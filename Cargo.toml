@@ -24,16 +24,22 @@ incremental = true
 [dependencies]
 anyhow = "1.0.75"
 bitvec = "1.0.1"
+cityhash-102-rs = "0.1.0"
 clap = { version = "4.4.6", features = ["derive"] }
 colored = "2.0.4"
 common_traits = "0.10.0"
 either = "1.9.0"
 epserde = { version = "0.2.2", optional = true }
 epserde-derive = {version = "0.2.0", optional = true }
+fastmurmur3 = "0.2.0"
 fxhash = "0.2.1"
+hashers = "1.0.1"
+highway = "1.1.0"
 itertools = "0.11.0"
 lazy_static = "1.4.0"
+metrohash = "1.0.6"
 murmur2 = "0.1.0"
+murmur3 = "0.5.2"
 radsort = "0.1.0"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
@@ -42,6 +48,8 @@ rdst = "0.20.11"
 rustc-hash = "1.1.0"
 sucds = "0.8.0"
 tempfile = "3.8.1"
+wyhash = "0.5.0"
+xxhash-rust = {version="0.8.7", features=["xxh64", "xxh3"]}
 
 [features]
 epserde = ["dep:epserde", "dep:epserde-derive"]
