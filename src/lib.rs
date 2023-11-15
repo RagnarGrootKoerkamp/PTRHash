@@ -87,28 +87,15 @@ impl Default for PtrHashParams {
 
 /// An alias for PtrHash with default generic arguments.
 /// Using this, you can write `DefaultPtrHash::new()` instead of `<PtrHash>::new()`.
-pub type DefaultPtrHash = PtrHash<TinyEf, hash::FxHash, Vec<u8>>;
+pub type DefaultPtrHash<'k, H, Key> = PtrHash<'k, Key, TinyEf, H, Vec<u8>>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type EfPtrHash = PtrHash<EliasFano, hash::FxHash, Vec<u8>>;
+pub type EfPtrHash<'k, Key> = PtrHash<'k, Key, EliasFano, hash::FxHash, Vec<u8>>;
 
 /// Trait that keys must satisfy.
 /// Currently implemented for `u64` and `[u8]`.
-pub trait KeyT: Send + Sync + std::hash::Hash + 'static {
-    fn default() -> &'static Self;
-}
-const ZERO: u64 = 0;
-impl KeyT for u64 {
-    fn default() -> &'static Self {
-        &ZERO
-    }
-}
-const EMPTY_SLICE: [u8; 0] = [];
-impl KeyT for [u8] {
-    fn default() -> &'static Self {
-        &EMPTY_SLICE
-    }
-}
+pub trait KeyT<'k>: Default + Send + Sync + std::hash::Hash {}
+impl<T: Default + Send + Sync + std::hash::Hash> KeyT<'_> for T {}
 
 // Some fixed algorithmic decisions.
 type Rp = FastReduce;
@@ -126,7 +113,8 @@ const SPLIT_BUCKETS: bool = true;
 /// `V`: The pilots type. Usually `Vec<u8>`, or `&[u8]` for Epserde.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct PtrHash<
-    Key: KeyT = u64,
+    'k,
+    Key: KeyT<'k> = u64,
     F: Packed = TinyEf,
     Hx: Hasher<Key> = hash::FxHash,
     V: AsRef<[u8]> = Vec<u8>,
@@ -183,12 +171,12 @@ pub struct PtrHash<
     pilots: V,
     /// Remap the out-of-bound slots to free slots.
     remap: F,
-    _key: PhantomData<Key>,
+    _key: PhantomData<&'k Key>,
     _hx: PhantomData<Hx>,
 }
 
 /// Construction methods.
-impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
+impl<'k, Key: KeyT<'k>, F: MutPacked, Hx: Hasher<Key>> PtrHash<'k, Key, F, Hx, Vec<u8>> {
     /// Create a new PtrHash instance from the given keys.
     ///
     /// NOTE: Only up to 2^40 keys are supported.
@@ -449,7 +437,7 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
 }
 
 /// Indexing methods.
-impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, V> {
+impl<'k, Key: KeyT<'k>, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<'k, Key, F, Hx, V> {
     /// Return the number of bits per element used for the pilots (`.0`) and the
     /// remapping (`.1)`.
     pub fn bits_per_element(&self) -> (f32, f32) {
@@ -499,24 +487,26 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
     pub fn index_stream<'a, const K: usize, const MINIMAL: bool>(
         &'a self,
         xs: impl IntoIterator<Item = &'a Key> + 'a,
-    ) -> impl Iterator<Item = usize> + 'a {
+    ) -> impl Iterator<Item = usize> + 'a + Captures<'k> {
         // Append K values at the end of the iterator to make sure we wrap sufficiently.
-        let tail = std::iter::repeat(KeyT::default()).take(K);
-        let mut xs = xs.into_iter().chain(tail);
+        let mut hxs = xs
+            .into_iter()
+            .map(|x| self.hash_key(x))
+            .chain(std::iter::repeat(Hx::H::default()).take(K));
 
         let mut next_hx: [Hx::H; K] = [Hx::H::default(); K];
         let mut next_i: [usize; K] = [0; K];
         // Initialize and prefetch first values.
         for idx in 0..K {
-            next_hx[idx] = self.hash_key(xs.next().unwrap());
+            next_hx[idx] = hxs.next().unwrap();
             next_i[idx] = self.bucket(next_hx[idx]);
             crate::util::prefetch_index(self.pilots.as_ref(), next_i[idx]);
         }
-        xs.enumerate().map(move |(idx, next_x)| {
+        hxs.enumerate().map(move |(idx, hx)| {
             let idx = idx % K;
             let cur_hx = next_hx[idx];
             let cur_i = next_i[idx];
-            next_hx[idx] = self.hash_key(next_x);
+            next_hx[idx] = hx;
             next_i[idx] = self.bucket(next_hx[idx]);
             crate::util::prefetch_index(self.pilots.as_ref(), next_i[idx]);
             let pilot = self.pilots.as_ref().index(cur_i);
@@ -597,3 +587,6 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         self.rem_s.reduce(hx.low() ^ hp)
     }
 }
+
+pub trait Captures<'k> {}
+impl<'a, T: ?Sized> Captures<'a> for T {}

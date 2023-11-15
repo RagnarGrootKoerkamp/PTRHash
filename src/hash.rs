@@ -79,7 +79,7 @@ impl Hasher<u64> for NoHash {
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct FxHash;
 
-impl<Key: KeyT> Hasher<Key> for FxHash {
+impl<'k, Key: KeyT<'k>> Hasher<Key> for FxHash {
     type H = u64;
     fn hash(x: &Key, _seed: u64) -> u64 {
         fxhash::hash64(x)

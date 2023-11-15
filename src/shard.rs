@@ -8,14 +8,14 @@ use std::{
 
 use super::*;
 
-impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
+impl<'k, Key: KeyT<'k>, F: Packed, Hx: Hasher<Key>> PtrHash<'k, Key, F, Hx> {
     /// Loop over the keys once per shard.
     /// Return an iterator over shards.
     /// For each shard, a filtered copy of the ParallelIterator is returned.
     pub(crate) fn shard_keys<'a>(
         &'a self,
         keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
-    ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
+    ) -> impl Iterator<Item = Vec<Hx::H>> + 'a + Captures<'k> {
         (0..self.num_shards).map(move |shard| {
             keys.clone()
                 .map(|key| self.hash_key(key.borrow()))
