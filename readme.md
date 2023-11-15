@@ -5,7 +5,7 @@ a list of `n` distinct keys into `[n]`.  It is an adaptation of [PTHash](https:/
 written in Rust.
 
 I'm keeping a blogpost with remarks, ideas, implementation notes,
-and experiments at <https://curiouscoding.nl/notes/ptrhash>.
+and experiments at <https://curiouscoding.nl/posts/ptrhash>.
 
 
 ## Contact
