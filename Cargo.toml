@@ -45,4 +45,4 @@ tempfile = "3.8.1"
 
 [features]
 epserde = ["dep:epserde", "dep:epserde-derive"]
-default = ["epserde"]
+# default = ["epserde"]
