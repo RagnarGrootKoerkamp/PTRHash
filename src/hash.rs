@@ -44,7 +44,9 @@ pub struct MulHash;
 pub struct NoHash;
 
 // B. Fast hashers that are always included.
-/// Good for hashing u64 and smaller keys.
+/// Good for hashing `u64` and smaller keys.
+/// Note that this doesn't use a seed, so while it is a bijection on `u64` keys,
+/// larger keys will give unfixable collisions.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct FxHash;
 /// Very fast weak 64bit hash with more quality than FxHash.

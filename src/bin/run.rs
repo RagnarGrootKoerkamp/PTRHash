@@ -77,19 +77,7 @@ enum Command {
     },
 }
 
-// Fast hashes
-// type PH = PtrHash<TinyEf, hash::FxHash, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::Murmur2_64, Vec<u8>>;
-type PH<Key> = PtrHash<Key, TinyEf, hash::Murmur3_128, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::FastMurmur3_128, Vec<u8>>;
-
-// Slow hashes
-// type PH = PtrHash<TinyEf, hash::Highway64, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::City64, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::Xx128, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::Metro64, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::Spooky64, Vec<u8>>;
-// type PH = PtrHash<TinyEf, hash::Spooky128, Vec<u8>>;
+type PH<Key> = PtrHash<Key, TinyEf, hash::Xx128, Vec<u8>>;
 
 fn main() -> anyhow::Result<()> {
     let Args { command } = Args::parse();

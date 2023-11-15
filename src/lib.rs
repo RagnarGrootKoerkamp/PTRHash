@@ -93,7 +93,6 @@ pub type DefaultPtrHash<H, Key> = PtrHash<Key, TinyEf, H, Vec<u8>>;
 pub type EfPtrHash<Key> = PtrHash<Key, EliasFano, hash::FxHash, Vec<u8>>;
 
 /// Trait that keys must satisfy.
-/// Currently implemented for `u64` and `[u8]`.
 pub trait KeyT: Default + Send + Sync + std::hash::Hash {}
 impl<T: Default + Send + Sync + std::hash::Hash> KeyT for T {}
 
@@ -207,8 +206,6 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
     /// The iterator must be cloneable for two reasons:
     /// - Construction can fail for the first seed (e.g. due to duplicate
     ///   hashes), in which case a new pass over keys is need.
-    /// - TODO: When all hashes do not fit in memory simultaneously, shard hashes into multiple files.
-    /// - TODO: 128bit hashes.
     /// NOTE: The exact API may change here depending on what's most convenient to use.
     pub fn new_from_par_iter<'a>(
         n: usize,
