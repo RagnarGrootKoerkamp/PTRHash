@@ -586,6 +586,3 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         self.rem_s.reduce(hx.low() ^ hp)
     }
 }
-
-pub trait Captures<'k> {}
-impl<'a, T: ?Sized> Captures<'a> for T {}

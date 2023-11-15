@@ -177,11 +177,11 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn benchmark_queries<Key: KeyT, H: Hasher<Key>>(
+fn benchmark_queries<Key: KeyT, H: Hasher<Key>, T: Packed, V: AsRef<[u8]> + Sync>(
     total: usize,
     n: usize,
     keys: &[Key],
-    pt: &PtrHash<Key, TinyEf, H, Vec<u8>>,
+    pt: &PtrHash<Key, T, H, V>,
 ) {
     let loops = total.div_ceil(n);
 
@@ -250,14 +250,7 @@ where
 }
 
 /// Wrapper around `index_stream` that runs multiple threads.
-fn index_parallel<
-    'k,
-    const A: usize,
-    Key: KeyT,
-    T: Packed,
-    H: Hasher<Key>,
-    V: AsRef<[u8]> + Sync,
->(
+fn index_parallel<const A: usize, Key: KeyT, T: Packed, H: Hasher<Key>, V: AsRef<[u8]> + Sync>(
     pt: &PtrHash<Key, T, H, V>,
     xs: &[Key],
     threads: usize,
