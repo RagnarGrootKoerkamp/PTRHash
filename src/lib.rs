@@ -90,7 +90,7 @@ impl Default for PtrHashParams {
 pub type DefaultPtrHash<H, Key> = PtrHash<Key, TinyEf, H, Vec<u8>>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type EfPtrHash<Key> = PtrHash<Key, EliasFano, hash::FxHash, Vec<u8>>;
+pub type EfPtrHash<H, Key> = PtrHash<Key, EliasFano, H, Vec<u8>>;
 
 /// Trait that keys must satisfy.
 pub trait KeyT: Default + Send + Sync + std::hash::Hash {}
