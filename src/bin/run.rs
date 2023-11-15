@@ -177,11 +177,11 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn benchmark_queries<'k, Key: KeyT<'k>, H: Hasher<Key>>(
+fn benchmark_queries<Key: KeyT, H: Hasher<Key>>(
     total: usize,
     n: usize,
     keys: &[Key],
-    pt: &PtrHash<'k, Key, TinyEf, H, Vec<u8>>,
+    pt: &PtrHash<Key, TinyEf, H, Vec<u8>>,
 ) {
     let loops = total.div_ceil(n);
 
@@ -225,11 +225,7 @@ fn benchmark_queries<'k, Key: KeyT<'k>, H: Hasher<Key>>(
 }
 
 #[must_use]
-pub fn bench_index<'k, Key: KeyT<'k>>(
-    loops: usize,
-    keys: &[Key],
-    index: impl Fn(&Key) -> usize,
-) -> f32 {
+pub fn bench_index<Key: KeyT>(loops: usize, keys: &[Key], index: impl Fn(&Key) -> usize) -> f32 {
     let start = SystemTime::now();
     let mut sum = 0;
     for _ in 0..loops {
@@ -242,7 +238,7 @@ pub fn bench_index<'k, Key: KeyT<'k>>(
 }
 
 #[must_use]
-pub fn time<'k, Key: KeyT<'k>, F>(loops: usize, keys: &[Key], f: F) -> f32
+pub fn time<Key: KeyT, F>(loops: usize, keys: &[Key], f: F) -> f32
 where
     F: Fn() -> usize,
 {
@@ -257,12 +253,12 @@ where
 fn index_parallel<
     'k,
     const A: usize,
-    Key: KeyT<'k>,
+    Key: KeyT,
     T: Packed,
     H: Hasher<Key>,
     V: AsRef<[u8]> + Sync,
 >(
-    pt: &PtrHash<'k, Key, T, H, V>,
+    pt: &PtrHash<Key, T, H, V>,
     xs: &[Key],
     threads: usize,
     minimal: bool,

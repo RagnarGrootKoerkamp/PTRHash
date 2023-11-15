@@ -1,4 +1,4 @@
-#![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
+//#![cfg_attr(target_arch = "aarch64", feature(stdsimd))]
 #![allow(clippy::needless_range_loop)]
 
 /// Customizable Hasher trait.
@@ -87,15 +87,15 @@ impl Default for PtrHashParams {
 
 /// An alias for PtrHash with default generic arguments.
 /// Using this, you can write `DefaultPtrHash::new()` instead of `<PtrHash>::new()`.
-pub type DefaultPtrHash<'k, H, Key> = PtrHash<'k, Key, TinyEf, H, Vec<u8>>;
+pub type DefaultPtrHash<H, Key> = PtrHash<Key, TinyEf, H, Vec<u8>>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
-pub type EfPtrHash<'k, Key> = PtrHash<'k, Key, EliasFano, hash::FxHash, Vec<u8>>;
+pub type EfPtrHash<Key> = PtrHash<Key, EliasFano, hash::FxHash, Vec<u8>>;
 
 /// Trait that keys must satisfy.
 /// Currently implemented for `u64` and `[u8]`.
-pub trait KeyT<'k>: Default + Send + Sync + std::hash::Hash {}
-impl<T: Default + Send + Sync + std::hash::Hash> KeyT<'_> for T {}
+pub trait KeyT: Default + Send + Sync + std::hash::Hash {}
+impl<T: Default + Send + Sync + std::hash::Hash> KeyT for T {}
 
 // Some fixed algorithmic decisions.
 type Rp = FastReduce;
@@ -113,8 +113,7 @@ const SPLIT_BUCKETS: bool = true;
 /// `V`: The pilots type. Usually `Vec<u8>`, or `&[u8]` for Epserde.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct PtrHash<
-    'k,
-    Key: KeyT<'k> = u64,
+    Key: KeyT = u64,
     F: Packed = TinyEf,
     Hx: Hasher<Key> = hash::FxHash,
     V: AsRef<[u8]> = Vec<u8>,
@@ -171,12 +170,12 @@ pub struct PtrHash<
     pilots: V,
     /// Remap the out-of-bound slots to free slots.
     remap: F,
-    _key: PhantomData<&'k Key>,
+    _key: PhantomData<Key>,
     _hx: PhantomData<Hx>,
 }
 
 /// Construction methods.
-impl<'k, Key: KeyT<'k>, F: MutPacked, Hx: Hasher<Key>> PtrHash<'k, Key, F, Hx, Vec<u8>> {
+impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
     /// Create a new PtrHash instance from the given keys.
     ///
     /// NOTE: Only up to 2^40 keys are supported.
@@ -437,7 +436,7 @@ impl<'k, Key: KeyT<'k>, F: MutPacked, Hx: Hasher<Key>> PtrHash<'k, Key, F, Hx, V
 }
 
 /// Indexing methods.
-impl<'k, Key: KeyT<'k>, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<'k, Key, F, Hx, V> {
+impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, V> {
     /// Return the number of bits per element used for the pilots (`.0`) and the
     /// remapping (`.1)`.
     pub fn bits_per_element(&self) -> (f32, f32) {
@@ -487,7 +486,7 @@ impl<'k, Key: KeyT<'k>, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<'k, 
     pub fn index_stream<'a, const K: usize, const MINIMAL: bool>(
         &'a self,
         xs: impl IntoIterator<Item = &'a Key> + 'a,
-    ) -> impl Iterator<Item = usize> + 'a + Captures<'k> {
+    ) -> impl Iterator<Item = usize> + 'a {
         // Append K values at the end of the iterator to make sure we wrap sufficiently.
         let mut hxs = xs
             .into_iter()
