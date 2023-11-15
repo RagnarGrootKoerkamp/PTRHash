@@ -98,6 +98,7 @@ PTRHash extends it in a few ways:
 ## Usage
 
 ```rust
+use ptr_hash::{PtrHash, PtrHashParams};
 let n = 1_000_000_000;
 let keys = ptr_hash::util::generate_keys(n);
 
@@ -107,7 +108,8 @@ assert_eq!(sum, (n * (n - 1)) / 2);
 
 // Get the minimal index of a key.
 let key = 0;
-let _idx = mphf.index_minimal(&key);
+let idx = mphf.index_minimal(&key);
+assert!(idx < n);
 // Get the non-minimal index of a key. Slightly faster.
 let _idx = mphf.index(&key);
 
