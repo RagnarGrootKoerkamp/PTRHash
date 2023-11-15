@@ -278,9 +278,10 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
 
         let p1 = (beta * u64::MAX as f64) as u64;
         let p2 = (gamma * b as f64) as usize;
-        let c1 = (gamma / beta * (b - 1) as f64).floor() as usize;
         // (b-2) to avoid rounding issues.
-        let c2 = (1. - gamma) / (1. - beta) * (b - 2) as f64;
+        let c1 = (gamma / beta * b.saturating_sub(2) as f64).floor() as usize;
+        // (b-2) to avoid rounding issues.
+        let c2 = (1. - gamma) / (1. - beta) * b.saturating_sub(2) as f64;
         // +1 to avoid bucket<p2 due to rounding.
         let c3 = p2 as isize - (beta * c2) as isize + 1;
         Self {
@@ -546,11 +547,9 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         let is_large = hx_remainder >= self.p1;
         let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
         let b = (is_large as isize * self.c3 + rem.reduce(hx_remainder) as isize) as usize;
-
-        debug_assert!(!is_large || self.p2 <= b);
-        debug_assert!(!is_large || b < self.b);
-        debug_assert!(is_large || b < self.p2);
-
+        debug_assert!(!is_large || self.p2 <= b, "p2 {} <= b {}", self.p2, b);
+        debug_assert!(!is_large || b < self.b, "b {} < p2 {}", b, self.b);
+        debug_assert!(is_large || b < self.p2, "b {} < p2 {}", b, self.p2);
         b
     }
 
