@@ -99,17 +99,19 @@ PTRHash extends it in a few ways:
 
 ```rust
 use ptr_hash::{PtrHash, PtrHashParams};
+
+// Generate some random keys.
 let n = 1_000_000_000;
 let keys = ptr_hash::util::generate_keys(n);
 
+// Build the datastructure.
 let mphf = <PtrHash>::new(&keys, PtrHashParams::default());
-let sum = mphf.index_stream::<32, true>(&keys).sum::<usize>();
-assert_eq!(sum, (n * (n - 1)) / 2);
 
 // Get the minimal index of a key.
 let key = 0;
 let idx = mphf.index_minimal(&key);
 assert!(idx < n);
+
 // Get the non-minimal index of a key. Slightly faster.
 let _idx = mphf.index(&key);
 
@@ -121,7 +123,6 @@ assert_eq!(indices.sum::<usize>(), (n * (n - 1)) / 2);
 
 // Test that all items map to different indices
 let mut taken = vec![false; n];
-
 for key in keys {
     let idx = mphf.index_minimal(&key);
     assert!(!taken[idx]);
