@@ -15,7 +15,7 @@ matrix [@curious_coding:matrix.org](https://matrix.to/#/@curious_coding:matrix.o
 
 ## Performance
 
-PTRHash supports up to $2^40$ keys. For default parameters $\alpha = 0.98$,
+PTRHash supports up to $2^{40}$ keys. For default parameters $\alpha = 0.98$,
 $c=9$, constructing a MPHF of $n=10^9$ integer keys gives:
 - Construction takes `19s` on my `i7-10750H` (`3.6GHz`) using `6` threads:
   - `5s` to sort hashes,
@@ -40,7 +40,7 @@ core, and multithreaded querying fully saturates the DDR4 memory bandwidth.
 
 **Parameters:**
 
--   Given are $n < 2^40 \approx 10^11$ keys.
+-   Given are $n < 2^40 \approx 10^{11}$ keys.
 -   We partition into $P$ parts each consisting of $\approx 200000$ keys.
 -   Each part consists of $B$ buckets and $S$ slots, with $S$ a power of $2$.
 -   The total number of buckets $B\cdot P$ is roughly $n/\log n \cdot c$, for a
