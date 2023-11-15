@@ -98,15 +98,24 @@ PTRHash extends it in a few ways:
 ## Usage
 
 ```rust
-let keys = generate_keys(n);
+let n = 1_000_000_000;
+let keys = ptr_hash::util::generate_keys(n);
 
-let mphf = FastPtrHash::new(&keys, PtrHashParams::default());
+let mphf = <PtrHash>::new(&keys, PtrHashParams::default());
+let sum = mphf.index_stream::<32, true>(&keys).sum::<usize>();
+assert_eq!(sum, (n * (n - 1)) / 2);
 
-// Get the index of a key.
-let idx = mphf.index(&key);
+// Get the minimal index of a key.
+let key = 0;
+let _idx = mphf.index_minimal(&key);
+// Get the non-minimal index of a key. Slightly faster.
+let _idx = mphf.index(&key);
 
-// Get the indices for a slice of keys.
-mphf.index_minimal_stream(&keys).map(|idx| todo!());
+// An iterator over the indices of the keys.
+// 32: number of iterations ahead to prefetch.
+// true: remap to a minimal key in [0, n).
+let indices = mphf.index_stream::<32, true>(&keys);
+assert_eq!(indices.sum::<usize>(), (n * (n - 1)) / 2);
 
 // Test that all items map to different indices
 let mut taken = vec![false; n];
