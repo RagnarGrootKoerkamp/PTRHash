@@ -77,7 +77,7 @@ impl Default for PtrHashParams {
             slots_per_part: 1 << 18,
             // By default, limit to 2^32 keys per shard, whose hashes take 8B*2^32=32GB.
             keys_per_shard: 1 << 33,
-            shard_to_disk: true,
+            shard_to_disk: false,
             print_stats: false,
         }
     }
