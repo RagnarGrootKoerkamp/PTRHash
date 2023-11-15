@@ -144,7 +144,7 @@ pub struct PtrHash<
     /// Additional constants.
     p1: u64,
     p2: usize,
-    c3: usize,
+    c3: isize,
 
     // Precomputed fast modulo operations.
     /// Fast %shards.
@@ -285,7 +285,7 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         // (b-2) to avoid rounding issues.
         let c2 = (1. - gamma) / (1. - beta) * (b - 2) as f64;
         // +1 to avoid bucket<p2 due to rounding.
-        let c3 = p2 - (beta * c2) as usize + 1;
+        let c3 = p2 as isize - (beta * c2) as isize + 1;
         Self {
             params,
             n,
@@ -548,7 +548,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         // NOTE: There is a lot of MOV/CMOV going on here.
         let is_large = hx_remainder >= self.p1;
         let rem = if is_large { self.rem_c2 } else { self.rem_c1 };
-        let b = is_large as usize * self.c3 + rem.reduce(hx_remainder);
+        let b = (is_large as isize * self.c3 + rem.reduce(hx_remainder) as isize) as usize;
 
         debug_assert!(!is_large || self.p2 <= b);
         debug_assert!(!is_large || b < self.b);
