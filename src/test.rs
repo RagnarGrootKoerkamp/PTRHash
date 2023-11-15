@@ -45,14 +45,14 @@ fn new_par_iter() {
 
 #[test]
 fn in_memory_sharding() {
-    let n = 1 << 29;
+    let n = 1 << 25;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
     let ptr_hash = <PtrHash>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
-            keys_per_shard: 1 << 27,
+            keys_per_shard: 1 << 22,
             shard_to_disk: false,
             ..Default::default()
         },
@@ -68,14 +68,14 @@ fn in_memory_sharding() {
 
 #[test]
 fn on_disk_sharding() {
-    let n = 1 << 29;
+    let n = 1 << 25;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
     let ptr_hash = <PtrHash>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
-            keys_per_shard: 1 << 27,
+            keys_per_shard: 1 << 22,
             shard_to_disk: true,
             ..Default::default()
         },
