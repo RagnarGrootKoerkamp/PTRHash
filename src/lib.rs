@@ -427,11 +427,12 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         let start = std::time::Instant::now();
         self.remap_free_slots(taken);
         log_duration("remap free", start);
-        self.print_bits_per_element();
-        log_duration("total build", overall_start);
 
         // Pack the data.
         self.pilots = pilots;
+
+        self.print_bits_per_element();
+        log_duration("total build", overall_start);
     }
 
     fn remap_free_slots(&mut self, taken: Vec<BitVec>) {
