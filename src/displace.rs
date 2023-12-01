@@ -141,11 +141,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
                         eprintln!(
                             "\
 Too many displacements. Aborting!
-Possible causes:
-- Too many elements in part.
-- Not enough empty slots => lower alpha.
-- Not enough buckets     => increase c.
-- Not enough entropy     => fix algorithm.
+Try increasing c to use more buckets.
 "
                         );
                         return None;
