@@ -2,9 +2,12 @@ use super::*;
 use crate::{bucket_idx::BucketIdx, stats::BucketStats};
 use bitvec::{slice::BitSlice, vec::BitVec};
 use rayon::prelude::*;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Mutex,
+use std::{
+    collections::BinaryHeap,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Mutex,
+    },
 };
 
 impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
@@ -87,7 +90,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
 
         let max_bucket_len = bucket_len(bucket_order[0]);
 
-        let mut stack = vec![];
+        let mut stack = BinaryHeap::new();
 
         let slots_for_bucket = |b: BucketIdx, p: Pilot| unsafe {
             let hp = self.hash_pilot(p);
@@ -121,12 +124,12 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
 
             let mut displacements = 0usize;
 
-            stack.push(new_b);
+            stack.push((new_b_len, new_b));
             recent.fill(BucketIdx::NONE);
             let mut recent_idx = 0;
             recent[0] = new_b;
 
-            'b: while let Some(b) = stack.pop() {
+            'b: while let Some((_b_len, b)) = stack.pop() {
                 if displacements > self.s && displacements.is_power_of_two() {
                     let num_taken_slots = taken.count_ones();
                     eprintln!(
@@ -234,7 +237,7 @@ Try increasing c to use more buckets.
                     if b2.is_some() {
                         assert!(b2 != b);
                         // DROP BUCKET b
-                        stack.push(b2);
+                        stack.push((bucket_len(b2), b2));
                         displacements += 1;
                         for p2 in slots_for_bucket(b2, pilots[b2] as Pilot) {
                             unsafe {
