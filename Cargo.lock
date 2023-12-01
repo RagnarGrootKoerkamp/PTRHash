@@ -535,6 +535,7 @@ dependencies = [
  "epserde",
  "epserde-derive",
  "fastmurmur3",
+ "fastrand",
  "fxhash",
  "hashers",
  "highway",

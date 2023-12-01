@@ -109,6 +109,8 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
         let mut recent = [BucketIdx::NONE; 4];
         let mut total_displacements = 0;
 
+        let mut rng = fastrand::Rng::new();
+
         for (i, &new_b) in bucket_order.iter().enumerate() {
             let new_bucket = &hashes[starts[new_b] as usize..starts[new_b + 1] as usize];
             if new_bucket.is_empty() {
@@ -171,7 +173,8 @@ Try increasing c to use more buckets.
 
                 // 2) Search for a pilot with minimal number of collisions.
 
-                let p = pilots[b] as Pilot + 1;
+                // Start at a random pilot to prevent displacement cycles.
+                let p0 = rng.u8(..) as u64;
                 // (worst colliding bucket size, p)
                 let mut best = (usize::MAX, u64::MAX);
 
@@ -179,7 +182,7 @@ Try increasing c to use more buckets.
                     // HOT: This code is slow and full of branch-misses.
                     // But also, it's only 20% of displace() time, since the
                     // hot-path above covers most.
-                    let p = (p + delta) % kmax;
+                    let p = (p0 + delta) % kmax;
                     let hp = self.hash_pilot(p);
                     let mut collision_score = 0;
                     for p in b_slots(hp) {
