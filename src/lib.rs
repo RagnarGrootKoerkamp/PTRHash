@@ -306,6 +306,10 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         let b_total = b * num_parts;
         // TODO: Figure out if large gcd(b,s) is a problem for the original PtrHash.
 
+        // Map beta% of hashes to gamma% of buckets.
+        let beta = params.beta;
+        let gamma = params.gamma;
+
         eprintln!("        keys: {n:>10}");
         eprintln!("      shards: {num_shards:>10}");
         eprintln!("       parts: {num_parts:>10}");
@@ -313,11 +317,15 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         eprintln!("   slots tot: {s_total:>10}");
         eprintln!(" buckets/prt: {b:>10}");
         eprintln!(" buckets tot: {b_total:>10}");
-        eprintln!(" keys/bucket: {:>13.2}", n as f64 / b_total as f64);
-
-        // Map beta% of hashes to gamma% of buckets.
-        let beta = params.beta;
-        let gamma = params.gamma;
+        eprintln!(
+            "keys/large b: {:>13.2}",
+            beta / gamma * n as f64 / b_total as f64
+        );
+        eprintln!(
+            "keys/small b: {:>13.2}",
+            (1. - beta) / (1. - gamma) * n as f64 / b_total as f64
+        );
+        eprintln!("keys/ bucket: {:>13.2}", n as f64 / b_total as f64);
 
         let p1 = (beta * u64::MAX as f64) as u64;
         let p2 = (gamma * b as f64) as usize;
