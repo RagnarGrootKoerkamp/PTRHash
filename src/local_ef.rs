@@ -15,22 +15,22 @@ const L: usize = 44;
 /// query, where Elias-Fano encoding usually needs 3 reads.
 #[derive(Default)]
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
-pub struct TinyEf<E = Vec<TinyEfUnit>> {
+pub struct LocalEf<E = Vec<LocalEfUnit>> {
     ef: E,
 }
 
-impl TinyEf<Vec<TinyEfUnit>> {
+impl LocalEf<Vec<LocalEfUnit>> {
     pub fn new(vals: &[u64]) -> Self {
         let mut p = Vec::with_capacity(vals.len().div_ceil(L));
         for i in (0..vals.len()).step_by(L) {
-            p.push(TinyEfUnit::new(&vals[i..min(i + L, vals.len())]));
+            p.push(LocalEfUnit::new(&vals[i..min(i + L, vals.len())]));
         }
 
         Self { ef: p }
     }
 }
 
-impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
+impl<E: AsRef<[LocalEfUnit]>> LocalEf<E> {
     pub fn index(&self, index: usize) -> u64 {
         // Note: This division is inlined by the compiler.
         unsafe { (*self.ef.as_ref().get_unchecked(index / L)).get(index % L) }
@@ -52,7 +52,7 @@ impl<E: AsRef<[TinyEfUnit]>> TinyEf<E> {
 #[repr(align(64))]
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 #[cfg_attr(feature = "epserde", zero_copy)]
-pub struct TinyEfUnit {
+pub struct LocalEfUnit {
     // 2*64 = 128 bits to indicate where 256 boundaries are crossed.
     // There are 48 1-bits corresponding to the stored numbers, and the number
     // of 0-bits before each number indicates the number of times 256 must be added.
@@ -63,7 +63,7 @@ pub struct TinyEfUnit {
     low_bits: [u8; L],
 }
 
-impl TinyEfUnit {
+impl LocalEfUnit {
     fn new(vals: &[u64]) -> Self {
         assert!(!vals.is_empty());
         assert!(vals.len() <= L);
@@ -118,7 +118,7 @@ fn test() {
         vals.sort_unstable();
         vals[0] = 0;
 
-        let lef = TinyEfUnit::new(&vals);
+        let lef = LocalEfUnit::new(&vals);
         for i in 0..L {
             assert_eq!(lef.get(i), vals[i], "error; full list: {:?}", vals);
         }

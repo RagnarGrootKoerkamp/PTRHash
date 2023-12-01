@@ -5,8 +5,8 @@ use epserde::prelude::*;
 use itertools::Itertools;
 use ptr_hash::{
     hash::{Hasher, Murmur2_64},
+    local_ef::{LocalEf, LocalEfUnit},
     pack::Packed,
-    tiny_ef::{TinyEf, TinyEfUnit},
     *,
 };
 use std::{
@@ -77,7 +77,7 @@ enum Command {
     },
 }
 
-type PH<Key> = PtrHash<Key, TinyEf, hash::Xx128, Vec<u8>>;
+type PH<Key> = PtrHash<Key, LocalEf, hash::Xx128, Vec<u8>>;
 
 fn main() -> anyhow::Result<()> {
     let Args { command } = Args::parse();
@@ -169,7 +169,7 @@ fn bench_hashers<Key: KeyT>(total: usize, params: &PtrHashParams, keys: &[Key]) 
     let n = keys.len();
     let loops = total.div_ceil(n);
     fn test<H: Hasher<Key>, Key: KeyT>(loops: usize, keys: &[Key], params: &PtrHashParams) {
-        type PH<Key, H> = PtrHash<Key, TinyEf, H, Vec<u8>>;
+        type PH<Key, H> = PtrHash<Key, LocalEf, H, Vec<u8>>;
         let pt = PH::<Key, H>::new_random(keys.len(), *params);
 
         let query = bench_index(loops, keys, |key| pt.index(key));

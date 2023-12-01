@@ -38,10 +38,10 @@
 
 /// Customizable Hasher trait.
 pub mod hash;
+/// Reusable Tiny Elias-Fano implementation.
+pub mod local_ef;
 /// Extendable backing storage trait and types.
 pub mod pack;
-/// Reusable Tiny Elias-Fano implementation.
-pub mod tiny_ef;
 /// Some internal logging and testing utilities.
 pub mod util;
 
@@ -58,6 +58,7 @@ use bitvec::{bitvec, vec::BitVec};
 use either::Either;
 use itertools::izip;
 use itertools::Itertools;
+use local_ef::LocalEf;
 use pack::EliasFano;
 use pack::MutPacked;
 use rand::{random, Rng, SeedableRng};
@@ -65,7 +66,6 @@ use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
-use tiny_ef::TinyEf;
 
 use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
@@ -122,7 +122,7 @@ impl Default for PtrHashParams {
 
 /// An alias for PtrHash with default generic arguments.
 /// Using this, you can write `DefaultPtrHash::new()` instead of `<PtrHash>::new()`.
-pub type DefaultPtrHash<H, Key> = PtrHash<Key, TinyEf, H, Vec<u8>>;
+pub type DefaultPtrHash<H, Key> = PtrHash<Key, LocalEf, H, Vec<u8>>;
 
 /// Using EliasFano for the remap is slower but uses slightly less memory.
 pub type EfPtrHash<H, Key> = PtrHash<Key, EliasFano, H, Vec<u8>>;
@@ -148,7 +148,7 @@ const SPLIT_BUCKETS: bool = true;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct PtrHash<
     Key: KeyT = u64,
-    F: Packed = TinyEf,
+    F: Packed = LocalEf,
     Hx: Hasher<Key> = hash::FxHash,
     V: AsRef<[u8]> = Vec<u8>,
 > {

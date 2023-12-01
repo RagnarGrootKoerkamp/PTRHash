@@ -3,7 +3,7 @@
 //!
 //! NOTE: This requires somewhere between 32 and 64GB of memory.
 use bitvec::bitvec;
-use ptr_hash::{hash::*, tiny_ef::TinyEf, PtrHash, PtrHashParams};
+use ptr_hash::{hash::*, local_ef::LocalEf, PtrHash, PtrHashParams};
 use rayon::prelude::*;
 
 fn main() {
@@ -11,7 +11,7 @@ fn main() {
     let n_query = 1 << 27;
     let range = 0..n as u64;
     let keys = range.clone().into_par_iter();
-    let ptr_hash = PtrHash::<_, TinyEf, Murmur2_64, _>::new_from_par_iter(
+    let ptr_hash = PtrHash::<_, LocalEf, Murmur2_64, _>::new_from_par_iter(
         n,
         keys.clone(),
         PtrHashParams {
