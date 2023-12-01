@@ -3,7 +3,7 @@
 //!
 //! NOTE: This requires somewhere between 32 and 64GB of memory.
 use bitvec::bitvec;
-use ptr_hash::{hash::*, local_ef::LocalEf, PtrHash, PtrHashParams};
+use ptr_hash::{hash::*, local_ef::LocalEf, PtrHash, PtrHashParams, Sharding};
 use rayon::prelude::*;
 
 fn main() {
@@ -18,7 +18,7 @@ fn main() {
             c: 10.,
             // ~10GB of keys per shard.
             keys_per_shard: 1 << 29,
-            shard_to_disk: false,
+            sharding: Sharding::Memory,
             ..Default::default()
         },
     );

@@ -53,7 +53,7 @@ fn in_memory_sharding() {
         keys.clone(),
         PtrHashParams {
             keys_per_shard: 1 << 22,
-            shard_to_disk: false,
+            sharding: Sharding::Memory,
             ..Default::default()
         },
     );
@@ -76,7 +76,7 @@ fn on_disk_sharding() {
         keys.clone(),
         PtrHashParams {
             keys_per_shard: 1 << 22,
-            shard_to_disk: true,
+            sharding: Sharding::Disk,
             ..Default::default()
         },
     );
@@ -102,7 +102,7 @@ fn many_keys_memory() {
         keys.clone(),
         PtrHashParams {
             keys_per_shard: 1 << 30,
-            shard_to_disk: false,
+            sharding: Sharding::Memory,
             ..Default::default()
         },
     );
@@ -132,7 +132,7 @@ fn many_keys_disk() {
         keys.clone(),
         PtrHashParams {
             keys_per_shard: 1 << 30,
-            shard_to_disk: true,
+            sharding: Sharding::Disk,
             ..Default::default()
         },
     );

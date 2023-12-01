@@ -27,7 +27,7 @@ const DEFAULT_C: f64 = 9.0;
 const DEFAULT_ALPHA: f64 = 0.98;
 const DEFAULT_SLOTS_PER_PART: usize = 1 << 18;
 const DEFAULT_KEYS_PER_SHARD: usize = 1 << 33;
-const DEFAULT_DISK: bool = false;
+const DEFAULT_SHARDING: Sharding = Sharding::None;
 
 #[derive(Subcommand)]
 enum Command {
@@ -43,8 +43,8 @@ enum Command {
         s: usize,
         #[arg(short, default_value_t = DEFAULT_KEYS_PER_SHARD)]
         keys_per_shard: usize,
-        #[arg(short, default_value_t = DEFAULT_DISK)]
-        disk: bool,
+        #[arg(long, value_enum, default_value_t = DEFAULT_SHARDING)]
+        sharding: Sharding,
         #[arg(long)]
         stats: bool,
         #[arg(short, long, default_value_t = 0)]
@@ -66,8 +66,8 @@ enum Command {
         s: usize,
         #[arg(short, default_value_t = DEFAULT_KEYS_PER_SHARD)]
         keys_per_shard: usize,
-        #[arg(short, default_value_t = DEFAULT_DISK)]
-        disk: bool,
+        #[arg(long, value_enum, default_value_t = DEFAULT_SHARDING)]
+        sharding: Sharding,
         #[arg(long, default_value_t = 300000000)]
         total: usize,
         #[arg(long)]
@@ -91,7 +91,7 @@ fn main() -> anyhow::Result<()> {
             s,
             keys_per_shard,
             threads,
-            disk,
+            sharding,
         } => {
             rayon::ThreadPoolBuilder::new()
                 .num_threads(threads)
@@ -106,7 +106,7 @@ fn main() -> anyhow::Result<()> {
                     print_stats: stats,
                     slots_per_part: s,
                     keys_per_shard,
-                    shard_to_disk: disk,
+                    sharding,
                     ..Default::default()
                 },
             );
@@ -124,7 +124,7 @@ fn main() -> anyhow::Result<()> {
             stats,
             s,
             keys_per_shard,
-            disk,
+            sharding,
             threads,
             keys,
         } => {
@@ -139,7 +139,7 @@ fn main() -> anyhow::Result<()> {
                 print_stats: stats,
                 slots_per_part: s,
                 keys_per_shard,
-                shard_to_disk: disk,
+                sharding,
                 ..Default::default()
             };
 

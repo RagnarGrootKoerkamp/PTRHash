@@ -69,6 +69,14 @@ use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
 
 use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
+#[derive(Clone, Copy, Debug, clap::ValueEnum, Default)]
+pub enum Sharding {
+    #[default]
+    None,
+    Memory,
+    Disk,
+}
+
 /// Parameters for PtrHash construction.
 ///
 /// Since these are not used in inner loops they are simple variables instead of template arguments.
@@ -91,7 +99,7 @@ pub struct PtrHashParams {
     pub keys_per_shard: usize,
     /// When true, write each shard to a file instead of iterating multiple
     /// times.
-    pub shard_to_disk: bool,
+    pub sharding: Sharding,
 
     /// Print bucket size and pilot stats after construction.
     pub print_stats: bool,
@@ -112,7 +120,7 @@ impl Default for PtrHashParams {
             slots_per_part: 1 << 18,
             // By default, limit to 2^32 keys per shard, whose hashes take 8B*2^32=32GB.
             keys_per_shard: 1 << 33,
-            shard_to_disk: false,
+            sharding: Sharding::None,
             print_stats: false,
         }
     }
@@ -388,10 +396,14 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
             taken.resize_with(self.num_parts, || bitvec![0; self.s]);
 
             // Iterate over shards.
-            let shard_hashes = if self.params.shard_to_disk {
-                Either::Left(self.shard_keys_to_disk(keys.clone()))
-            } else {
-                Either::Right(self.shard_keys(keys.clone()))
+            let shard_hashes = match self.params.sharding {
+                Sharding::None => Either::Left(self.no_sharding(keys.clone())),
+                Sharding::Memory => {
+                    Either::Right(Either::Left(self.shard_keys_to_disk(keys.clone())))
+                }
+                Sharding::Disk => {
+                    Either::Right(Either::Right(self.shard_keys_in_memory(keys.clone())))
+                }
             };
             let shard_pilots = pilots.chunks_mut(self.b * self.parts_per_shard);
             let shard_taken = taken.chunks_mut(self.parts_per_shard);
@@ -399,8 +411,6 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
             for (shard, (hashes, pilots, taken)) in
                 izip!(shard_hashes, shard_pilots, shard_taken).enumerate()
             {
-                eprintln!("Shard {shard:>3}/{:3}", self.num_shards);
-
                 // Determine the buckets.
                 let start = std::time::Instant::now();
                 let Some((hashes, part_starts)) = self.sort_parts(shard, hashes) else {

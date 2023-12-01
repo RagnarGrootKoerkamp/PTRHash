@@ -9,18 +9,38 @@ use std::{
 use super::*;
 
 impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
-    /// Loop over the keys once per shard.
     /// Return an iterator over shards.
     /// For each shard, a filtered copy of the ParallelIterator is returned.
-    pub(crate) fn shard_keys<'a>(
+    pub(crate) fn no_sharding<'a>(
         &'a self,
         keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
+        eprintln!("No sharding: collecting all hashes in memory.");
+        let start = std::time::Instant::now();
+        let hashes = keys.map(|key| self.hash_key(key.borrow())).collect();
+        log_duration("collect hash", start);
+        std::iter::once(hashes)
+    }
+
+    /// Loop over the keys once per shard.
+    /// Return an iterator over shards.
+    /// For each shard, a filtered copy of the ParallelIterator is returned.
+    pub(crate) fn shard_keys_in_memory<'a>(
+        &'a self,
+        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+    ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
+        eprintln!("In-memory sharding: iterate keys once per shard.");
         (0..self.num_shards).map(move |shard| {
-            keys.clone()
+            eprintln!("Shard {shard:>3}/{:3}", self.num_shards);
+            let start = std::time::Instant::now();
+            let hashes = keys
+                .clone()
                 .map(|key| self.hash_key(key.borrow()))
                 .filter(move |h| self.shard(*h) == shard)
-                .collect()
+                .collect();
+
+            log_duration("collect shrd", start);
+            hashes
         })
     }
 
@@ -35,6 +55,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
         &'a self,
         keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
+        eprintln!("Disk sharding: writing hashes per shard to disk.");
         let temp_dir = tempfile::TempDir::new().unwrap();
         eprintln!("TMP PATH: {:?}", temp_dir.path());
 
