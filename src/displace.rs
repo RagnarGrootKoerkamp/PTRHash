@@ -126,9 +126,16 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
 
             'b: while let Some(b) = stack.pop() {
                 if displacements > self.s && displacements.is_power_of_two() {
+                    let num_taken_slots = taken.count_ones();
                     eprintln!(
-                        "part {part:>6} bucket {:>5.2}%  chain: {displacements:>9}",
-                        100. * (part * self.b + i) as f32 / self.b_total as f32,
+                        "part {part:>6} alpha {:>5.2}% bucket size {} ({}/{}, {:>5.2}%) slots filled {}/{} ({:>5.2}%) chain: {displacements:>9}",
+                        100. * hashes.len()  as f32 / slots.len() as f32,
+                        new_b_len,
+                        i, self.b,
+                        100. * i as f32 / self.b as f32,
+                        num_taken_slots,
+                        taken.len(),
+                        100. * num_taken_slots as f32 / taken.len() as f32,
                     );
                     if displacements >= 10 * self.s {
                         eprintln!(
