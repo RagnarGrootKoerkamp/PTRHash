@@ -69,7 +69,8 @@ use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
 
 use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
-#[derive(Clone, Copy, Debug, clap::ValueEnum, Default)]
+/// Select the sharding method to use.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum, Default)]
 pub enum Sharding {
     #[default]
     None,
@@ -278,7 +279,7 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
     }
 
     /// Only initialize the parameters; do not compute the pilots yet.
-    fn init(n: usize, params: PtrHashParams) -> Self {
+    fn init(n: usize, mut params: PtrHashParams) -> Self {
         assert!(n > 1, "Things break if n=1.");
         assert!(n < (1 << 40), "Number of keys must be less than 2^40.");
 
@@ -296,6 +297,9 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         // that is what should fit in L1 or L2 cache.
         // Thus, the number of partitions is:
         let s = 1 << params.slots_per_part.ilog2();
+        if let Sharding::None = params.sharding {
+            params.keys_per_shard = n;
+        }
         let num_shards = n.div_ceil(params.keys_per_shard);
         let parts_per_shard = s_total_target.div_ceil(s).div_ceil(num_shards);
         let num_parts = num_shards * parts_per_shard;
