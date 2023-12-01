@@ -106,7 +106,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
             }
         };
 
-        let mut recent = [BucketIdx::NONE; 4];
+        let mut recent = [BucketIdx::NONE; 16];
         let mut total_displacements = 0;
 
         let mut rng = fastrand::Rng::new();
@@ -250,7 +250,7 @@ Try increasing c to use more buckets.
                 }
 
                 recent_idx += 1;
-                recent_idx %= 4;
+                recent_idx %= recent.len();
                 recent[recent_idx] = b;
             }
             total_displacements += displacements;
