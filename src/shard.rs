@@ -15,7 +15,9 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
         &'a self,
         keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> impl Iterator<Item = Vec<Hx::H>> + 'a {
-        eprintln!("No sharding: collecting all hashes in memory.");
+        if has_log() {
+            eprintln!("No sharding: collecting all hashes in memory.");
+        }
         let start = std::time::Instant::now();
         let hashes = keys.map(|key| self.hash_key(key.borrow())).collect();
         log_duration("collect hash", start);

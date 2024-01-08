@@ -23,14 +23,12 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
         // NOTE: This does not work for other reduction methods.
 
         let start = Instant::now();
-        // 1. Collect hashes per part.
-        let start = log_duration("┌  hash keys", start);
         // 2. Radix sort hashes.
         // TODO: Write robinhood sort that inserts in the right place directly.
         // A) Sort L1 sized ranges.
         // B) Splat the front of each range to the next part of the target interval.
         hashes.radix_sort_unstable();
-        let start = log_duration("├ radix sort", start);
+        let start = log_duration("┌ radix sort", start);
 
         // 3. Check duplicates.
         let distinct = hashes.par_windows(2).all(|w| w[0] != w[1]);
@@ -71,11 +69,13 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
                 return None;
             }
         }
-        eprintln!("max key/part: {max_part_len:>10}",);
-        eprintln!(
-            "max    alpha: {:>13.2}%",
-            100. * max_part_len as f32 / self.s as f32
-        );
+        if has_log() {
+            eprintln!("max key/part: {max_part_len:>10}",);
+            eprintln!(
+                "max    alpha: {:>13.2}%",
+                100. * max_part_len as f32 / self.s as f32
+            );
+        }
 
         log_duration("├part starts", start);
 

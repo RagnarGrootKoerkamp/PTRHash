@@ -28,7 +28,18 @@ pub fn prefetch_index<T>(s: &[T], index: usize) {
     }
 }
 
+thread_local! {
+    static LOG: std::cell::Cell<bool> = std::cell::Cell::new(false);
+}
+
+pub(crate) fn has_log() -> bool {
+    LOG.with(|log| log.get())
+}
+
 pub(crate) fn log_duration(name: &str, start: Instant) -> Instant {
+    if !LOG.with(|log| log.get()) {
+        return start;
+    }
     eprintln!(
         "{}",
         format!("{name:>12}: {:>13.2?}s", start.elapsed().as_secs_f32()).bold()

@@ -67,6 +67,7 @@ use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
 
+use crate::util::has_log;
 use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
 /// Select the sharding method to use.
@@ -314,22 +315,24 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         let beta = params.beta;
         let gamma = params.gamma;
 
-        eprintln!("        keys: {n:>10}");
-        eprintln!("      shards: {num_shards:>10}");
-        eprintln!("       parts: {num_parts:>10}");
-        eprintln!("   slots/prt: {s:>10}");
-        eprintln!("   slots tot: {s_total:>10}");
-        eprintln!(" buckets/prt: {b:>10}");
-        eprintln!(" buckets tot: {b_total:>10}");
-        eprintln!(
-            "keys/large b: {:>13.2}",
-            beta / gamma * n as f64 / b_total as f64
-        );
-        eprintln!(
-            "keys/small b: {:>13.2}",
-            (1. - beta) / (1. - gamma) * n as f64 / b_total as f64
-        );
-        eprintln!("keys/ bucket: {:>13.2}", n as f64 / b_total as f64);
+        if has_log() {
+            eprintln!("        keys: {n:>10}");
+            eprintln!("      shards: {num_shards:>10}");
+            eprintln!("       parts: {num_parts:>10}");
+            eprintln!("   slots/prt: {s:>10}");
+            eprintln!("   slots tot: {s_total:>10}");
+            eprintln!(" buckets/prt: {b:>10}");
+            eprintln!(" buckets tot: {b_total:>10}");
+            eprintln!(
+                "keys/large b: {:>13.2}",
+                beta / gamma * n as f64 / b_total as f64
+            );
+            eprintln!(
+                "keys/small b: {:>13.2}",
+                (1. - beta) / (1. - gamma) * n as f64 / b_total as f64
+            );
+            eprintln!("keys/ bucket: {:>13.2}", n as f64 / b_total as f64);
+        }
 
         let p1 = (beta * u64::MAX as f64) as u64;
         let p2 = (gamma * b as f64) as usize;
@@ -503,10 +506,12 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
 
     pub fn print_bits_per_element(&self) {
         let (p, r) = self.bits_per_element();
-        eprintln!(
-            "bits/element: {:>13.2}  (pilots {p:4.2}, remap {r:4.2})",
-            p + r
-        );
+        if has_log() {
+            eprintln!(
+                "bits/element: {:>13.2}  (pilots {p:4.2}, remap {r:4.2})",
+                p + r
+            );
+        }
     }
 
     /// Get a non-minimal index of the given key.

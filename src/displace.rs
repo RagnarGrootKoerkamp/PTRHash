@@ -35,11 +35,13 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
             let parts_done = parts_done.fetch_add(1, Ordering::Relaxed);
             total_displacements.fetch_add(cnt, Ordering::Relaxed);
 
-            eprint!(
-                "parts done: {parts_done:>6}/{:>6} ({:>4.1}%)\r",
-                self.num_parts,
-                100. * parts_done as f32 / self.num_parts as f32
-            );
+            if has_log() {
+                eprint!(
+                    "parts done: {parts_done:>6}/{:>6} ({:>4.1}%)\r",
+                    self.num_parts,
+                    100. * parts_done as f32 / self.num_parts as f32
+                );
+            }
             Some(())
         });
 
@@ -56,15 +58,17 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
         let sum_pilots = pilots.iter().map(|&k| k as Pilot).sum::<Pilot>();
 
         // Clear the last \r line.
-        eprint!("\x1b[K");
-        eprintln!(
-            "  displ./bkt: {:>14.3}",
-            total_displacements as f32 / (self.b * self.parts_per_shard) as f32
-        );
-        eprintln!(
-            "   avg pilot: {:>14.3}",
-            sum_pilots as f32 / (self.b * self.parts_per_shard) as f32
-        );
+        if has_log() {
+            eprint!("\x1b[K");
+            eprintln!(
+                "  displ./bkt: {:>14.3}",
+                total_displacements as f32 / (self.b * self.parts_per_shard) as f32
+            );
+            eprintln!(
+                "   avg pilot: {:>14.3}",
+                sum_pilots as f32 / (self.b * self.parts_per_shard) as f32
+            );
+        }
 
         if self.params.print_stats {
             stats.lock().unwrap().print();
@@ -131,17 +135,20 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
 
             'b: while let Some((_b_len, b)) = stack.pop() {
                 if displacements > self.s && displacements.is_power_of_two() {
+                    // log = true;
                     let num_taken_slots = taken.count_ones();
-                    eprintln!(
-                        "part {part:>6} alpha {:>5.2}% bucket size {} ({}/{}, {:>5.2}%) slots filled {}/{} ({:>5.2}%) chain: {displacements:>9}",
-                        100. * hashes.len()  as f32 / slots.len() as f32,
-                        new_b_len,
-                        i, self.b,
-                        100. * i as f32 / self.b as f32,
-                        num_taken_slots,
-                        taken.len(),
-                        100. * num_taken_slots as f32 / taken.len() as f32,
-                    );
+                    if has_log() {
+                        eprintln!(
+                            "part {part:>6} alpha {:>5.2}% bucket size {} ({}/{}, {:>5.2}%) slots filled {}/{} ({:>5.2}%) chain: {displacements:>9}",
+                            100. * hashes.len()  as f32 / slots.len() as f32,
+                            new_b_len,
+                            i, self.b,
+                            100. * i as f32 / self.b as f32,
+                            num_taken_slots,
+                            taken.len(),
+                            100. * num_taken_slots as f32 / taken.len() as f32,
+                        );
+                    }
                     if displacements >= 10 * self.s {
                         eprintln!(
                             "\
@@ -227,6 +234,16 @@ Try increasing c to use more buckets.
                 }
 
                 let (_collision_score, p) = best;
+                if has_log() {
+                    eprintln!(
+                        "{displacements:>7} | pilots[{:>7}] = {:>3} len: {} stack: {} score: {:>3}",
+                        b.0,
+                        p,
+                        bucket_len(b),
+                        stack.len(),
+                        _collision_score
+                    );
+                }
                 pilots[b] = p as u8;
                 let hp = self.hash_pilot(p);
 
@@ -237,6 +254,13 @@ Try increasing c to use more buckets.
                     if b2.is_some() {
                         assert!(b2 != b);
                         // DROP BUCKET b
+                        if has_log() {
+                            eprintln!(
+                                "{displacements:>7} | Push {:>7} len: {}",
+                                b2.0,
+                                bucket_len(b2)
+                            );
+                        }
                         stack.push((bucket_len(b2), b2));
                         displacements += 1;
                         for p2 in slots_for_bucket(b2, pilots[b2] as Pilot) {
