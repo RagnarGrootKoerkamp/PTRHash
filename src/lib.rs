@@ -525,6 +525,14 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         self.slot(hx, pilot)
     }
 
+    /// Faster version of `index` for when there is only a single part.
+    pub fn index_single_part(&self, key: &Key) -> usize {
+        let hx = self.hash_key(key);
+        let b = self.bucket_in_part(hx.high());
+        let pilot = self.pilots.as_ref().index(b);
+        self.slot_in_part(hx, pilot)
+    }
+
     /// Get the index for `key` in `[0, n)`.
     pub fn index_minimal(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
