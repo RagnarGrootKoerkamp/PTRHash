@@ -55,5 +55,7 @@ wyhash =  "0.5.0"
 xxhash-rust = {version = "0.8.7", features = ["xxh64", "xxh3"]}
 
 [features]
-default = []
+default = ["split_buckets"]
 epserde = ["dep:epserde", "dep:epserde-derive"]
+# Allow disabling split_buckets for faster lookups on small datasets.
+split_buckets = []

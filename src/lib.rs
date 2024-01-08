@@ -147,7 +147,11 @@ type Rb = FastReduce;
 type Rs = MulReduce;
 type Pilot = u64;
 type PilotHash = u64;
+
+#[cfg(feature = "split_buckets")]
 const SPLIT_BUCKETS: bool = true;
+#[cfg(not(feature = "split_buckets"))]
+const SPLIT_BUCKETS: bool = false;
 
 /// PtrHash datastructure.
 /// The recommended way to use PtrHash with default types.
