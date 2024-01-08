@@ -40,6 +40,7 @@ rdst = "0.20.11"
 rustc-hash = "1.1.0"
 sucds = "0.8.0"
 tempfile = "3.8.1"
+fastrand = "2.0.1"
 
 # Default included hash functions
 cityhash-102-rs = "0.1.0"
@@ -52,7 +53,6 @@ murmur2 = "0.1.0"
 murmur3 =  "0.5.2"
 wyhash =  "0.5.0"
 xxhash-rust = {version = "0.8.7", features = ["xxh64", "xxh3"]}
-fastrand = "2.0.1"
 
 [features]
 default = []
