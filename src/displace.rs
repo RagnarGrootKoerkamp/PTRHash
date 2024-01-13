@@ -35,7 +35,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
             let parts_done = parts_done.fetch_add(1, Ordering::Relaxed);
             total_displacements.fetch_add(cnt, Ordering::Relaxed);
 
-            if has_log() {
+            if self.params.print_stats {
                 eprint!(
                     "parts done: {parts_done:>6}/{:>6} ({:>4.1}%)\r",
                     self.num_parts,
@@ -58,7 +58,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
         let sum_pilots = pilots.iter().map(|&k| k as Pilot).sum::<Pilot>();
 
         // Clear the last \r line.
-        if has_log() {
+        if self.params.print_stats {
             eprint!("\x1b[K");
             eprintln!(
                 "  displ./bkt: {:>14.3}",
@@ -137,7 +137,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
                 if displacements > self.s && displacements.is_power_of_two() {
                     // log = true;
                     let num_taken_slots = taken.count_ones();
-                    if has_log() {
+                    if self.params.print_stats {
                         eprintln!(
                             "part {part:>6} alpha {:>5.2}% bucket size {} ({}/{}, {:>5.2}%) slots filled {}/{} ({:>5.2}%) chain: {displacements:>9}",
                             100. * hashes.len()  as f32 / slots.len() as f32,
@@ -234,7 +234,7 @@ Try increasing c to use more buckets.
                 }
 
                 let (_collision_score, p) = best;
-                if has_log() {
+                if self.params.print_stats {
                     eprintln!(
                         "{displacements:>7} | pilots[{:>7}] = {:>3} len: {} stack: {} score: {:>3}",
                         b.0,
@@ -254,7 +254,7 @@ Try increasing c to use more buckets.
                     if b2.is_some() {
                         assert!(b2 != b);
                         // DROP BUCKET b
-                        if has_log() {
+                        if self.params.print_stats {
                             eprintln!(
                                 "{displacements:>7} | Push {:>7} len: {}",
                                 b2.0,

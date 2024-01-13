@@ -67,7 +67,6 @@ use rayon::prelude::*;
 use rdst::RadixSort;
 use std::{borrow::Borrow, default::Default, marker::PhantomData, time::Instant};
 
-use crate::util::has_log;
 use crate::{hash::*, pack::Packed, reduce::*, util::log_duration};
 
 /// Select the sharding method to use.
@@ -319,7 +318,7 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
         let beta = params.beta;
         let gamma = params.gamma;
 
-        if has_log() {
+        if params.print_stats {
             eprintln!("        keys: {n:>10}");
             eprintln!("      shards: {num_shards:>10}");
             eprintln!("       parts: {num_parts:>10}");
@@ -510,7 +509,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
 
     pub fn print_bits_per_element(&self) {
         let (p, r) = self.bits_per_element();
-        if has_log() {
+        if self.params.print_stats {
             eprintln!(
                 "bits/element: {:>13.2}  (pilots {p:4.2}, remap {r:4.2})",
                 p + r

@@ -69,7 +69,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>> PtrHash<Key, F, Hx> {
                 return None;
             }
         }
-        if has_log() {
+        if self.params.print_stats {
             eprintln!("max key/part: {max_part_len:>10}",);
             eprintln!(
                 "max    alpha: {:>13.2}%",
