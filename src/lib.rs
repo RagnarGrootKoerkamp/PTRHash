@@ -522,6 +522,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
     /// Use `index_minimal` to get a key in `[0, n)`.
     ///
     /// `index.rs` has additional streaming/SIMD implementations.
+    #[inline]
     pub fn index(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
         let b = self.bucket(hx);
@@ -530,6 +531,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
     }
 
     /// Faster version of `index` for when there is only a single part.
+    #[inline]
     pub fn index_single_part(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
         let b = self.bucket_in_part(hx.high());
@@ -538,6 +540,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
     }
 
     /// Get the index for `key` in `[0, n)`.
+    #[inline]
     pub fn index_minimal(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
         let b = self.bucket(hx);
@@ -556,6 +559,7 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
     //
     // TODO: A chunked version that processes K keys at a time.
     // TODO: SIMD to determine buckets/positions in parallel.
+    #[inline]
     pub fn index_stream<'a, const K: usize, const MINIMAL: bool>(
         &'a self,
         xs: impl IntoIterator<Item = &'a Key> + 'a,
