@@ -148,3 +148,11 @@ fn many_keys_disk() {
         done.set(idx, true);
     }
 }
+
+#[test]
+fn ptr_hash_can_clone() {
+    let ptr_hash = PtrHash::<_>::new(&["hello", "there"], PtrHashParams::default());
+
+    // test succeeds if this compiles
+    let _y = ptr_hash.clone();
+}

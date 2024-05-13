@@ -159,6 +159,7 @@ const SPLIT_BUCKETS: bool = false;
 /// `Hx`: The hasher to use for keys, default `FxHash`.
 /// `V`: The pilots type. Usually `Vec<u8>`, or `&[u8]` for Epserde.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct PtrHash<
     Key: KeyT = u64,
     F: Packed = LocalEf,

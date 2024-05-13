@@ -27,7 +27,7 @@ impl Hash for u128 {
     }
 }
 
-pub trait Hasher<Key>: Sync {
+pub trait Hasher<Key>: Clone + Sync {
     type H: Hash;
     fn hash(x: &Key, seed: u64) -> Self::H;
 }
@@ -38,9 +38,11 @@ fn to_bytes<Key>(x: &Key) -> &[u8] {
 
 // A. u64-only hashers
 /// Multiply the key by a mixing constant.
+#[derive(Clone)]
 pub struct MulHash;
 /// Pass the key through unchanged.
 /// Used for benchmarking.
+#[derive(Clone)]
 pub struct NoHash;
 
 // B. Fast hashers that are always included.
@@ -48,41 +50,56 @@ pub struct NoHash;
 /// Note that this doesn't use a seed, so while it is a bijection on `u64` keys,
 /// larger keys will give unfixable collisions.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct FxHash;
 /// Very fast weak 64bit hash with more quality than FxHash.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Murmur2_64;
 /// Fast weak 128bit hash for integers.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct FastMurmur3_128;
 
 // C. Additional higher quality but slower hashers.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Murmur3_128;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Highway64;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Highway128;
 /// Fast good 64bit hash.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct City64;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct City128;
 /// Fast good 64bit hash.
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Wy64;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Xx64;
 /// Fast good 128bit hash (but fails at 10^11 keys).
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Xx128;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Metro64;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Metro128;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Spooky64;
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
+#[derive(Clone)]
 pub struct Spooky128;
 
 // Hash implementations.
