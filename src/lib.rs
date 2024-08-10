@@ -518,6 +518,10 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         }
     }
 
+    pub fn n(&self) -> usize {
+        self.n
+    }
+
     /// index() always returns below this bound.
     pub fn max_index(&self) -> usize {
         self.s_total
