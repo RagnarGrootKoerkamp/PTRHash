@@ -518,6 +518,11 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
         }
     }
 
+    /// index() always returns below this bound.
+    pub fn max_index(&self) -> usize {
+        self.s_total
+    }
+
     /// Get a non-minimal index of the given key.
     /// Use `index_minimal` to get a key in `[0, n)`.
     ///
