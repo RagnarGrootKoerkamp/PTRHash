@@ -84,6 +84,8 @@ pub enum Sharding {
 #[derive(Clone, Copy, Debug)]
 #[cfg_attr(feature = "epserde", derive(epserde::prelude::Epserde))]
 pub struct PtrHashParams {
+    /// Set to false to disable remapping to a minimal PHF.
+    pub remap: bool,
     /// Use `n/alpha` slots approximately.
     pub alpha: f64,
     /// Use `c*n/lg(n)` buckets.
@@ -113,6 +115,7 @@ pub struct PtrHashParams {
 impl Default for PtrHashParams {
     fn default() -> Self {
         Self {
+            remap: true,
             alpha: 0.98,
             c: 9.0,
             // TODO: Understand why exactly this choice of parameters.
@@ -473,7 +476,7 @@ impl<Key: KeyT, F: MutPacked, Hx: Hasher<Key>> PtrHash<Key, F, Hx, Vec<u8>> {
             self.n
         );
 
-        if self.s_total == self.n {
+        if !self.params.remap || self.s_total == self.n {
             return;
         }
 
@@ -549,6 +552,8 @@ impl<Key: KeyT, F: Packed, Hx: Hasher<Key>, V: AsRef<[u8]>> PtrHash<Key, F, Hx, 
     }
 
     /// Get the index for `key` in `[0, n)`.
+    ///
+    /// Requires that the remap parameter is set to true.
     #[inline]
     pub fn index_minimal(&self, key: &Key) -> usize {
         let hx = self.hash_key(key);
