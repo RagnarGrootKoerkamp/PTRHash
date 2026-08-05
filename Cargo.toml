@@ -30,8 +30,8 @@ epserde-derive = {version = "0.13.0", optional = true }
 itertools = "0.15.0"
 rand = "0.10.2"
 rand_chacha = "0.10.0"
-rayon = "1.8.0"
-rdst = "0.20.11"
+rayon = { version = "1.8.0", optional = true }
+rdst = { version = "0.20.11", default-features = false }
 sucds = { version = "0.8.0", optional = true }
 tempfile = "3.8.1"
 fastrand = "2.0.1"
@@ -57,7 +57,10 @@ gxhash = { version = "3.5.0", optional = true }
 prefetch-index = "0.2.1"
 
 [features]
-default = ["elias-fano", "cacheline-ef"]
+default = ["elias-fano", "cacheline-ef", "parallel"]
+# Multi-threaded construction. Off means no `rayon` in the dependency tree at all, for callers
+# that build a PHF inside a binary where every kilobyte is counted.
+parallel = ["rayon", "rdst/multi-threaded"]
 # Epserde support for zero-cost deserialization from disk.
 epserde = ["dep:epserde", "dep:epserde-derive", "cacheline-ef/epserde"]
 # Enable iter_array_chunks unstable feature for iter_batch_exact, which is only for benchmarking.

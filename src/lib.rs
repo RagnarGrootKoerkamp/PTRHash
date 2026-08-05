@@ -184,7 +184,30 @@ use mem_dbg::MemSize;
 use pack::MutPacked;
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
+
+/// The iterator kind key streams are consumed as: rayon's with `parallel`, `std`'s without.
+///
+/// Construction only ever calls `map`, `filter`, `collect`, `zip`, `enumerate`, `try_for_each` and
+/// `clone` on a key stream, and those are spelled the same on both, so every bound in this crate is
+/// written once against this alias.
+#[cfg(feature = "parallel")]
+pub use rayon::iter::ParallelIterator as KeyIterator;
+#[cfg(not(feature = "parallel"))]
+pub use std::iter::Iterator as KeyIterator;
+
+/// Borrow a key slice as whichever iterator kind is compiled in.
+#[cfg(feature = "parallel")]
+fn key_stream<Key: KeyT>(keys: &[Key]) -> impl ParallelIterator<Item = &Key> + Clone {
+    keys.par_iter()
+}
+
+/// Borrow a key slice as whichever iterator kind is compiled in.
+#[cfg(not(feature = "parallel"))]
+fn key_stream<Key: KeyT>(keys: &[Key]) -> impl Iterator<Item = &Key> + Clone {
+    keys.iter()
+}
 pub use shard::Sharding;
 use stats::BucketStats;
 use std::array::from_fn;
@@ -465,7 +488,7 @@ impl<
     pub fn new(keys: &[Key], params: PtrHashParams<BF>) -> Self {
         let mut ptr_hash = Self::init(keys.len(), params);
         ptr_hash
-            .compute_pilots(keys.par_iter())
+            .compute_pilots(key_stream(keys))
             .expect("Unable to construct PtrHash after 10 tries. Try using a better hash or decreasing lambda.");
         ptr_hash
     }
@@ -475,7 +498,7 @@ impl<
     pub fn new_with_stats(keys: &[Key], params: PtrHashParams<BF>) -> (Self, BucketStats) {
         let mut ptr_hash = Self::init(keys.len(), params);
         let stats = ptr_hash
-            .compute_pilots(keys.par_iter())
+            .compute_pilots(key_stream(keys))
             .expect("Unable to construct PtrHash after 10 tries. Try using a better hash or decreasing lambda.");
         (ptr_hash, stats)
     }
@@ -485,7 +508,7 @@ impl<
     /// parameters) and the eviction chains become too long.
     pub fn try_new(keys: &[Key], params: PtrHashParams<BF>) -> Option<Self> {
         let mut ptr_hash = Self::init(keys.len(), params);
-        ptr_hash.compute_pilots(keys.par_iter())?;
+        ptr_hash.compute_pilots(key_stream(keys))?;
         Some(ptr_hash)
     }
 }
@@ -501,13 +524,15 @@ impl<
     > PtrHash<Key, BF, F, Hx, Vec<u8>, SINGLE_PART, REMAP>
 {
     /// Same as `new` above, but takes a `ParallelIterator` over keys instead of a slice.
+    /// Needs the `parallel` feature, which is what supplies the iterator kind.
+    #[cfg(feature = "parallel")]
     ///
     /// The iterator must be cloneable, since construction can fail for the
     /// first seed (e.g. due to duplicate hashes), in which case a new pass over
     /// keys is need.
     pub fn new_from_par_iter<'a>(
         n: usize,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+        keys: impl KeyIterator<Item = impl Borrow<Key>> + Clone + 'a,
         params: PtrHashParams<BF>,
     ) -> Self {
         let mut ptr_hash = Self::init(n, params);
@@ -590,7 +615,7 @@ impl<
 
     fn compute_pilots<'a>(
         &mut self,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+        keys: impl KeyIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> Option<BucketStats> {
         let overall_start = std::time::Instant::now();
         // Initialize arrays;

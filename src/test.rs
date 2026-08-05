@@ -167,6 +167,7 @@ fn index_batch() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 fn new_par_iter() {
     let n = 100_000;
     let keys = generate_keys(n);
@@ -174,6 +175,7 @@ fn new_par_iter() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 #[cfg_attr(debug_assertions, ignore = "only run in release mode")]
 fn in_memory_sharding() {
     let n = 1 << 25;
@@ -198,6 +200,7 @@ fn in_memory_sharding() {
 }
 
 #[test]
+#[cfg(feature = "parallel")]
 #[cfg_attr(debug_assertions, ignore = "only run in release mode")]
 fn on_disk_sharding() {
     let n = 1 << 25;
@@ -223,6 +226,7 @@ fn on_disk_sharding() {
 
 /// Test that sharded construction and queries work with more than 2^32 keys.
 #[test]
+#[cfg(feature = "parallel")]
 #[ignore = "very slow"]
 fn many_keys_memory() {
     let n = 1 << 33;
@@ -253,6 +257,7 @@ fn many_keys_memory() {
 
 /// Test that sharded construction and queries work with more than 2^32 keys.
 #[test]
+#[cfg(feature = "parallel")]
 #[ignore = "very slow; writes 64GB to disk"]
 fn many_keys_disk() {
     let n = 1 << 33;

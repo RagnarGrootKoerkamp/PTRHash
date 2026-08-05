@@ -65,7 +65,7 @@ impl<
     /// Return an iterator over the Vec of hashes of each shard.
     pub(crate) fn shards<'a>(
         &'a self,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+        keys: impl KeyIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> Box<dyn Iterator<Item = Vec<Hx::H>> + 'a> {
         match self.params.sharding {
             Sharding::None => self.no_sharding(keys.clone()),
@@ -78,7 +78,7 @@ impl<
     /// Collect all hashes to a Vec directly and return it.
     fn no_sharding<'a>(
         &'a self,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+        keys: impl KeyIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> Box<dyn Iterator<Item = Vec<Hx::H>> + 'a> {
         trace!("No sharding: collecting all {} hashes in memory.", self.n);
         let start = std::time::Instant::now();
@@ -89,10 +89,10 @@ impl<
 
     /// Loop over the keys once per shard.
     /// Return an iterator over shards.
-    /// For each shard, a filtered copy of the ParallelIterator is returned.
+    /// For each shard, a filtered copy of the key iterator is returned.
     fn shard_keys_in_memory<'a>(
         &'a self,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+        keys: impl KeyIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> Box<dyn Iterator<Item = Vec<Hx::H>> + 'a> {
         trace!(
             "In-memory sharding: iterate keys once for each of {} shards, each of ~{} keys.",
@@ -124,7 +124,7 @@ impl<
     fn shard_keys_hybrid<'a>(
         &'a self,
         mem: usize,
-        keys: impl ParallelIterator<Item = impl Borrow<Key>> + Clone + 'a,
+        keys: impl KeyIterator<Item = impl Borrow<Key>> + Clone + 'a,
     ) -> Box<dyn Iterator<Item = Vec<Hx::H>> + 'a> {
         let total_shards = self.shards;
         let keys_per_shard = self.n / total_shards;
@@ -175,14 +175,25 @@ impl<
                 // Each thread has a local buffer per shard.
                 let init = || writers.iter().map(ThreadLocalBuf::new).collect_vec();
                 // Iterate over keys.
+                let sink = |bufs: &mut Vec<ThreadLocalBuf<'_, Hx::H>>, h: Hx::H| {
+                    let shard = self.shard(h);
+                    if shard_range.contains(&shard) {
+                        bufs[shard - shard_range.start].push(h);
+                    }
+                };
+                // `for_each_init` gives each worker its own buffer set. Serially there is one
+                // worker, so one set made up front is the same thing.
+                #[cfg(feature = "parallel")]
                 keys.clone()
                     .map(|key| self.hash_key(key.borrow()))
-                    .for_each_init(init, |bufs, h| {
-                        let shard = self.shard(h);
-                        if shard_range.contains(&shard) {
-                            bufs[shard - shard_range.start].push(h);
-                        }
-                    });
+                    .for_each_init(init, sink);
+                #[cfg(not(feature = "parallel"))]
+                {
+                    let mut bufs = init();
+                    keys.clone()
+                        .map(|key| self.hash_key(key.borrow()))
+                        .for_each(|h| sink(&mut bufs, h));
+                }
                 let start = log_duration("Writing files", start);
 
                 // Flush writers and convert to files.

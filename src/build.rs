@@ -2,6 +2,7 @@ use super::*;
 use crate::{bucket_idx::BucketIdx, stats::BucketStats};
 use bitvec::{slice::BitSlice, vec::BitVec};
 use log::warn;
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use std::{
     collections::BinaryHeap,
@@ -23,9 +24,14 @@ impl<Key: KeyT + ?Sized, BF: BucketFn, F: Packed, Hx: KeyHasher<Key>, const SING
         pilots: &mut [u8],
         taken: &mut [BitVec],
     ) -> Option<BucketStats> {
+        #[cfg(feature = "parallel")]
         let pilots_per_part = pilots.par_chunks_exact_mut(self.buckets);
+        #[cfg(not(feature = "parallel"))]
+        let pilots_per_part = pilots.chunks_exact_mut(self.buckets);
 
-        let iter = pilots_per_part.zip(taken).enumerate();
+        // `mut` only matters for the serial iterator; rayon's takes `self`.
+        #[allow(unused_mut)]
+        let mut iter = pilots_per_part.zip(taken).enumerate();
 
         // let total_evictions = AtomicUsize::new(0);
         let parts_done = AtomicUsize::new(shard * self.parts_per_shard);

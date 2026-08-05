@@ -4,6 +4,7 @@ use super::*;
 use colored::Colorize;
 use log::{trace, warn};
 use rand::{rng, RngExt};
+#[cfg(feature = "parallel")]
 use rayon::prelude::*;
 use rdst::RadixSort;
 
@@ -32,16 +33,28 @@ pub fn generate_keys(n: usize) -> Vec<u64> {
     let start = Instant::now();
     let keys = loop {
         let start = Instant::now();
+        #[cfg(feature = "parallel")]
         let keys: Vec<_> = (0..n)
             .into_par_iter()
             .map_init(rng, |rng, _| rng.random())
             .collect();
+        #[cfg(not(feature = "parallel"))]
+        let keys: Vec<_> = {
+            let mut rng = rng();
+            (0..n).map(|_| rng.random()).collect()
+        };
         let start = log_duration("┌   gen keys", start);
+        #[cfg(feature = "parallel")]
         let mut keys2: Vec<_> = keys.par_iter().copied().collect();
+        #[cfg(not(feature = "parallel"))]
+        let mut keys2: Vec<_> = keys.to_vec();
         let start = log_duration("├      clone", start);
         keys2.radix_sort_unstable();
         let start = log_duration("├       sort", start);
+        #[cfg(feature = "parallel")]
         let distinct = keys2.par_windows(2).all(|w| w[0] < w[1]);
+        #[cfg(not(feature = "parallel"))]
+        let distinct = keys2.windows(2).all(|w| w[0] < w[1]);
         log_duration("├ duplicates", start);
         if distinct {
             break keys;
@@ -55,6 +68,7 @@ pub fn generate_keys(n: usize) -> Vec<u64> {
 pub fn generate_string_keys(n: usize) -> Vec<Vec<u8>> {
     let start = Instant::now();
     // let start = Instant::now();
+    #[cfg(feature = "parallel")]
     let keys: Vec<_> = (0..n)
         .into_par_iter()
         .map_init(rng, |rng, _| {
@@ -62,6 +76,16 @@ pub fn generate_string_keys(n: usize) -> Vec<Vec<u8>> {
             (0..len).map(|_| rng.random_range(1..=255)).collect()
         })
         .collect();
+    #[cfg(not(feature = "parallel"))]
+    let keys: Vec<Vec<u8>> = {
+        let mut rng = rng();
+        (0..n)
+            .map(|_| {
+                let len = rng.random_range(10..=50);
+                (0..len).map(|_| rng.random_range(1..=255)).collect()
+            })
+            .collect()
+    };
     log_duration("generatekeys", start);
     keys
 }
