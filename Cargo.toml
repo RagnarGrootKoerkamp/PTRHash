@@ -23,27 +23,31 @@ incremental = true
 
 [dependencies]
 bitvec = "1.0.1"
-clap = { version = "4.4.6", features = ["derive"], optional = true }
 colored = "3.0.0"
-epserde = { version = "0.13.0", optional = true }
-epserde-derive = {version = "0.13.0", optional = true }
 itertools = "0.15.0"
 rand = "0.10.2"
 rand_chacha = "0.10.0"
 rayon = "1.8.0"
 rdst = "0.20.11"
-sucds = { version = "0.8.0", optional = true }
 tempfile = "3.8.1"
 fastrand = "2.0.1"
-serde = { version = "1.0.215", features = ["derive"], optional = true }
 mem_dbg = "0.4.2"
 
+# Optional deps
+# Enable clap::ValueEnum for the sharding enum.
+clap = { version = "4.4.6", features = ["derive"], optional = true }
+epserde = { version = "0.13.0", optional = true }
+epserde-derive = {version = "0.13.0", optional = true }
+sucds = { version = "0.8.0", optional = true }
 cacheline-ef = { version = "1.1.0", optional = true }
+# Only used for some additional stats in the paper.
+serde = { version = "1.0.215", features = ["derive"], optional = true }
 
 # Default included hash functions
 fxhash = "0.2.1"
 xxhash-rust = {version = "0.8.7", features = ["xxh64", "xxh3"]}
 
+# Additional hash functions
 cityhash-102-rs = {version="0.1.0", optional=true}
 fastmurmur3 = {version="0.2.0", optional=true}
 hashers =  {version="1.0.1", optional=true}
@@ -56,24 +60,16 @@ log = "0.4.27"
 gxhash = { version = "3.5.0", optional = true }
 prefetch-index = "0.2.1"
 
+
 [features]
 default = ["elias-fano", "cacheline-ef"]
 # Epserde support for zero-cost deserialization from disk.
 epserde = ["dep:epserde", "dep:epserde-derive", "cacheline-ef/epserde"]
 # Enable iter_array_chunks unstable feature for iter_batch_exact, which is only for benchmarking.
 unstable = []
-cacheline-ef = ["dep:cacheline-ef"]
 elias-fano = ["dep:sucds"]
-# Support for gxhash string hashing which depends on SSE2.
-gxhash = ["dep:gxhash"]
 # Allow additional hash functions, on top of just FxHash and XxHash.
 hashers = ["dep:cityhash-102-rs", "dep:fastmurmur3", "dep:hashers", "dep:highway", "dep:metrohash", "dep:murmur2", "dep:murmur3", "dep:wyhash"]
-# default = ["epserde"]
-# Derive serde::Serialize on the BucketStats returned by `PtrHash::print_bits_per_element`
-# and friends. Only needed to serialize those stats; the hash function itself does not use it.
-serde = ["dep:serde"]
-# Eanble clap::ValueEnum for the sharding enum.
-clap = ["dep:clap"]
 
 [dev-dependencies]
 env_logger = "0.11.7"
