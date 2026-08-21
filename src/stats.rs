@@ -1,6 +1,7 @@
 use crate::Pilot;
 
-#[derive(Default, Clone, serde::Serialize, Debug)]
+#[derive(Default, Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 struct Row {
     buckets: usize,
     elements: usize,
@@ -23,7 +24,8 @@ impl Row {
     }
 }
 
-#[derive(Default, serde::Serialize, Debug)]
+#[derive(Default, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize))]
 pub struct BucketStats {
     by_pct: Vec<Row>,
     by_bucket_len: Vec<Row>,
