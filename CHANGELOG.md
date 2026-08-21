@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+
+## 2.0.3
 - Make `serde` dependency optional since it's only needed for some internal
   examples to gather additional statistics.
 
