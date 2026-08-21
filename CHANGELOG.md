@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+- Make `serde` dependency optional since it's only needed for some internal
+  examples to gather additional statistics.
 
 ## 2.0.2
 - Make `gxhash` dependency optional so docs.rs and other non-SSE2 builds work.
