@@ -395,3 +395,31 @@ fn remap_out_of_bounds() {
         }
     }
 }
+
+#[cfg(all(feature = "epserde", feature = "cacheline-ef"))]
+#[test]
+fn epserde_cacheline_ef_round_trip() {
+    use std::io::{Read, Seek, SeekFrom};
+
+    use cacheline_ef::CachelineEfVec;
+    use epserde::prelude::*;
+
+    // FxHash does not implement epserde's traits, so use XXH3 as in the
+    // epserde example. CachelineEfVec is the remapping structure under test.
+    type CachelineEfPtrHash =
+        PtrHash<u64, bucket_fn::Linear, CachelineEfVec, hash::Xxh3Int, Vec<u8>>;
+
+    let keys = generate_keys(100);
+    let mphf = CachelineEfPtrHash::new(&keys, PtrHashParams::default());
+    let mut file = tempfile::tempfile().unwrap();
+
+    unsafe { mphf.serialize(&mut file).unwrap() };
+    file.seek(SeekFrom::Start(0)).unwrap();
+    let mut data = vec![];
+    file.read_to_end(&mut data).unwrap();
+    let deserialized = unsafe { CachelineEfPtrHash::deserialize_eps(&data).unwrap() };
+
+    for key in keys {
+        assert_eq!(deserialized.index(&key), mphf.index(&key));
+    }
+}

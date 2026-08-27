@@ -4,6 +4,8 @@
 
 ## git
 
+- Bump `cacheline_ef` to also use version `13` of `epserde`.
+
 ## 2.1.0
 - Fix [#35](https://github.com/RagnarGrootKoerkamp/ptrhash/issues/35): when
   remapping values, it could happen that there is no positive key that hits the
