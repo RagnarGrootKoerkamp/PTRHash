@@ -4,6 +4,8 @@
 
 ## git
 
+## 2.1.1
+
 - Bump `cacheline_ef` to also use version `13` of `epserde`.
 
 ## 2.1.0
