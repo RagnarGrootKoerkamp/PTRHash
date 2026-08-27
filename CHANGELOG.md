@@ -3,6 +3,12 @@
 <!-- next-header -->
 
 ## git
+- Fix [#35](https://github.com/RagnarGrootKoerkamp/ptrhash/issues/35): when
+  remapping values, it could happen that there is no positive key that hits the
+  last slot of the remap array (since around 1% of its slots is empty). But
+  negative keys _can_ hit this slot still, and so we must make sure to allocate
+  space for it so that we don't get an out-of-bounds access or a random target
+  position outside 0..n.
 
 ## 2.0.3
 - Make `serde` dependency optional since it's only needed for some internal

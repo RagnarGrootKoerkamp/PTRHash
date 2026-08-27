@@ -684,9 +684,10 @@ impl<
     }
 
     fn remap_free_slots(&mut self, taken: &Vec<BitVec>) -> Result<(), ()> {
+        let remap_slots = self.slots_total - self.n;
         assert_eq!(
             taken.iter().map(|t| t.count_zeros()).sum::<usize>(),
-            self.slots_total - self.n,
+            remap_slots,
             "Not the right number of free slots left!\n total slots {} - n {}",
             self.slots_total,
             self.n
@@ -697,8 +698,10 @@ impl<
         }
 
         // Compute the free spots.
-        let mut v = Vec::with_capacity(self.slots_total - self.n);
+        let mut v = Vec::with_capacity(remap_slots);
         let get = |t: &Vec<BitVec>, idx: usize| t[idx / self.slots][idx % self.slots];
+
+        // Iterate over the empty slots in all parts.
         for i in taken
             .iter()
             .enumerate()
@@ -712,6 +715,9 @@ impl<
                 v.push(i as u64);
             }
             v.push(i as u64);
+        }
+        while v.len() < remap_slots {
+            v.push(self.n as u64 - 1);
         }
         self.remap = MutPacked::try_new(v).ok_or(())?;
         Ok(())
