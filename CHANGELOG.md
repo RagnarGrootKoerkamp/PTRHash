@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+
+## 2.1.0
 - Fix [#35](https://github.com/RagnarGrootKoerkamp/ptrhash/issues/35): when
   remapping values, it could happen that there is no positive key that hits the
   last slot of the remap array (since around 1% of its slots is empty). But
