@@ -372,3 +372,26 @@ fn single_part() {
 
     mphf.index(&0);
 }
+
+/// See https://github.com/RagnarGrootKoerkamp/PtrHash/issues/35
+#[ignore = "Slow"]
+#[test]
+fn remap_out_of_bounds() {
+    let mut i: u64 = 0;
+    let mut key = || {
+        i += 1;
+        let mut z = i.wrapping_add(0x9e37_79b9_7f4a_7c15);
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let n: usize = 50_000;
+    for _round in 0..500u64 {
+        let keys: Vec<u64> = (0..n as u64).map(|_| key()).collect();
+        let mph = <DefaultPtrHash>::new(&keys, PtrHashParams::default());
+
+        for _i in 0..4_000_000 {
+            mph.index(&key());
+        }
+    }
+}

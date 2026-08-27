@@ -719,6 +719,7 @@ impl<
         while v.len() < remap_slots {
             v.push(self.n as u64 - 1);
         }
+        assert_eq!(v.len(), remap_slots);
         self.remap = MutPacked::try_new(v).ok_or(())?;
         Ok(())
     }
