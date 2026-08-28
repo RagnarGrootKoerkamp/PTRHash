@@ -762,7 +762,6 @@ impl<
     /// Around `n/alpha ~ 1.01*n`.
     #[doc(hidden)]
     pub fn max_index_no_remap(&self) -> usize {
-        eprintln!("Rem slots: {:?}", self.rem_slots);
         self.slots_total
     }
 
