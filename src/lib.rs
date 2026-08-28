@@ -948,7 +948,7 @@ impl<
                     let pilot = self.ph.pilots.as_ref().index(cur_bucket);
                     let slot = self.ph.slot(cur_hash, pilot);
 
-                    let slot = if REMAP && slot >= self.ph.n {
+                    let slot = if QUERY_REMAP && slot >= self.ph.n {
                         self.ph.remap.index(slot - self.ph.n) as usize
                     } else {
                         slot
